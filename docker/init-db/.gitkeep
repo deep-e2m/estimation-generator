@@ -1,0 +1,9 @@
+# This directory is for PostgreSQL initialization scripts
+# Any .sql or .sh files placed here will be executed when the database container
+# is first created (only runs once, when the data volume is empty)
+#
+# Example files:
+# - 01_create_extensions.sql - Create required PostgreSQL extensions
+# - 02_seed_data.sql - Insert initial seed data
+#
+# Scripts are executed in alphabetical order

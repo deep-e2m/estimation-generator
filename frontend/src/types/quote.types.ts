@@ -1,0 +1,277 @@
+/**
+ * Quote-related type definitions
+ * Based on API contracts specification
+ */
+
+// Platform options for quote generation
+export type Platform =
+  | 'wordpress'
+  | 'shopify'
+  | 'woocommerce'
+  | 'magento'
+  | 'custom'
+  | 'other';
+
+// Quote status lifecycle
+export type QuoteStatus =
+  | 'generating'
+  | 'draft'
+  | 'finalized'
+  | 'sent'
+  | 'accepted'
+  | 'rejected'
+  | 'archived';
+
+// Generation progress steps
+export type GenerationStep =
+  | 'parsing_input'
+  | 'analyzing_requirements'
+  | 'retrieving_knowledge'
+  | 'generating_estimate'
+  | 'formatting_output';
+
+// Estimation approach options
+export type EstimationApproach = 'single_point' | 'three_point' | 't_shirt';
+
+// Detail level for generation
+export type DetailLevel = 'summary' | 'standard' | 'detailed';
+
+// Hours estimation structure (three-point estimation)
+export interface HoursEstimate {
+  optimistic_hours: number;
+  most_likely_hours: number;
+  pessimistic_hours: number;
+  expected_hours: number;
+  cost?: number;
+}
+
+// Individual deliverable/line item
+export interface Deliverable {
+  id: string;
+  name: string;
+  description: string;
+  category?: string;
+  estimate: HoursEstimate;
+  notes?: string;
+}
+
+// Risk assessment
+export interface Risk {
+  id?: string;
+  description: string;
+  impact: 'low' | 'medium' | 'high';
+  mitigation: string;
+}
+
+// Timeline milestone
+export interface Milestone {
+  name: string;
+  target_date: string;
+}
+
+// Quote timeline section
+export interface QuoteTimeline {
+  estimated_start: string;
+  estimated_end: string;
+  milestones: Milestone[];
+}
+
+// Quote totals summary
+export interface QuoteTotals {
+  total_optimistic_hours: number;
+  total_most_likely_hours: number;
+  total_pessimistic_hours: number;
+  total_expected_hours: number;
+  total_cost: number;
+  currency: string;
+  hourly_rate: number;
+}
+
+// Scope section
+export interface QuoteScope {
+  included: string[];
+  excluded: string[];
+}
+
+// Research reference link
+export interface ResearchReference {
+  id?: string;
+  summary: string;
+  url: string;
+  source_type: 'official_docs' | 'plugin_page' | 'api_reference' | 'community' | 'other';
+  relevance_note: string;
+  is_valid?: boolean;
+}
+
+// Quote content structure
+export interface QuoteContent {
+  executive_summary: string;
+  scope: QuoteScope;
+  deliverables: Deliverable[];
+  assumptions: string[];
+  risks: Risk[];
+  timeline?: QuoteTimeline;
+  research_references: ResearchReference[];
+  totals: QuoteTotals;
+}
+
+// User reference
+export interface UserRef {
+  id: string;
+  full_name: string;
+  email?: string;
+  avatar_url?: string;
+}
+
+// Project reference
+export interface ProjectRef {
+  id: string;
+  name: string;
+}
+
+// Attachment reference
+export interface AttachmentRef {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  url: string;
+  thumbnail_url?: string;
+}
+
+// Quote requirements input
+export interface QuoteRequirements {
+  text: string;
+  attachments: AttachmentRef[];
+}
+
+// Generation metadata
+export interface GenerationMetadata {
+  model_used: string;
+  knowledge_docs_used: string[];
+  confidence_score: number;
+  generation_time_seconds: number;
+}
+
+// Full Quote object
+export interface Quote {
+  id: string;
+  quote_number: string;
+  version: number;
+  status: QuoteStatus;
+  project: ProjectRef;
+  requirements: QuoteRequirements;
+  content: QuoteContent;
+  generation_metadata?: GenerationMetadata;
+  created_by: UserRef;
+  created_at: string;
+  updated_at: string;
+}
+
+// Quote list item (summary view)
+export interface QuoteListItem {
+  id: string;
+  quote_number: string;
+  version: number;
+  status: QuoteStatus;
+  totals: Pick<QuoteTotals, 'total_expected_hours' | 'total_cost' | 'currency'>;
+  created_by: UserRef;
+  created_at: string;
+  updated_at: string;
+}
+
+// Generation options for quote request
+export interface GenerationOptions {
+  detail_level: DetailLevel;
+  include_assumptions: boolean;
+  include_risks: boolean;
+  estimation_approach: EstimationApproach;
+  currency: string;
+  hourly_rate: number;
+}
+
+// Quote generation request
+export interface GenerateQuoteRequest {
+  requirements_text: string;
+  attachment_ids: string[];
+  platform: Platform;
+  generation_options: GenerationOptions;
+}
+
+// Quote generation response (async)
+export interface GenerateQuoteResponse {
+  quote_id: string;
+  quote_number: string;
+  version: number;
+  status: 'generating';
+  generation_job_id: string;
+  estimated_completion_seconds: number;
+  created_at: string;
+}
+
+// Generation progress tracking
+export interface GenerationProgress {
+  quote_id: string;
+  status: 'generating' | 'completed' | 'failed';
+  progress: {
+    current_step: GenerationStep;
+    steps_completed: number;
+    total_steps: number;
+    percentage: number;
+    message?: string;
+  };
+  started_at: string;
+  completed_at?: string;
+  redirect_url?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// Quote update request (partial update)
+export interface UpdateQuoteRequest {
+  content?: Partial<QuoteContent>;
+  status?: QuoteStatus;
+}
+
+// Export options
+export interface ExportOptions {
+  template: 'professional' | 'minimal' | 'detailed' | 'editable' | 'print_ready';
+  include_sections: {
+    executive_summary: boolean;
+    scope: boolean;
+    deliverables: boolean;
+    timeline: boolean;
+    assumptions: boolean;
+    risks: boolean;
+    terms_and_conditions?: boolean;
+  };
+  branding?: {
+    company_logo_url?: string;
+    primary_color?: string;
+    include_footer?: boolean;
+  };
+  metadata?: {
+    prepared_for?: string;
+    prepared_by?: string;
+    valid_until?: string;
+  };
+}
+
+// Export job status
+export interface ExportJob {
+  export_job_id: string;
+  status: 'processing' | 'completed' | 'failed';
+  format: 'pdf' | 'docx';
+  progress_percentage?: number;
+  download_url?: string;
+  download_url_expires_at?: string;
+  file_size?: number;
+  started_at: string;
+  completed_at?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+}

@@ -1,0 +1,181 @@
+# Docker Compose configuration for Quote Generation Assistant
+# Supports both development (with hot-reload) and production modes
+#
+# Development: docker compose up
+# Production:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+services:
+  # ===========================================
+  # Frontend Service (React/Vite)
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      # VITE_API_URL is used by Vite proxy (server-side), not client
+      # Client uses relative URLs that go through the Vite proxy
+      - VITE_API_URL=http://backend:8000
+      # Empty VITE_PUBLIC_API_URL means client uses relative URLs via proxy
+      - VITE_PUBLIC_API_URL=
+    volumes:
+      # Mount source code for hot-reload
+      - ./frontend:/app
+      # Preserve node_modules from container
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - estimation-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================
+  # Backend Service (FastAPI)
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      # Application settings
+      - APP_NAME=${APP_NAME:-Quote Generation Assistant}
+      - DEBUG=${DEBUG:-true}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # Database connection (Docker internal)
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quote_assistant}
+
+      # Redis connection (Docker internal)
+      - REDIS_URL=redis://redis:6379/0
+
+      # Security settings
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production-32chars}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+
+      # CORS settings - include Docker service names and localhost
+      - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000","http://localhost:${FRONTEND_PORT:-3000}","http://127.0.0.1:3000"]
+
+      # Storage settings
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-database}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+    volumes:
+      # Mount source code for hot-reload in development
+      - ./backend:/app
+      # Exclude venv from mount
+      - /app/venv
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - estimation-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-quote_assistant}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      # Persist database data
+      - postgres_data:/var/lib/postgresql/data
+      # Optional: init scripts
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - estimation-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-quote_assistant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================
+  # Redis Cache
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      # Persist Redis data
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - estimation-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ===========================================
+  # Database Migrations (one-time run)
+  # ===========================================
+  migrations:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quote_assistant}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        echo 'Running database migrations...' &&
+        alembic upgrade head &&
+        echo 'Migrations completed successfully!'
+      "
+    networks:
+      - estimation-network
+    restart: "no"
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  estimation-network:
+    driver: bridge
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

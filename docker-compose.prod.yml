@@ -1,0 +1,109 @@
+# Production Docker Compose Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file overrides development settings for production:
+# - Uses production build targets
+# - Removes hot-reload volumes
+# - Adds resource limits
+# - Configures production logging
+
+services:
+  # ===========================================
+  # Frontend Production Configuration
+  # ===========================================
+  frontend:
+    build:
+      target: production
+      args:
+        - VITE_API_URL=${VITE_API_URL:-}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    environment:
+      - NODE_ENV=production
+    volumes: []  # Remove development volume mounts
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # Backend Production Configuration
+  # ===========================================
+  backend:
+    environment:
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - LOG_LEVEL=WARNING
+    volumes: []  # Remove development volume mounts
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================
+  # Database Production Configuration
+  # ===========================================
+  db:
+    ports: []  # Don't expose database port in production
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================
+  # Redis Production Configuration
+  # ===========================================
+  redis:
+    ports: []  # Don't expose Redis port in production
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # Migrations - No changes needed
+  # ===========================================
+  migrations:
+    restart: "no"
