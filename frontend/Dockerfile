@@ -1,13 +1,17 @@
 # Stage 1: Development stage with hot-reload support
 FROM node:20-alpine AS development
 
+# Required for native binaries (Vite/Rolldown, Lightning CSS, etc.)
+RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm ci
+# Use npm install instead of npm ci to resolve platform-specific dependencies
+# (lockfile may lack linux-musl binaries when generated on macOS)
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -22,13 +26,16 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 # Stage 2: Build stage for production
 FROM node:20-alpine AS builder
 
+# Required for native binaries (Vite/Rolldown, Lightning CSS, etc.)
+RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install all dependencies (including dev for build)
-RUN npm ci
+# Use npm install instead of npm ci to resolve platform-specific dependencies
+RUN npm install
 
 # Copy source code
 COPY . .
