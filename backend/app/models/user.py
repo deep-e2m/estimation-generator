@@ -17,7 +17,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
-    pass  # For type hints of relationships
+    from app.models.chat_message import ChatMessage
+    from app.models.project import Project
+    from app.models.quote import Quote
 
 
 class UserRole(str, enum.Enum):
@@ -166,6 +168,35 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         DateTime(timezone=True),
         nullable=True,
         doc="Account locked until this timestamp",
+    )
+
+    # Relationships
+    projects: Mapped[list["Project"]] = relationship(
+        "Project",
+        back_populates="creator",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    created_quotes: Mapped[list["Quote"]] = relationship(
+        "Quote",
+        foreign_keys="Quote.created_by",
+        back_populates="creator",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    approved_quotes: Mapped[list["Quote"]] = relationship(
+        "Quote",
+        foreign_keys="Quote.approved_by",
+        back_populates="approver",
+        lazy="selectin",
+    )
+
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        "ChatMessage",
+        back_populates="user",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

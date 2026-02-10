@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth
+from app.api.v1 import auth, chat, documents, knowledge, projects, quotes
 from app.config import settings
 from app.core.database import close_db_connection, init_db_connection
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan handler for startup and shutdown events.
 
@@ -93,6 +93,36 @@ def create_application() -> FastAPI:
         tags=["Authentication"],
     )
 
+    app.include_router(
+        projects.router,
+        prefix=f"{settings.API_V1_PREFIX}/projects",
+        tags=["Projects"],
+    )
+
+    app.include_router(
+        quotes.router,
+        prefix=f"{settings.API_V1_PREFIX}",
+        tags=["Quotes"],
+    )
+
+    app.include_router(
+        chat.router,
+        prefix=f"{settings.API_V1_PREFIX}",
+        tags=["Chat"],
+    )
+
+    app.include_router(
+        knowledge.router,
+        prefix=f"{settings.API_V1_PREFIX}/knowledge",
+        tags=["Knowledge Base"],
+    )
+
+    app.include_router(
+        documents.router,
+        prefix=f"{settings.API_V1_PREFIX}",
+        tags=["Documents"],
+    )
+
     return app
 
 
@@ -105,7 +135,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
 
     @app.exception_handler(Exception)
-    async def global_exception_handler(
+    async def _global_exception_handler(  # pyright: ignore[reportUnusedFunction]
         request: Request, exc: Exception
     ) -> JSONResponse:
         """Handle unexpected exceptions."""

@@ -29,15 +29,16 @@ export default defineConfig(({ mode }) => {
         interval: 1000,
       },
       proxy: {
+        // WebSocket proxy for real-time collaboration - must be before /api
+        '/api/v1/ws': {
+          target: apiTarget.replace('http', 'ws'),
+          ws: true,
+          changeOrigin: true,
+        },
         '/api': {
           target: apiTarget,
           changeOrigin: true,
           secure: false,
-        },
-        '/ws': {
-          target: apiTarget.replace('http', 'ws'),
-          ws: true,
-          changeOrigin: true,
         },
       },
     },
@@ -57,5 +58,29 @@ export default defineConfig(({ mode }) => {
     },
     // Environment variable prefix
     envPrefix: 'VITE_',
+    // Optimize deps for Lexical
+    optimizeDeps: {
+      include: [
+        'lexical',
+        '@lexical/react/LexicalComposer',
+        '@lexical/react/LexicalRichTextPlugin',
+        '@lexical/react/LexicalContentEditable',
+        '@lexical/react/LexicalHistoryPlugin',
+        '@lexical/react/LexicalAutoFocusPlugin',
+        '@lexical/react/LexicalOnChangePlugin',
+        '@lexical/react/LexicalErrorBoundary',
+        '@lexical/react/LexicalListPlugin',
+        '@lexical/react/LexicalLinkPlugin',
+        '@lexical/react/LexicalMarkdownShortcutPlugin',
+        '@lexical/rich-text',
+        '@lexical/list',
+        '@lexical/code',
+        '@lexical/link',
+        '@lexical/table',
+        '@lexical/markdown',
+        '@lexical/utils',
+        '@lexical/html',
+      ],
+    },
   }
 })

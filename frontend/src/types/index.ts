@@ -42,6 +42,9 @@ export interface User {
   updated_at?: string;
 }
 
+// Platform Type (used by both Project and Quote)
+export type Platform = 'wordpress' | 'shopify' | 'woocommerce' | 'custom';
+
 // Project Types
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 
@@ -49,6 +52,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  platform?: Platform;
   client_name?: string;
   client_email?: string;
   target_completion_date?: string;
@@ -71,8 +75,6 @@ export interface TeamMember {
 
 // Quote Types
 export type QuoteStatus = 'generating' | 'draft' | 'finalized' | 'sent' | 'accepted' | 'rejected' | 'archived';
-
-export type Platform = 'WordPress' | 'Shopify' | 'WooCommerce' | 'Magento' | 'Custom' | 'Other';
 
 export interface QuoteSummary {
   id: string;
@@ -257,3 +259,5 @@ export interface QuoteFilters {
 // Re-export detailed quote types
 export * from './quote.types';
 export * from './file.types';
+export * from './project';
+export * from './chat';

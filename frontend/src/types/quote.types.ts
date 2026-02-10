@@ -3,14 +3,12 @@
  * Based on API contracts specification
  */
 
-// Platform options for quote generation
+// Platform options for quote generation (must match backend Platform enum)
 export type Platform =
   | 'wordpress'
   | 'shopify'
   | 'woocommerce'
-  | 'magento'
-  | 'custom'
-  | 'other';
+  | 'custom';
 
 // Quote status lifecycle
 export type QuoteStatus =
@@ -190,12 +188,18 @@ export interface GenerationOptions {
   hourly_rate: number;
 }
 
-// Quote generation request
+// Quote generation request - matches backend QuoteGenerateRequest schema
 export interface GenerateQuoteRequest {
-  requirements_text: string;
-  attachment_ids: string[];
-  platform: Platform;
-  generation_options: GenerationOptions;
+  requirements: string;  // min 10 chars, max 50000 chars
+  title?: string;        // optional title, max 500 chars
+  hourly_rate?: number;  // optional hourly rate for cost calculation
+  use_rag?: boolean;     // whether to use RAG context from knowledge base (default true)
+  project_context?: {    // additional project context
+    platform?: Platform;
+    client_name?: string;
+    industry?: string;
+    [key: string]: unknown;
+  };
 }
 
 // Quote generation response (async)

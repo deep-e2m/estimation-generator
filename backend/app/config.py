@@ -120,6 +120,89 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
+    # ==================== OpenRouter Settings ====================
+    # API key for OpenRouter - provides access to multiple LLM providers
+    OPENROUTER_API_KEY: str = Field(
+        default="",
+        description="OpenRouter API key for multi-model LLM access",
+    )
+    # Application name shown in OpenRouter dashboard
+    OPENROUTER_APP_NAME: str = "Estimate AI"
+    # HTTP referer for OpenRouter requests (used for tracking)
+    OPENROUTER_HTTP_REFERER: str = Field(
+        default="http://localhost:3000",
+        description="HTTP referer for OpenRouter API requests",
+    )
+
+    # ==================== LLM Settings ====================
+    # Default temperature for LLM requests (0.0 = deterministic, 2.0 = creative)
+    LLM_DEFAULT_TEMPERATURE: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=2.0,
+        description="Default sampling temperature for LLM requests",
+    )
+    # Default maximum tokens for LLM responses
+    LLM_DEFAULT_MAX_TOKENS: int = Field(
+        default=4096,
+        ge=256,
+        le=16384,
+        description="Default maximum tokens for LLM responses",
+    )
+    # Request timeout in seconds
+    LLM_REQUEST_TIMEOUT: int = Field(
+        default=120,
+        ge=30,
+        le=600,
+        description="Timeout in seconds for LLM API requests",
+    )
+
+    # ==================== RAG Settings ====================
+    # Number of similar documents to retrieve
+    RAG_TOP_K_RESULTS: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Number of similar documents to retrieve for RAG",
+    )
+    # Minimum similarity score for retrieval (0-1)
+    RAG_SIMILARITY_THRESHOLD: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity score for RAG retrieval",
+    )
+    # Embedding vector dimensions (must match the embedding model)
+    EMBEDDING_DIMENSIONS: int = Field(
+        default=1536,
+        description="Dimensions for embedding vectors (OpenAI text-embedding-3-small)",
+    )
+    # Maximum context length for RAG
+    RAG_MAX_CONTEXT_LENGTH: int = Field(
+        default=8000,
+        ge=1000,
+        le=32000,
+        description="Maximum character length for RAG context",
+    )
+
+    # ==================== Knowledge Base Settings ====================
+    # Path to knowledge base files (relative to project root)
+    KNOWLEDGE_BASE_PATH: str = "knowledge-based"
+    # Chunk size for document embedding
+    KNOWLEDGE_CHUNK_SIZE: int = Field(
+        default=512,
+        ge=100,
+        le=2000,
+        description="Character size for document chunks",
+    )
+    # Overlap between chunks
+    KNOWLEDGE_CHUNK_OVERLAP: int = Field(
+        default=50,
+        ge=0,
+        le=200,
+        description="Character overlap between document chunks",
+    )
+
     @field_validator("DATABASE_URL")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

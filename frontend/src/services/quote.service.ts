@@ -45,38 +45,56 @@ class QuoteService {
 
     const generate = async () => {
       try {
-        // Initial generation request
-        const response = await apiClient.post<{ success: boolean; data: GenerateQuoteResponse }>(
-          `/api/v1/projects/${projectId}/quotes/generate`,
-          request,
-          { signal: this.abortController?.signal }
-        );
-
-        const { quote_id, generation_job_id } = response.data.data;
-
         // Set initial progress
         onProgress({
-          quote_id,
+          quote_id: '',
           status: 'generating',
           progress: {
-            current_step: 'parsing_input',
-            steps_completed: 0,
-            total_steps: 5,
-            percentage: 0,
-            message: 'Starting quote generation...',
+            current_step: 'generating_estimate',
+            steps_completed: 1,
+            total_steps: 3,
+            percentage: 33,
+            message: 'Generating quote with AI...',
           },
           started_at: new Date().toISOString(),
         });
 
-        // Poll for progress
-        await this.pollGenerationProgress(
-          projectId,
-          quote_id,
-          generation_job_id,
-          onProgress,
-          onComplete,
-          onError
+        // The backend does synchronous generation and returns the full quote
+        const response = await apiClient.post<{
+          success: boolean;
+          data: {
+            quote: Quote;
+            generation_metadata: {
+              model_used: string;
+              tokens_used: number;
+              generation_cost: number;
+              rag_context_used: boolean;
+              generation_time_ms: number;
+            };
+          };
+        }>(
+          `/api/v1/projects/${projectId}/quotes`,
+          request,
+          { signal: this.abortController?.signal }
         );
+
+        // Update progress to complete
+        onProgress({
+          quote_id: response.data.data.quote.id,
+          status: 'completed',
+          progress: {
+            current_step: 'formatting_output',
+            steps_completed: 3,
+            total_steps: 3,
+            percentage: 100,
+            message: 'Quote generated successfully!',
+          },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+
+        // Return the quote directly
+        onComplete(response.data.data.quote);
       } catch (error) {
         if ((error as Error).name === 'AbortError') {
           onError('Generation cancelled');
@@ -158,7 +176,7 @@ class QuoteService {
     request: GenerateQuoteRequest
   ): Promise<GenerateQuoteResponse> {
     const response = await apiClient.post<{ success: boolean; data: GenerateQuoteResponse }>(
-      `/api/v1/projects/${projectId}/quotes/generate`,
+      `/api/v1/projects/${projectId}/quotes`,
       request
     );
     return response.data.data;
@@ -365,6 +383,26 @@ class QuoteService {
   }
 
   /**
+   * Export quote directly to blob (for immediate download)
+   * Handles both DOCX and PDF formats
+   */
+  async exportQuote(
+    projectId: string,
+    quoteId: string,
+    format: 'docx' | 'pdf'
+  ): Promise<Blob> {
+    // Backend uses POST for export endpoints
+    const response = await apiClient.post(
+      `/api/v1/projects/${projectId}/quotes/${quoteId}/export/${format}`,
+      {},
+      {
+        responseType: 'blob',
+      }
+    );
+    return response.data;
+  }
+
+  /**
    * Get supported platforms
    */
   getSupportedPlatforms(): Array<{ value: Platform; label: string }> {
@@ -372,9 +410,7 @@ class QuoteService {
       { value: 'wordpress', label: 'WordPress' },
       { value: 'shopify', label: 'Shopify' },
       { value: 'woocommerce', label: 'WooCommerce' },
-      { value: 'magento', label: 'Magento' },
-      { value: 'custom', label: 'Custom (React, Vue, Angular, etc.)' },
-      { value: 'other', label: 'Other' },
+      { value: 'custom', label: 'Custom (React, Vue, Angular, Magento, etc.)' },
     ];
   }
 }

@@ -3,7 +3,9 @@
  *
  * Routes:
  * - Public: /auth/login, /auth/register
- * - Protected: /dashboard, /projects, /quotes, etc.
+ * - Protected: /dashboard, /projects, etc.
+ *
+ * Note: Quotes are accessed within Projects, not as standalone routes
  */
 
 import { useEffect } from 'react'
@@ -21,26 +23,16 @@ import RegisterPage from '@/pages/Register'
 
 // Main pages
 import DashboardPage from '@/pages/Dashboard'
-import NewQuote from '@/pages/NewQuote'
+import { ProjectsPage } from '@/pages/Projects'
+import { NewProjectPage } from '@/pages/NewProject'
+import { ProjectDetailPage } from '@/pages/ProjectDetail'
+import { QuoteDetail } from '@/pages/QuoteDetail'
+import { QuoteEditPage } from '@/pages/QuoteEdit'
 
-// Placeholder pages
-function ProjectsPage() {
-  return (
-    <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-      <h2 className="text-lg font-medium text-gray-900">Projects</h2>
-      <p className="mt-2 text-gray-500">Projects list will be displayed here.</p>
-    </div>
-  )
-}
-
-function QuotesPage() {
-  return (
-    <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-      <h2 className="text-lg font-medium text-gray-900">Quotes</h2>
-      <p className="mt-2 text-gray-500">Quotes list will be displayed here.</p>
-    </div>
-  )
-}
+// Styles
+import '@/styles/chat.css'
+import '@/styles/projects.css'
+import '@/styles/quotes.css'
 
 function SettingsPage() {
   return (
@@ -144,11 +136,20 @@ function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+
+        {/* Projects routes */}
         <Route path="/projects" element={<ProjectsPage />} />
-        <Route path="/projects/:id" element={<ProjectsPage />} />
-        <Route path="/quotes" element={<QuotesPage />} />
-        <Route path="/quotes/new" element={<NewQuote projectId="default" />} />
-        <Route path="/quotes/:id" element={<QuotesPage />} />
+        <Route path="/projects/new" element={<NewProjectPage />} />
+        <Route path="/projects/:id" element={<ProjectDetailPage />} />
+        <Route path="/projects/:id/quotes/:quoteId" element={<QuoteDetail />} />
+        <Route path="/projects/:projectId/quotes/:quoteId/edit" element={<QuoteEditPage />} />
+
+        {/* Redirect old /quotes routes to /projects */}
+        <Route path="/quotes" element={<Navigate to="/projects" replace />} />
+        <Route path="/quotes/new" element={<Navigate to="/projects" replace />} />
+        <Route path="/quotes/:id" element={<Navigate to="/projects" replace />} />
+
+        {/* Settings and Help */}
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />

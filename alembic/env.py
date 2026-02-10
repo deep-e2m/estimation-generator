@@ -19,6 +19,11 @@ from alembic import context
 # Import your models' Base
 from app.models.base import Base
 from app.models.file_upload import FileUpload, FileBlob  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.project import Project  # noqa: F401
+from app.models.quote import Quote  # noqa: F401
+from app.models.chat_message import ChatMessage  # noqa: F401
+from app.models.knowledge_embedding import KnowledgeEmbedding  # noqa: F401
 from app.config import settings
 
 # Alembic Config object

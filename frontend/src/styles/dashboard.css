@@ -7,7 +7,8 @@
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: 2.5rem; /* 40px between major sections */
+  gap: 3rem; /* 48px between major sections for better breathing room */
+  padding: 0.5rem 0;
 }
 
 /* Welcome section */
@@ -74,7 +75,7 @@
 /* Stats grid */
 .dashboard-stats {
   display: grid;
-  gap: 1.5rem; /* 24px between stat cards */
+  gap: 1.75rem; /* 28px between stat cards */
 }
 
 @media (min-width: 640px) {
@@ -99,7 +100,7 @@
 }
 
 .stat-card-content {
-  padding: 1.5rem;
+  padding: 1.75rem;
 }
 
 .stat-card-inner {
@@ -251,6 +252,26 @@
 .empty-state-btn svg {
   width: 1.125rem;
   height: 1.125rem;
+}
+
+/* Card section styling */
+.card-section {
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.card-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.card-section-content {
+  padding: 1.5rem;
 }
 
 /* Quick actions */

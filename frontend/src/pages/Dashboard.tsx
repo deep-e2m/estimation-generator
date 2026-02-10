@@ -121,9 +121,9 @@ export default function DashboardPage() {
             Here's what's happening with your projects today.
           </p>
         </div>
-        <Link to="/quotes/new" className="dashboard-welcome-btn shrink-0">
+        <Link to="/projects/new" className="dashboard-welcome-btn shrink-0">
           <Plus className="h-5 w-5" />
-          New Quote
+          New Project
         </Link>
       </div>
 
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           <CardHeader className="card-section-header">
             <CardTitle>Recent Quotes</CardTitle>
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/quotes" className="flex items-center gap-1.5">
+              <Link to="/projects" className="flex items-center gap-1.5">
                 View all
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -200,9 +200,9 @@ export default function DashboardPage() {
           <CardContent className="card-section-content">
             <EmptyState
               title="No quotes yet"
-              description="Generate your first AI-powered quote."
-              actionLabel="New Quote"
-              actionHref="/quotes/new"
+              description="Create a project to generate AI-powered quotes."
+              actionLabel="New Project"
+              actionHref="/projects/new"
             />
           </CardContent>
         </Card>
@@ -215,33 +215,33 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="card-section-content">
           <div className="quick-actions-grid">
-            <Link to="/quotes/new" className="quick-action-item primary">
+            <Link to="/projects/new" className="quick-action-item primary">
               <div className="quick-action-icon bg-primary-100">
-                <FileText className="h-6 w-6 text-primary-600" />
+                <Plus className="h-6 w-6 text-primary-600" />
               </div>
               <div className="quick-action-text">
-                <p>Generate Quote</p>
-                <p>AI-powered estimation</p>
+                <p>New Project</p>
+                <p>Start with a quote</p>
               </div>
             </Link>
 
-            <Link to="/projects/new" className="quick-action-item success">
+            <Link to="/projects" className="quick-action-item success">
               <div className="quick-action-icon bg-success-100">
                 <FolderOpen className="h-6 w-6 text-success-600" />
               </div>
               <div className="quick-action-text">
-                <p>New Project</p>
-                <p>Organize your work</p>
+                <p>All Projects</p>
+                <p>View & manage projects</p>
               </div>
             </Link>
 
-            <Link to="/quotes" className="quick-action-item warning">
+            <Link to="/projects" className="quick-action-item warning">
               <div className="quick-action-icon bg-warning-100">
-                <Clock className="h-6 w-6 text-warning-600" />
+                <FileText className="h-6 w-6 text-warning-600" />
               </div>
               <div className="quick-action-text">
-                <p>Quote History</p>
-                <p>View past estimates</p>
+                <p>View Quotes</p>
+                <p>Project quotes & history</p>
               </div>
             </Link>
 

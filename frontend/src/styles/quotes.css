@@ -1,0 +1,547 @@
+/**
+ * Quotes Styles
+ * Styles for quote listing, viewing, and editing
+ */
+
+/* Quote List */
+.quote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.quote-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.quote-list-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+/* Quote Card */
+.quote-card {
+  display: block;
+  padding: 1.25rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.quote-card:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.quote-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.quote-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.quote-card-number {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.quote-card-client {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.quote-card-metrics {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.quote-card-metric {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.quote-card-metric-icon {
+  width: 1rem;
+  height: 1rem;
+  color: #9ca3af;
+}
+
+.quote-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.quote-card-platform {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  color: #6b7280;
+}
+
+.quote-card-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+/* Quote Status Badges */
+.quote-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+}
+
+.quote-status-generating {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
+.quote-status-draft {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.quote-status-finalized {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.quote-status-sent {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+
+.quote-status-accepted {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.quote-status-rejected {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.quote-status-archived {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Quote View */
+.quote-view {
+  background-color: #ffffff;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+}
+
+.quote-view-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .quote-view-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
+
+.quote-view-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.quote-view-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.quote-view-version {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  color: #6b7280;
+}
+
+.quote-view-content {
+  padding: 1.5rem;
+}
+
+.quote-view-section {
+  margin-bottom: 2rem;
+}
+
+.quote-view-section:last-child {
+  margin-bottom: 0;
+}
+
+.quote-view-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+.quote-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Quote Editor */
+.quote-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.quote-editor-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .quote-editor-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.quote-editor-content {
+  min-height: 400px;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+}
+
+.quote-editor-textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+
+.quote-editor-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.quote-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Quote Totals Summary */
+.quote-totals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+  border-radius: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .quote-totals {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.quote-totals-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quote-totals-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4b5563;
+}
+
+.quote-totals-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.quote-totals-value-primary {
+  color: #3b82f6;
+}
+
+.quote-totals-value-success {
+  color: #059669;
+}
+
+/* Quote Empty State */
+.quote-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.quote-empty-icon {
+  display: flex;
+  width: 4rem;
+  height: 4rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  margin-bottom: 1.5rem;
+}
+
+.quote-empty-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.quote-empty-description {
+  font-size: 0.875rem;
+  color: #6b7280;
+  max-width: 20rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Deliverables Table */
+.deliverables-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.deliverables-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #4b5563;
+  border-bottom: 2px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.deliverables-table th:not(:first-child) {
+  text-align: right;
+}
+
+.deliverables-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.deliverables-table td:not(:first-child) {
+  text-align: right;
+}
+
+.deliverables-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.deliverable-name {
+  font-weight: 500;
+  color: #111827;
+}
+
+.deliverable-description {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.deliverable-hours {
+  font-weight: 500;
+  color: #111827;
+}
+
+/* Collapsible Section */
+.collapsible-section {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.collapsible-section:last-child {
+  border-bottom: none;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.collapsible-header:hover {
+  background-color: #f9fafb;
+}
+
+.collapsible-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.collapsible-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  color: #6b7280;
+}
+
+.collapsible-content {
+  padding: 0 1.5rem 1.5rem;
+}
+
+/* Assumptions and Risks Lists */
+.assumptions-list,
+.risks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.assumption-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background-color: #fffbeb;
+  border-radius: 0.5rem;
+}
+
+.assumption-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background-color: #fef08a;
+  color: #a16207;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
+}
+
+.assumption-text {
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.risk-item {
+  padding: 1rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+.risk-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.risk-description {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+
+.risk-mitigation {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+}
+
+.risk-impact {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  text-transform: capitalize;
+}
+
+.risk-impact-low {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.risk-impact-medium {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.risk-impact-high {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}

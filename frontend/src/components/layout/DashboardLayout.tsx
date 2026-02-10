@@ -13,7 +13,6 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   FolderOpen,
-  FileText,
   Settings,
   HelpCircle,
   LogOut,
@@ -42,11 +41,6 @@ const mainNavItems = [
     label: 'Projects',
     href: '/projects',
     icon: FolderOpen,
-  },
-  {
-    label: 'Quotes',
-    href: '/quotes',
-    icon: FileText,
   },
 ]
 
@@ -189,7 +183,6 @@ export default function DashboardLayout() {
     const path = location.pathname
     if (path === '/dashboard') return 'Dashboard'
     if (path.startsWith('/projects')) return 'Projects'
-    if (path.startsWith('/quotes')) return 'Quotes'
     if (path.startsWith('/settings')) return 'Settings'
     if (path.startsWith('/help')) return 'Help & Support'
     return 'Estimate AI'
@@ -258,13 +251,13 @@ export default function DashboardLayout() {
 
         {/* Navigation */}
         <nav className="sidebar-nav">
-          {/* New Quote Button */}
+          {/* New Project Button */}
           <button
-            onClick={() => navigate('/quotes/new')}
+            onClick={() => navigate('/projects/new')}
             className={cn('sidebar-new-quote-btn', sidebarCollapsed && 'px-2')}
           >
             <Plus className="h-4 w-4" />
-            {!sidebarCollapsed && 'New Quote'}
+            {!sidebarCollapsed && 'New Project'}
           </button>
 
           {/* Main Navigation */}

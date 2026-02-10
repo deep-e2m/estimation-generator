@@ -1,0 +1,318 @@
+"""
+Quote schemas for request/response validation.
+
+This module defines Pydantic schemas for quote-related endpoints
+including generation, CRUD operations, and status management.
+"""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Any, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.quote import Complexity, QuoteStatus
+from app.schemas.auth import APIResponse
+from app.schemas.project import PaginationMeta
+
+
+# =============================================================================
+# Quote Base Schemas
+# =============================================================================
+
+
+class QuoteBase(BaseModel):
+    """Base quote schema with common fields."""
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Quote title",
+        examples=["WordPress E-commerce Website Development"],
+    )
+    requirements: str = Field(
+        ...,
+        min_length=10,
+        max_length=50000,
+        description="Client requirements for the project",
+        examples=["Build a WordPress site with WooCommerce, 10 product pages, shopping cart..."],
+    )
+
+
+class QuoteCreate(QuoteBase):
+    """Schema for quote creation request (without LLM generation)."""
+
+    content: str = Field(
+        ...,
+        min_length=1,
+        description="Quote content/document",
+    )
+    total_hours: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        description="Estimated total hours",
+    )
+    total_cost: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        description="Estimated total cost",
+    )
+    platform: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Target platform",
+    )
+    complexity: Complexity = Field(
+        default=Complexity.MEDIUM,
+        description="Project complexity level",
+    )
+
+
+class QuoteGenerateRequest(BaseModel):
+    """Schema for quote generation request with LLM."""
+
+    requirements: str = Field(
+        ...,
+        min_length=10,
+        max_length=50000,
+        description="Client requirements for the project",
+        examples=["Build a WordPress site with WooCommerce, 10 product pages, shopping cart..."],
+    )
+    title: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Optional title for the quote. If not provided, one will be generated.",
+    )
+    hourly_rate: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Hourly rate for cost calculation",
+        examples=[125.00],
+    )
+    use_rag: bool = Field(
+        default=True,
+        description="Whether to use RAG context from knowledge base",
+    )
+    project_context: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Additional project context (client name, industry, etc.)",
+    )
+
+
+class QuoteUpdate(BaseModel):
+    """Schema for quote update request. All fields are optional."""
+
+    title: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="Quote title",
+    )
+    content: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Quote content/document",
+    )
+    requirements: Optional[str] = Field(
+        default=None,
+        min_length=10,
+        max_length=50000,
+        description="Client requirements",
+    )
+    total_hours: Optional[Decimal] = Field(
+        default=None,
+        ge=0,
+        description="Estimated total hours",
+    )
+    total_cost: Optional[Decimal] = Field(
+        default=None,
+        ge=0,
+        description="Estimated total cost",
+    )
+    complexity: Optional[Complexity] = Field(
+        default=None,
+        description="Project complexity level",
+    )
+
+
+class QuoteStatusUpdate(BaseModel):
+    """Schema for quote status update request."""
+
+    status: QuoteStatus = Field(
+        ...,
+        description="New status for the quote",
+    )
+
+    @field_validator("status")
+    @classmethod
+    def validate_status_transition(cls, v: QuoteStatus) -> QuoteStatus:
+        """Validate status is a valid target status."""
+        # All statuses are valid targets; transition validation happens in the endpoint
+        return v
+
+
+class QuoteRegenerateRequest(BaseModel):
+    """Schema for quote regeneration request."""
+
+    feedback: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="Feedback or refinement instructions for the regeneration",
+    )
+    use_rag: bool = Field(
+        default=True,
+        description="Whether to use RAG context from knowledge base",
+    )
+
+
+# =============================================================================
+# Quote Response Schemas
+# =============================================================================
+
+
+class QuoteResponse(BaseModel):
+    """Schema for quote data in responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Unique quote identifier")
+    quote_number: str = Field(default="", description="Human-readable quote number")
+    project_id: UUID = Field(..., description="ID of the parent project")
+    title: str = Field(..., description="Quote title")
+    content: str = Field(..., description="Quote content/document")
+    requirements: str = Field(..., description="Client requirements")
+    total_hours: Decimal = Field(..., description="Estimated total hours")
+    total_cost: Decimal = Field(..., description="Estimated total cost")
+    platform: str = Field(..., description="Target platform")
+    complexity: Complexity = Field(..., description="Project complexity")
+    status: QuoteStatus = Field(..., description="Current quote status")
+    created_by: UUID = Field(..., description="ID of user who created the quote")
+    approved_by: Optional[UUID] = Field(None, description="ID of user who approved the quote")
+    approved_at: Optional[datetime] = Field(None, description="Approval timestamp")
+    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    @field_validator("quote_number", mode="before")
+    @classmethod
+    def generate_quote_number(cls, v, info):
+        """Generate quote_number from UUID if not provided."""
+        if v:
+            return v
+        # Get the id from values if available
+        id_val = info.data.get("id") if info.data else None
+        if id_val:
+            return f"QT-{str(id_val)[:8].upper()}"
+        return ""
+
+
+class QuoteSummaryResponse(BaseModel):
+    """Shortened quote response for listings."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Unique quote identifier")
+    quote_number: str = Field(default="", description="Human-readable quote number")
+    project_id: UUID = Field(..., description="ID of the parent project")
+    title: str = Field(..., description="Quote title")
+    total_hours: Decimal = Field(..., description="Estimated total hours")
+    total_cost: Decimal = Field(..., description="Estimated total cost")
+    platform: str = Field(..., description="Target platform")
+    complexity: Complexity = Field(..., description="Project complexity")
+    status: QuoteStatus = Field(..., description="Current quote status")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    @field_validator("quote_number", mode="before")
+    @classmethod
+    def generate_quote_number(cls, v, info):
+        """Generate quote_number from UUID if not provided."""
+        if v:
+            return v
+        id_val = info.data.get("id") if info.data else None
+        if id_val:
+            return f"QT-{str(id_val)[:8].upper()}"
+        return ""
+
+
+class QuoteDetailResponse(QuoteResponse):
+    """Extended quote response with additional information."""
+
+    project_name: Optional[str] = Field(None, description="Name of the parent project")
+    creator_name: Optional[str] = Field(None, description="Name of the quote creator")
+    approver_name: Optional[str] = Field(None, description="Name of the approver (if approved)")
+
+
+# =============================================================================
+# Quote Generation Response Schemas
+# =============================================================================
+
+
+class QuoteGenerationMetadata(BaseModel):
+    """Metadata about the quote generation process."""
+
+    model_used: str = Field(..., description="LLM model used for generation")
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    generation_cost: float = Field(..., description="Cost of the LLM API call")
+    rag_context_used: bool = Field(..., description="Whether RAG context was used")
+    generation_time_ms: Optional[int] = Field(None, description="Generation time in milliseconds")
+
+
+class QuoteGenerationResponse(BaseModel):
+    """Response schema for quote generation."""
+
+    quote: QuoteResponse = Field(..., description="The generated quote")
+    generation_metadata: QuoteGenerationMetadata = Field(..., description="Generation metadata")
+
+
+# =============================================================================
+# List Response Schemas
+# =============================================================================
+
+
+class QuoteListData(BaseModel):
+    """Data container for quote list response."""
+
+    quotes: list[QuoteSummaryResponse] = Field(..., description="List of quotes")
+    pagination: PaginationMeta = Field(..., description="Pagination information")
+
+
+class QuoteListResponse(APIResponse):
+    """Response schema for quote listing endpoint."""
+
+    data: QuoteListData = Field(..., description="Quote list data with pagination")
+
+
+# =============================================================================
+# Single Quote Response Schemas
+# =============================================================================
+
+
+class QuoteDataResponse(APIResponse):
+    """Response schema for single quote operations."""
+
+    data: QuoteResponse = Field(..., description="Quote data")
+
+
+class QuoteDetailDataResponse(APIResponse):
+    """Response schema for quote detail view."""
+
+    data: QuoteDetailResponse = Field(..., description="Detailed quote data")
+
+
+class QuoteGenerateDataResponse(APIResponse):
+    """Response schema for quote generation."""
+
+    data: QuoteGenerationResponse = Field(..., description="Generated quote with metadata")
+
+
+class QuoteDeleteResponse(APIResponse):
+    """Response schema for quote deletion."""
+
+    data: dict = Field(
+        default={"message": "Quote deleted successfully"},
+        description="Deletion confirmation",
+    )

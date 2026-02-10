@@ -1,0 +1,15 @@
+# Training Quotes Folder
+
+Place your historical quotes here for RAG training.
+
+## File Format
+Use markdown (.md) files with this structure:
+- Client Information
+- Initial Requirements
+- Communication History (back-and-forth)
+- Final Requirements Summary
+- Final Quote (with hour breakdown)
+- Assumptions & Exclusions
+- Outcome (if available)
+
+See /specs/rag-implementation-strategy.md for detailed examples.

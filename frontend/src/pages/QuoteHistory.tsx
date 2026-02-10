@@ -37,12 +37,10 @@ const statusOptions: { value: QuoteStatus | ''; label: string }[] = [
 
 const platformOptions: { value: Platform | ''; label: string }[] = [
   { value: '', label: 'All Platforms' },
-  { value: 'WordPress', label: 'WordPress' },
-  { value: 'Shopify', label: 'Shopify' },
-  { value: 'WooCommerce', label: 'WooCommerce' },
-  { value: 'Magento', label: 'Magento' },
-  { value: 'Custom', label: 'Custom' },
-  { value: 'Other', label: 'Other' },
+  { value: 'wordpress', label: 'WordPress' },
+  { value: 'shopify', label: 'Shopify' },
+  { value: 'woocommerce', label: 'WooCommerce' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 const sortOptions = [

@@ -39,9 +39,7 @@ const PLATFORMS: Array<{ value: Platform; label: string; description: string }> 
   { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging' },
   { value: 'shopify', label: 'Shopify', description: 'Hosted e-commerce platform' },
   { value: 'woocommerce', label: 'WooCommerce', description: 'WordPress e-commerce plugin' },
-  { value: 'magento', label: 'Magento', description: 'Enterprise e-commerce platform' },
-  { value: 'custom', label: 'Custom', description: 'React, Vue, Angular, or other frameworks' },
-  { value: 'other', label: 'Other', description: 'Other platforms or technologies' },
+  { value: 'custom', label: 'Custom', description: 'React, Vue, Angular, Magento, or other frameworks' },
 ];
 
 // Generation step labels
@@ -141,16 +139,11 @@ export const NewQuotePage: React.FC<NewQuotePageProps> = ({
     setGenerationProgress(null);
 
     const request: GenerateQuoteRequest = {
-      requirements_text: requirements,
-      attachment_ids: uploadedRecords.map((r) => r.id),
-      platform,
-      generation_options: {
-        detail_level: 'detailed',
-        include_assumptions: true,
-        include_risks: true,
-        estimation_approach: 'three_point',
-        currency: 'USD',
-        hourly_rate: 150, // Default rate, should come from user settings
+      requirements: requirements,
+      hourly_rate: 150, // Default rate, should come from user settings
+      use_rag: true,
+      project_context: {
+        platform,
       },
     };
 
@@ -177,7 +170,7 @@ export const NewQuotePage: React.FC<NewQuotePageProps> = ({
     );
 
     setCancelGeneration(() => cancel);
-  }, [canGenerate, requirements, uploadedRecords, platform, projectId, onQuoteGenerated]);
+  }, [canGenerate, requirements, platform, projectId, onQuoteGenerated]);
 
   /**
    * Handle cancel generation
