@@ -14,8 +14,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.orm import selectinload
+
 from app.core.database import get_db_session
 from app.core.security import TokenValidationError, verify_access_token
+from app.models.project import Project
 from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -194,3 +197,48 @@ ActiveUser = Annotated[User, Depends(get_current_active_user)]
 VerifiedUser = Annotated[User, Depends(get_current_verified_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+# ---------------------------------------------------------------------------
+# Shared access-control helpers
+# ---------------------------------------------------------------------------
+
+
+def api_error(status_code: int, code: str, message: str) -> HTTPException:
+    """Create an HTTPException with a standardised error body."""
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message},
+    )
+
+
+async def get_project_with_access(
+    project_id: UUID,
+    current_user: User,
+    db: AsyncSession,
+) -> Project:
+    """
+    Fetch a project by ID and verify the user has access.
+
+    Loads the ``creator`` and ``client`` relationships eagerly so
+    callers don't need to issue follow-up queries for common fields.
+
+    Raises:
+        HTTPException 404: project not found.
+        HTTPException 403: user is not the owner and not an admin.
+    """
+    query = (
+        select(Project)
+        .options(selectinload(Project.creator), selectinload(Project.client))
+        .where(Project.id == project_id)
+    )
+    result = await db.execute(query)
+    project = result.scalar_one_or_none()
+
+    if project is None:
+        raise api_error(404, "PROJECT_NOT_FOUND", "Project not found")
+
+    if project.created_by != current_user.id and not current_user.is_admin:
+        raise api_error(403, "ACCESS_DENIED", "You don't have access to this project")
+
+    return project

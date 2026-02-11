@@ -408,9 +408,6 @@ class QuoteService {
   getSupportedPlatforms(): Array<{ value: Platform; label: string }> {
     return [
       { value: 'wordpress', label: 'WordPress' },
-      { value: 'shopify', label: 'Shopify' },
-      { value: 'woocommerce', label: 'WooCommerce' },
-      { value: 'custom', label: 'Custom (React, Vue, Angular, Magento, etc.)' },
     ];
   }
 }

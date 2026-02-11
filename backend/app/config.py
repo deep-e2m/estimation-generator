@@ -8,7 +8,7 @@ environment variables and .env files.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -109,12 +109,13 @@ class Settings(BaseSettings):
         "http://frontend:80",         # Production Docker
     ]
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ["*"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
-
-    # Rate Limiting
-    RATE_LIMIT_REQUESTS_PER_MINUTE: int = Field(default=100, ge=10)
-    RATE_LIMIT_AUTH_REQUESTS_PER_MINUTE: int = Field(default=5, ge=1)
+    CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    CORS_ALLOW_HEADERS: list[str] = [
+        "Authorization",
+        "Content-Type",
+        "X-Request-ID",
+        "Accept",
+    ]
 
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -202,6 +203,22 @@ class Settings(BaseSettings):
         le=200,
         description="Character overlap between document chunks",
     )
+
+    _DEFAULT_SECRET_KEY = "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_IN_PRODUCTION"
+
+    @model_validator(mode="after")
+    def validate_secret_key_not_default(self) -> "Settings":
+        """Reject the default SECRET_KEY when not in development mode."""
+        if (
+            self.SECRET_KEY == self._DEFAULT_SECRET_KEY
+            and self.ENVIRONMENT != "development"
+        ):
+            raise ValueError(
+                "SECRET_KEY must be changed from the default value in "
+                f"{self.ENVIRONMENT} environment. Generate a secure key with: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+        return self
 
     @field_validator("DATABASE_URL")
     @classmethod

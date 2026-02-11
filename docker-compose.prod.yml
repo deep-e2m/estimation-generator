@@ -103,6 +103,27 @@ services:
         max-file: "3"
 
   # ===========================================
+  # Celery Worker Production Configuration
+  # ===========================================
+  celery-worker:
+    volumes: []  # Remove development volume mounts
+    command: celery -A app.core.celery_app worker --loglevel=warning --concurrency=4 -Q default,knowledge
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================
   # Migrations - No changes needed
   # ===========================================
   migrations:

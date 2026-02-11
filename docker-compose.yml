@@ -33,7 +33,7 @@ services:
     networks:
       - estimation-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -75,6 +75,14 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+
+      # OpenRouter LLM settings
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_APP_NAME=${OPENROUTER_APP_NAME:-Estimate AI}
+      - OPENROUTER_HTTP_REFERER=${OPENROUTER_HTTP_REFERER:-http://localhost:3000}
+      - LLM_DEFAULT_TEMPERATURE=${LLM_DEFAULT_TEMPERATURE:-0.3}
+      - LLM_DEFAULT_MAX_TOKENS=${LLM_DEFAULT_MAX_TOKENS:-4096}
+      - LLM_REQUEST_TIMEOUT=${LLM_REQUEST_TIMEOUT:-120}
     volumes:
       # Mount source code for hot-reload in development
       - ./backend:/app
@@ -139,6 +147,47 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  # ===========================================
+  # Celery Worker (Background Tasks)
+  # ===========================================
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Database connection (Docker internal)
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quote_assistant}
+      # Redis connection (Docker internal)
+      - REDIS_URL=redis://redis:6379/0
+      # OpenRouter LLM settings (needed for embedding generation)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_APP_NAME=${OPENROUTER_APP_NAME:-Estimate AI}
+      # Application settings
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount source code for development
+      - ./backend:/app
+      # Exclude venv from mount
+      - /app/venv
+      # Mount knowledge base for ingestion tasks
+      - ./knowledge-based:/app/knowledge-based:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2 -Q default,knowledge
+    networks:
+      - estimation-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.core.celery_app", "inspect", "ping", "-d", "celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ===========================================
   # Database Migrations (one-time run)

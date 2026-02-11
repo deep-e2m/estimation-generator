@@ -121,7 +121,7 @@ class KnowledgeSearchRequest(BaseModel):
     )
     platform: Optional[str] = Field(
         default=None,
-        description="Filter by platform (e.g., 'wordpress', 'shopify')",
+        description="Filter by platform (currently only 'wordpress' is supported)",
     )
     top_k: int = Field(
         default=10,
@@ -233,3 +233,39 @@ class DocumentDeleteResponse(APIResponse):
     """Response schema for document deletion."""
 
     data: DocumentDeleteResult = Field(..., description="Document deletion result")
+
+
+# =============================================================================
+# Task Status Schemas (for Celery background tasks)
+# =============================================================================
+
+
+class TaskSubmittedResult(BaseModel):
+    """Result when a task is submitted to the background queue."""
+
+    task_id: str = Field(..., description="Celery task ID for tracking")
+    status: str = Field(default="submitted", description="Task submission status")
+    message: str = Field(..., description="Human-readable status message")
+
+
+class TaskSubmittedResponse(APIResponse):
+    """Response schema for task submission."""
+
+    data: TaskSubmittedResult = Field(..., description="Task submission result")
+
+
+class TaskStatusResult(BaseModel):
+    """Status of a background task."""
+
+    task_id: str = Field(..., description="Celery task ID")
+    status: str = Field(..., description="Task status (PENDING, STARTED, SUCCESS, FAILURE)")
+    ready: bool = Field(..., description="Whether the task has completed")
+    result: Optional[dict[str, Any]] = Field(None, description="Task result if completed")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    info: Optional[dict[str, Any]] = Field(None, description="Task progress info")
+
+
+class TaskStatusResponse(APIResponse):
+    """Response schema for task status endpoint."""
+
+    data: TaskStatusResult = Field(..., description="Task status information")

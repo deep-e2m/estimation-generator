@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.database import get_session_factory
+from app.core.redis import knowledge_cache
 from app.services.ai.openrouter_client import OpenRouterClient
 from app.services.ai.rag_service import RAGService
 
@@ -255,10 +256,10 @@ class KnowledgeService:
             "full_build": ["full build", "new website", "new site", "ground up"],
             "redesign": ["redesign", "rebuild", "overhaul", "migration"],
             "branding_refresh": ["branding refresh", "visual refresh", "styling"],
-            "ecommerce": ["woocommerce", "shopify", "ecommerce", "e-commerce", "online store"],
+            "ecommerce": ["woocommerce", "ecommerce", "e-commerce", "online store"],
             "landing_page": ["landing page", "campaign page", "single page"],
             "maintenance": ["maintenance", "updates", "support"],
-            "custom_development": ["custom development", "plugin development", "app development"],
+            "custom_development": ["custom development", "plugin development", "wordpress plugin"],
         }
 
         for project_type, keywords in type_keywords.items():
@@ -419,8 +420,8 @@ class KnowledgeService:
         filename = file_path.stem.lower()
         metadata: Dict[str, Any] = {}
 
-        # Try to extract platform from filename
-        platforms = ["wordpress", "shopify", "custom", "react", "nextjs"]
+        # Try to extract platform from filename (WordPress only)
+        platforms = ["wordpress"]
         for platform in platforms:
             if platform in filename:
                 metadata["platform"] = platform
@@ -588,13 +589,27 @@ class KnowledgeService:
     async def get_knowledge_stats(
         self,
         db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Get statistics about the knowledge base.
 
+        Results are cached in Redis for 2 minutes.
+
+        Args:
+            db_session: Optional database session.
+            use_cache: Whether to use Redis cache (default True).
+
         Returns:
             Dictionary with knowledge base statistics.
         """
+        # Try cache first
+        if use_cache:
+            cached_stats = await knowledge_cache.get("stats")
+            if cached_stats is not None:
+                logger.debug("Cache hit for knowledge stats")
+                return cached_stats
+
         stats_query = """
             SELECT
                 source_type,
@@ -627,6 +642,10 @@ class KnowledgeService:
                 }
                 stats["total_embeddings"] += row.embedding_count
                 stats["total_documents"] += row.document_count
+
+            # Cache the stats
+            if use_cache:
+                await knowledge_cache.set("stats", stats)
 
             return stats
 

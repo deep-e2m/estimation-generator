@@ -115,17 +115,15 @@ class ChatMessage(Base, UUIDMixin):
         doc="Timestamp when message was created",
     )
 
-    # Relationships
+    # Relationships (lazy="select" by default — use selectinload() in queries where eager loading is needed)
     project: Mapped["Project"] = relationship(
         "Project",
         back_populates="chat_messages",
-        lazy="selectin",
     )
 
     user: Mapped["User | None"] = relationship(
         "User",
         back_populates="chat_messages",
-        lazy="selectin",
     )
 
     def __repr__(self) -> str:

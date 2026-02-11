@@ -18,6 +18,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.chat_message import ChatMessage
+    from app.models.client import Client
     from app.models.document import Document
     from app.models.quote import Quote
     from app.models.user import User
@@ -27,13 +28,10 @@ class Platform(str, enum.Enum):
     """
     Supported e-commerce platforms.
 
-    Defines the platforms for which quotes can be generated.
+    Currently only WordPress is supported.
     """
 
     WORDPRESS = "wordpress"
-    SHOPIFY = "shopify"
-    WOOCOMMERCE = "woocommerce"
-    CUSTOM = "custom"
 
 
 class ProjectStatus(str, enum.Enum):
@@ -60,6 +58,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
         id: Unique identifier (UUID).
         name: Project name (max 500 characters).
         description: Optional detailed project description.
+        additional_instructions: Optional additional information or instructions.
         platform: Target e-commerce platform.
         status: Current project status.
         created_by: UUID of the user who created the project.
@@ -76,10 +75,25 @@ class Project(Base, UUIDMixin, TimestampMixin):
         doc="Project name",
     )
 
-    description: Mapped[str | None] = mapped_column(
+    description: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
         doc="Detailed project description",
+    )
+
+    additional_instructions: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        doc="Additional information or instructions for the project",
+    )
+
+    # Client relationship
+    client_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("clients.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Client associated with this project (optional)",
     )
 
     # Platform selection
@@ -118,33 +132,35 @@ class Project(Base, UUIDMixin, TimestampMixin):
         doc="User who created this project",
     )
 
-    # Relationships
+    # Relationships (lazy="select" by default — use selectinload() in queries where eager loading is needed)
     creator: Mapped["User"] = relationship(
         "User",
         foreign_keys=[created_by],
         back_populates="projects",
-        lazy="selectin",
+    )
+
+    client: Mapped[Optional["Client"]] = relationship(
+        "Client",
+        foreign_keys=[client_id],
+        back_populates="projects",
     )
 
     quotes: Mapped[list["Quote"]] = relationship(
         "Quote",
         back_populates="project",
         cascade="all, delete-orphan",
-        lazy="selectin",
     )
 
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
         back_populates="project",
         cascade="all, delete-orphan",
-        lazy="selectin",
     )
 
     documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="project",
         cascade="all, delete-orphan",
-        lazy="selectin",
     )
 
     def __repr__(self) -> str:

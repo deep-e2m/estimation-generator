@@ -128,23 +128,20 @@ class Document(Base, UUIDMixin, TimestampMixin):
         doc="Additional metadata",
     )
 
-    # Relationships
+    # Relationships (lazy="select" by default — use selectinload() in queries where eager loading is needed)
     project: Mapped["Project"] = relationship(
         "Project",
         back_populates="documents",
-        lazy="selectin",
     )
 
     creator: Mapped["User"] = relationship(
         "User",
         foreign_keys=[created_by],
-        lazy="selectin",
     )
 
     last_editor: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[last_edited_by],
-        lazy="selectin",
     )
 
     def __repr__(self) -> str:

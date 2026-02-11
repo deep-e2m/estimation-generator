@@ -115,9 +115,55 @@ test-results/
 coverage/
 
 # ==========================================
-# Claude / AI Tools
+# AI Tools / Coding Assistants
 # ==========================================
+# Claude / Anthropic
 .claude/
+.claude_*
+
+# Cursor IDE
+.cursor/
+.cursorrules
+.cursorignore
+.cursor_tuning/
+
+# Agent/Rule files
+AGENTS.md
+**/AGENTS.md
+**/RULE.md
+.rules/
+
+# Aider
+.aider*
+.aider/
+aider.conf.yml
+
+# Continue
+.continue/
+
+# Codeium
+.codeium/
+
+# Tabnine
+.tabnine/
+.tabnine_*
+
+# GitHub Copilot
+.copilot/
+.github/copilot/
+.copilot-*
+
+# Windsurf
+.windsurf/
+
+# Sourcegraph Cody
+.cody/
+.sourcegraph/
+
+# Other AI tools
+.ai/
+.llm/
+.gpt/
 
 # ==========================================
 # Project-specific

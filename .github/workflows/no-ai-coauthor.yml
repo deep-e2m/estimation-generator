@@ -1,0 +1,61 @@
+name: Block AI Co-authorship
+
+on:
+  push:
+    branches: [main, master, develop, dev-*]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  check-coauthorship:
+    name: Check for AI Co-authorship
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for commit inspection
+
+      - name: Check commits for AI co-authorship
+        run: |
+          echo "Checking commits for AI co-authorship trailers..."
+          
+          # Get the range of commits to check
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            # For push events, check the pushed commits
+            COMMIT_RANGE="${{ github.event.before }}..${{ github.event.after }}"
+          fi
+          
+          # Patterns to block
+          PATTERNS="Co-authored-by:.*(Claude|Anthropic|Cursor|AI Assistant|Copilot|OpenAI|GPT|Codeium|Tabnine|aider)"
+          
+          # Check each commit
+          FOUND_AI=false
+          while IFS= read -r commit_hash; do
+            if [ -n "$commit_hash" ]; then
+              COMMIT_MSG=$(git log -1 --format="%B" "$commit_hash")
+              if echo "$COMMIT_MSG" | grep -iE "$PATTERNS" > /dev/null 2>&1; then
+                echo "::error::Found AI co-authorship in commit $commit_hash"
+                echo "Commit message:"
+                echo "$COMMIT_MSG"
+                echo "---"
+                FOUND_AI=true
+              fi
+            fi
+          done < <(git rev-list $COMMIT_RANGE 2>/dev/null || git rev-list HEAD~10..HEAD)
+          
+          if [ "$FOUND_AI" = true ]; then
+            echo ""
+            echo "============================================================"
+            echo "ERROR: AI co-authorship detected in commit history!"
+            echo "============================================================"
+            echo ""
+            echo "Please rebase and remove the Co-authored-by lines:"
+            echo "  git rebase -i HEAD~N  # Edit the commit messages"
+            echo ""
+            exit 1
+          fi
+          
+          echo "No AI co-authorship found in commits."

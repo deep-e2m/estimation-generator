@@ -18,13 +18,14 @@ email-validator==2.1.0.post1
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-bcrypt==4.1.2
+bcrypt==3.2.2
 
 # HTTP Client
 httpx==0.26.0
 
 # Redis (for session/cache management)
-redis==5.0.1
+# hiredis provides C parser for faster Redis operations
+redis[hiredis]==5.0.1
 
 # Celery (for background tasks)
 celery==5.3.6
