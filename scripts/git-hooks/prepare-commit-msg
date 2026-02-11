@@ -1,0 +1,23 @@
+#!/bin/bash
+# =============================================================================
+# Git prepare-commit-msg hook: Auto-remove AI co-authorship trailers
+# =============================================================================
+# This hook automatically strips AI tool co-authorship trailers from commit
+# messages before they are finalized.
+#
+# Install: ./scripts/install-hooks.sh
+# =============================================================================
+
+COMMIT_MSG_FILE="$1"
+
+# Remove AI co-authorship lines (case-insensitive)
+# This runs before the commit message is finalized
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' -E '/^Co-authored-by:.*([Cc]laude|[Aa]nthropic|[Cc]ursor|AI [Aa]ssistant|[Cc]opilot|[Oo]pen[Aa][Ii]|GPT|[Cc]odeium|[Tt]abnine|aider)/d' "$COMMIT_MSG_FILE"
+else
+    # Linux
+    sed -i -E '/^Co-authored-by:.*([Cc]laude|[Aa]nthropic|[Cc]ursor|AI [Aa]ssistant|[Cc]opilot|[Oo]pen[Aa][Ii]|GPT|[Cc]odeium|[Tt]abnine|aider)/d' "$COMMIT_MSG_FILE"
+fi
+
+exit 0

@@ -1,10 +1,8 @@
 /**
  * NewProject Page
- * Form to create a new project with exactly 4 fields:
- * - Project Name (required)
- * - Project Description (required)
- * - Files (optional)
- * - Target Platform (required)
+ * Form to create a new project with a two-column layout:
+ * - Left sidebar: Title, description, and steps
+ * - Right panel: Form fields (Name, Description, Platform, Files)
  *
  * After submission, navigates to chat where AI auto-initiates analysis
  */
@@ -12,7 +10,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FolderPlus,
   ArrowLeft,
   AlertCircle,
   ChevronDown,
@@ -21,24 +18,22 @@ import {
   X,
   File,
   Loader2,
+  Users,
 } from 'lucide-react';
 import { projectsService } from '@/services';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Dropdown } from '@/components/ui/Dropdown';
 import { cn } from '@/lib/utils';
 import type { ProjectCreate } from '@/types';
 import '@/styles/projects.css';
 
 // Platform type
-type Platform = 'wordpress' | 'shopify' | 'woocommerce' | 'custom';
+type Platform = 'wordpress';
 
-// Platform options - exactly as specified
+// Platform options - only WordPress is supported
 const PLATFORMS: Array<{ value: Platform; label: string; description: string }> = [
-  { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging' },
-  { value: 'shopify', label: 'Shopify', description: 'Hosted e-commerce platform' },
-  { value: 'woocommerce', label: 'WooCommerce', description: 'WordPress e-commerce plugin' },
-  { value: 'custom', label: 'Custom', description: 'React, Vue, Angular, Magento, or other frameworks' },
+  { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging platform' },
 ];
 
 interface FormData {
@@ -70,6 +65,9 @@ export function NewProjectPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPlatformOpen, setIsPlatformOpen] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+
+  // Client type selection (cosmetic - for reference only)
+  const [selectedClientType, setSelectedClientType] = useState<'new' | 'existing'>('new');
 
   // Validation
   const validateForm = useCallback((): boolean => {
@@ -196,29 +194,45 @@ export function NewProjectPage() {
         Back to Projects
       </button>
 
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Create New Project</h1>
-        <p className="text-gray-500 mt-1">
-          Enter project details to start generating your estimate
-        </p>
-      </div>
+      {/* Two-Column Layout */}
+      <div className="new-project-layout">
+        {/* Left Sidebar */}
+        <aside className="new-project-sidebar">
+          <h1 className="text-2xl font-bold text-gray-900">Create New Project</h1>
+          <p className="text-gray-500 mt-3 leading-relaxed">
+            Enter project details to start generating your estimate.
+          </p>
 
-      <form onSubmit={handleSubmit}>
-        <Card className="max-w-2xl shadow-sm">
-          <CardHeader className="p-8 pb-0">
-            <CardTitle className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100">
-                <FolderPlus className="h-5 w-5 text-primary-600" />
-              </div>
-              Project Details
-            </CardTitle>
-            <CardDescription className="mt-2">
-              Provide the required information for your project
-            </CardDescription>
-          </CardHeader>
+          <div className="sidebar-divider" />
 
-          <CardContent className="space-y-8 p-8">
+          <div className="sidebar-steps">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">What happens next:</h3>
+            <ol className="space-y-4">
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">1</span>
+                <span className="text-sm text-gray-600">Fill in your project details</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">2</span>
+                <span className="text-sm text-gray-600">Upload reference files (optional)</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">3</span>
+                <span className="text-sm text-gray-600">AI generates your estimate automatically</span>
+              </li>
+            </ol>
+          </div>
+        </aside>
+
+        {/* Right Form Panel */}
+        <main className="new-project-form-panel">
+          {/* Form Header */}
+          <div className="form-header">
+            <h2 className="text-lg font-semibold text-gray-900">Project Details</h2>
+            <p className="text-sm text-gray-500 mt-1">Fill in the required information below</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="form-fields">
             {/* Submit Error */}
             {submitError && (
               <div className="flex items-center gap-3 p-4 bg-error-50 border border-error-200 rounded-lg text-error-700">
@@ -228,17 +242,19 @@ export function NewProjectPage() {
             )}
 
             {/* Field 1: Project Name (required) */}
-            <Input
-              label="Project Name *"
-              value={formData.name}
-              onChange={handleChange('name')}
-              placeholder="Enter project name"
-              error={errors.name}
-              disabled={isSubmitting}
-            />
+            <div className="form-field">
+              <Input
+                label="Project Name *"
+                value={formData.name}
+                onChange={handleChange('name')}
+                placeholder="Enter project name"
+                error={errors.name}
+                disabled={isSubmitting}
+              />
+            </div>
 
             {/* Field 2: Project Description (required) */}
-            <div>
+            <div className="form-field">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Project Description *
               </label>
@@ -246,9 +262,9 @@ export function NewProjectPage() {
                 value={formData.description}
                 onChange={handleChange('description')}
                 placeholder="Describe the project requirements, goals, and any important details..."
-                rows={6}
+                rows={5}
                 className={cn(
-                  'w-full px-4 py-2.5 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all disabled:bg-gray-50 disabled:opacity-50',
+                  'w-full px-4 py-3 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all disabled:bg-gray-50 disabled:opacity-50',
                   errors.description ? 'border-error-300' : 'border-gray-300'
                 )}
                 disabled={isSubmitting}
@@ -257,78 +273,30 @@ export function NewProjectPage() {
                 <p className="mt-1.5 text-sm text-error-600">{errors.description}</p>
               )}
               <p className="mt-2 text-xs text-gray-500">
-                Provide a clear description of what the project involves. This will be used to generate your estimate.
+                This will be used to generate your estimate.
               </p>
             </div>
 
-            {/* Field 3: Files (optional) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Supporting Files <span className="text-gray-400">(Optional)</span>
-              </label>
-              <p className="text-sm text-gray-500 mb-3">
-                Upload screenshots, mockups, diagrams, or requirement documents
+            {/* Field 3: Client Type (cosmetic) */}
+            <div className="form-field">
+              <Dropdown
+                label="Client Type"
+                value={selectedClientType}
+                options={[
+                  { value: 'new', label: 'New Client' },
+                  { value: 'existing', label: 'Existing Client' },
+                ]}
+                onChange={(value) => setSelectedClientType(value as 'new' | 'existing')}
+                placeholder="Select client type"
+                disabled={isSubmitting}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                For reference only - does not affect project creation.
               </p>
-
-              {/* File Drop Zone */}
-              <div className="relative">
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  disabled={isSubmitting}
-                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
-                />
-                <div className={cn(
-                  'border-2 border-dashed rounded-lg p-6 text-center transition-colors',
-                  isSubmitting ? 'border-gray-200 bg-gray-50' : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50/30'
-                )}>
-                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium text-primary-600">Click to upload</span> or drag and drop
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    PDF, DOC, DOCX, TXT, PNG, JPG, XLSX (Max 10MB each)
-                  </p>
-                </div>
-              </div>
-
-              {/* File List */}
-              {formData.files.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {formData.files.map((file, index) => (
-                    <div
-                      key={`${file.name}-${index}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <File className="h-5 w-5 text-gray-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-700 truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile(index)}
-                        className="p-1 text-gray-400 hover:text-error-600 transition-colors"
-                        disabled={isSubmitting}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Field 4: Target Platform (required) */}
-            <div>
+            {/* Field 5: Target Platform (required) */}
+            <div className="form-field">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Target Platform *
               </label>
@@ -410,8 +378,71 @@ export function NewProjectPage() {
               )}
             </div>
 
+            {/* Field 6: Files (optional) */}
+            <div className="form-field">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Supporting Files <span className="text-gray-400 font-normal">(Optional)</span>
+              </label>
+
+              {/* File Drop Zone */}
+              <div className="relative">
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={isSubmitting}
+                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
+                />
+                <div className={cn(
+                  'border-2 border-dashed rounded-lg p-6 text-center transition-colors',
+                  isSubmitting ? 'border-gray-200 bg-gray-50' : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50/30'
+                )}>
+                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium text-primary-600">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    PDF, DOC, PNG, JPG, XLSX (Max 10MB each)
+                  </p>
+                </div>
+              </div>
+
+              {/* File List */}
+              {formData.files.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {formData.files.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <File className="h-5 w-5 text-gray-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-700 truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFile(index)}
+                        className="p-1 text-gray-400 hover:text-error-600 transition-colors"
+                        disabled={isSubmitting}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Actions */}
-            <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
+            <div className="form-actions">
               <Button
                 type="button"
                 variant="outline"
@@ -424,7 +455,7 @@ export function NewProjectPage() {
                 {isUploadingFiles ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Uploading Files...
+                    Uploading...
                   </>
                 ) : isSubmitting ? (
                   'Creating...'
@@ -433,9 +464,9 @@ export function NewProjectPage() {
                 )}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </form>
+          </form>
+        </main>
+      </div>
     </div>
   );
 }

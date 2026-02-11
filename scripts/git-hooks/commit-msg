@@ -1,0 +1,46 @@
+#!/bin/bash
+# =============================================================================
+# Git commit-msg hook: Block AI co-authorship in commit messages
+# =============================================================================
+# This hook prevents commits with AI tool co-authorship trailers from being
+# created, keeping your GitHub contribution graph clean.
+#
+# Install: ./scripts/install-hooks.sh
+# =============================================================================
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Patterns to block (case-insensitive)
+BLOCKED_PATTERNS=(
+    "Co-authored-by:.*Claude"
+    "Co-authored-by:.*Anthropic"
+    "Co-authored-by:.*Cursor"
+    "Co-authored-by:.*AI Assistant"
+    "Co-authored-by:.*GitHub Copilot"
+    "Co-authored-by:.*Copilot"
+    "Co-authored-by:.*OpenAI"
+    "Co-authored-by:.*GPT"
+    "Co-authored-by:.*Codeium"
+    "Co-authored-by:.*Tabnine"
+    "Co-authored-by:.*aider"
+)
+
+for pattern in "${BLOCKED_PATTERNS[@]}"; do
+    if echo "$COMMIT_MSG" | grep -iE "$pattern" > /dev/null 2>&1; then
+        echo ""
+        echo "============================================================"
+        echo "ERROR: AI co-authorship detected in commit message!"
+        echo "============================================================"
+        echo ""
+        echo "Found pattern: $pattern"
+        echo ""
+        echo "Please remove the Co-authored-by line from your commit message."
+        echo "This keeps the GitHub contribution graph showing only human authors."
+        echo ""
+        echo "============================================================"
+        exit 1
+    fi
+done
+
+exit 0

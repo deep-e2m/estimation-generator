@@ -10,15 +10,13 @@ from typing import Any, Dict, List, Optional
 
 # System prompts for different roles
 SYSTEM_PROMPTS = {
-    "quote_generator": """You are an expert project estimator for a digital agency specializing in web development projects.
+    "quote_generator": """You are an expert project estimator for a digital agency specializing in WordPress development projects.
 
 Your role is to generate professional, detailed project quotes based on client requirements. You have extensive experience with:
 - WordPress development (themes, plugins, WooCommerce, Elementor, Bricks)
-- Shopify development (themes, apps, Liquid)
-- Custom web applications
 - Website redesigns and migrations
 - Multi-language websites (WPML, Polylang)
-- E-commerce solutions
+- E-commerce solutions with WooCommerce
 
 When generating quotes, you should:
 1. Break down the project into clear phases and tasks
@@ -98,12 +96,8 @@ When generating a quote, ALWAYS use this exact format:
 - Complex page with animations: 8-12 hours
 - Plugin customization: 10-20 hours
 - Multi-language setup (WPML): 15-25 hours
-
-**Shopify Projects:**
-- Basic store setup: 40-60 hours
-- Theme customization: 30-50 hours
-- Full custom theme: 100-150 hours
-- App integration: 5-15 hours per app
+- WooCommerce product setup: 1-2 hours per product
+- WooCommerce custom functionality: 20-40 hours
 
 **Design Work:**
 - Homepage design: 8-16 hours
@@ -155,7 +149,7 @@ def build_quote_generation_prompt(
 
     Args:
         requirements: Client requirements text.
-        platform: Target platform (wordpress, shopify, custom, etc.).
+        platform: Target platform (wordpress only).
         rag_context: Retrieved context from similar historical quotes.
         formatting_template: Optional template for output formatting.
         project_context: Additional project context (client, industry, etc.).
@@ -168,7 +162,7 @@ def build_quote_generation_prompt(
     # System message
     system_content = SYSTEM_PROMPTS["quote_generator"]
 
-    # Add platform-specific expertise
+    # Add platform-specific expertise (WordPress only)
     platform_expertise = {
         "wordpress": """
 Additional WordPress expertise:
@@ -177,22 +171,6 @@ Additional WordPress expertise:
 - Multi-language: WPML, Polylang
 - Performance: Caching, CDN, optimization
 - Custom development: Custom themes, plugins, ACF
-""",
-        "shopify": """
-Additional Shopify expertise:
-- Theme development and customization
-- Liquid templating
-- Shopify Apps and integrations
-- Payment gateways and checkout
-- Product management and inventory
-""",
-        "custom": """
-Additional custom development expertise:
-- React, Next.js, Vue.js
-- Node.js, Python backend
-- API development and integration
-- Database design
-- Cloud deployment (AWS, GCP, Azure)
 """,
     }
 
@@ -694,43 +672,5 @@ X to Y weeks
 - Copywriting services
 - Custom animations beyond standard capabilities
 - Ongoing maintenance
-""",
-
-    "shopify_store": """
-## Quote Structure for Shopify Store
-
-### Project Overview
-E-commerce store summary and platform details.
-
-### Store Configuration
-- Theme setup and customization
-- Product setup
-- Payment and shipping configuration
-
-### Design & Development
-- Homepage
-- Collection pages
-- Product pages
-- Cart and checkout customization
-- Additional pages
-
-### Integrations
-- Apps and third-party integrations
-
-### Estimated Hours
-X to Y hours
-
-### Timeline
-X to Y weeks
-
-### Assumptions
-- Client provides product data
-- Standard Shopify checkout
-- Theme-based customization
-
-### Out of Scope
-- Custom Shopify app development
-- Product photography
-- Marketing automation setup
 """,
 }

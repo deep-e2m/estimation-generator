@@ -16,6 +16,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Import your models here so that Alembic can detect them
 from app.models.base import Base
 from app.models.user import User  # noqa: F401 - imported for model registration
+from app.models.project import Project  # noqa: F401 - imported for model registration
+from app.models.quote import Quote  # noqa: F401 - imported for model registration
+from app.models.chat_message import ChatMessage  # noqa: F401 - imported for model registration
+from app.models.document import Document  # noqa: F401 - imported for model registration
+from app.models.knowledge_embedding import KnowledgeEmbedding  # noqa: F401 - imported for model registration
 
 # Import settings for database URL
 from app.config import settings

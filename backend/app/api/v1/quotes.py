@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import ActiveUser, DbSession
+from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
 from app.models.project import Project
 from app.models.quote import Complexity, Quote, QuoteStatus
 from app.schemas.project import PaginationMeta
@@ -52,74 +52,13 @@ router = APIRouter()
 # =============================================================================
 
 
-async def get_project_with_access_check(
-    project_id: UUID,
-    current_user,
-    db,
-    require_write: bool = False,
-) -> Project:
-    """
-    Get project and verify user has access.
-
-    Args:
-        project_id: The project UUID.
-        current_user: The authenticated user.
-        db: Database session.
-        require_write: Whether write access is required.
-
-    Returns:
-        Project: The project if found and accessible.
-
-    Raises:
-        HTTPException: If project not found or access denied.
-    """
-    query = select(Project).where(Project.id == project_id)
-    result = await db.execute(query)
-    project = result.scalar_one_or_none()
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "PROJECT_NOT_FOUND",
-                "message": "Project not found",
-            },
-        )
-
-    # Check access
-    if project.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this project",
-            },
-        )
-
-    return project
-
-
 async def get_quote_with_access_check(
     quote_id: UUID,
     current_user,
     db,
     include_project: bool = False,
 ) -> Quote:
-    """
-    Get quote and verify user has access.
-
-    Args:
-        quote_id: The quote UUID.
-        current_user: The authenticated user.
-        db: Database session.
-        include_project: Whether to load project relationship.
-
-    Returns:
-        Quote: The quote if found and accessible.
-
-    Raises:
-        HTTPException: If quote not found or access denied.
-    """
+    """Get quote and verify user has access."""
     query = select(Quote).where(Quote.id == quote_id)
     if include_project:
         query = query.options(selectinload(Quote.project))
@@ -128,23 +67,10 @@ async def get_quote_with_access_check(
     quote = result.scalar_one_or_none()
 
     if quote is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "QUOTE_NOT_FOUND",
-                "message": "Quote not found",
-            },
-        )
+        raise api_error(status.HTTP_404_NOT_FOUND, "QUOTE_NOT_FOUND", "Quote not found")
 
-    # Check access
     if quote.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this quote",
-            },
-        )
+        raise api_error(status.HTTP_403_FORBIDDEN, "ACCESS_DENIED", "You don't have access to this quote")
 
     return quote
 
@@ -209,7 +135,7 @@ async def generate_quote(
     start_time = time.time()
 
     # Verify project access
-    project = await get_project_with_access_check(project_id, current_user, db)
+    project = await get_project_with_access(project_id, current_user, db)
 
     # ENFORCE SINGLE ESTIMATE PER PROJECT
     # Check if project already has an estimate
@@ -223,13 +149,10 @@ async def generate_quote(
             project_id,
             existing_quote.id,
         )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "ESTIMATE_ALREADY_EXISTS",
-                "message": "This project already has an estimate. Only ONE estimate per project is allowed. To create a different estimate, please create a new project.",
-                "existing_quote_id": str(existing_quote.id),
-            },
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "ESTIMATE_ALREADY_EXISTS",
+            "This project already has an estimate. Only ONE estimate per project is allowed. To create a different estimate, please create a new project.",
         )
 
     # Get RAG context if enabled
@@ -403,7 +326,7 @@ async def list_project_quotes(
         QuoteListResponse: Paginated list of quotes.
     """
     # Verify project access
-    await get_project_with_access_check(project_id, current_user, db)
+    await get_project_with_access(project_id, current_user, db)
 
     # Build base query
     base_query = select(Quote).where(Quote.project_id == project_id)
@@ -1025,7 +948,7 @@ async def export_quote_docx(
     )
 
     # Verify project access
-    project = await get_project_with_access_check(project_id, current_user, db)
+    project = await get_project_with_access(project_id, current_user, db)
 
     # Fetch quote with relationships
     query = (

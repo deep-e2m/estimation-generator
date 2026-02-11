@@ -3,12 +3,15 @@ Knowledge Base API endpoints.
 
 This module provides endpoints for knowledge base management including
 ingestion, statistics, and search functionality.
+
+Supports both synchronous (blocking) and asynchronous (Celery background task)
+ingestion modes.
 """
 
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import AdminUser, ActiveUser, DbSession
 from app.schemas.knowledge import (
@@ -29,6 +32,10 @@ from app.schemas.knowledge import (
     KnowledgeStats,
     KnowledgeStatsResponse,
     SourceTypeStats,
+    TaskStatusResponse,
+    TaskStatusResult,
+    TaskSubmittedResponse,
+    TaskSubmittedResult,
 )
 from app.services.ai.knowledge_service import KnowledgeService, get_knowledge_service
 from app.services.ai.rag_service import RAGService, get_rag_service
@@ -47,9 +54,10 @@ router = APIRouter()
     "/ingest",
     response_model=FullIngestionResponse,
     summary="Trigger knowledge base ingestion",
-    description="Triggers ingestion of training files into the knowledge base. Admin only.",
+    description="Triggers ingestion of training files into the knowledge base. Admin only. Set async_mode=true for background processing.",
     responses={
-        200: {"description": "Ingestion completed"},
+        200: {"description": "Ingestion completed (sync) or task submitted (async)"},
+        202: {"description": "Task submitted for background processing"},
         401: {"description": "Not authenticated"},
         403: {"description": "Admin access required"},
         500: {"description": "Ingestion failed"},
@@ -59,27 +67,76 @@ async def ingest_knowledge(
     request: KnowledgeIngestRequest,
     current_user: AdminUser,
     db: DbSession,
-) -> FullIngestionResponse:
+    async_mode: bool = Query(
+        default=False,
+        description="If true, runs ingestion as a background task and returns immediately",
+    ),
+) -> FullIngestionResponse | TaskSubmittedResponse:
     """
     Trigger knowledge base ingestion.
 
     Ingests training files, guidelines, and other documents into
     the vector knowledge base for RAG retrieval.
 
+    Set async_mode=true to run as a background task (recommended for
+    large ingestion operations).
+
     Args:
         request: Ingestion configuration.
         current_user: The authenticated admin user.
         db: Database session.
+        async_mode: If true, runs as background task.
 
     Returns:
-        FullIngestionResponse: Ingestion results.
+        FullIngestionResponse: Ingestion results (sync mode).
+        TaskSubmittedResponse: Task info (async mode).
     """
     logger.info(
-        "Knowledge ingestion triggered: user=%s, source_type=%s",
+        "Knowledge ingestion triggered: user=%s, source_type=%s, async=%s",
         current_user.email,
         request.source_type,
+        async_mode,
     )
 
+    # Handle async mode - submit to Celery
+    if async_mode:
+        from app.tasks.knowledge_tasks import (
+            ingest_all_knowledge_task,
+            ingest_guidelines_task,
+            ingest_training_files_task,
+        )
+
+        if request.source_type == "all" or request.source_type is None:
+            task = ingest_all_knowledge_task.delay()
+            message = "Full knowledge base ingestion started"
+        elif request.source_type == "training_quotes":
+            task = ingest_training_files_task.delay(
+                folder_path=request.folder_path,
+                file_pattern=request.file_pattern,
+            )
+            message = "Training files ingestion started"
+        elif request.source_type == "guidelines":
+            task = ingest_guidelines_task.delay(folder_path=request.folder_path)
+            message = "Guidelines ingestion started"
+        else:
+            task = ingest_training_files_task.delay(
+                folder_path=request.folder_path,
+                file_pattern=request.file_pattern,
+            )
+            message = "Custom folder ingestion started"
+
+        logger.info("Ingestion task submitted: %s", task.id)
+
+        return TaskSubmittedResponse(
+            success=True,
+            data=TaskSubmittedResult(
+                task_id=task.id,
+                status="submitted",
+                message=f"{message}. Use GET /api/v1/knowledge/tasks/{task.id} to check status.",
+            ),
+        )
+
+    # Synchronous mode - run inline
     try:
         knowledge_service = get_knowledge_service()
 
@@ -514,5 +571,65 @@ async def search_knowledge(
             detail={
                 "code": "SEARCH_FAILED",
                 "message": f"Knowledge search failed: {str(e)}",
+            },
+        )
+
+
+# =============================================================================
+# Task Status Endpoint
+# =============================================================================
+
+
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskStatusResponse,
+    summary="Get task status",
+    description="Returns the status of a background ingestion task.",
+    responses={
+        200: {"description": "Task status retrieved"},
+        401: {"description": "Not authenticated"},
+        404: {"description": "Task not found"},
+    },
+)
+async def get_task_status(
+    task_id: str,
+    current_user: ActiveUser,
+) -> TaskStatusResponse:
+    """
+    Get the status of a background ingestion task.
+
+    Args:
+        task_id: The Celery task ID.
+        current_user: The authenticated user.
+
+    Returns:
+        TaskStatusResponse: Task status information.
+    """
+    logger.debug("Getting task status: task_id=%s, user=%s", task_id, current_user.email)
+
+    try:
+        from app.tasks.knowledge_tasks import get_task_status as get_celery_task_status
+
+        status_info = get_celery_task_status(task_id)
+
+        return TaskStatusResponse(
+            success=True,
+            data=TaskStatusResult(
+                task_id=status_info["task_id"],
+                status=status_info["status"],
+                ready=status_info["ready"],
+                result=status_info.get("result"),
+                error=status_info.get("error"),
+                info=status_info.get("info") or status_info.get("progress"),
+            ),
+        )
+
+    except Exception as e:
+        logger.error("Failed to get task status: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "TASK_STATUS_FAILED",
+                "message": f"Failed to get task status: {str(e)}",
             },
         )

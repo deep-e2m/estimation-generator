@@ -4,11 +4,7 @@
  */
 
 // Platform options for quote generation (must match backend Platform enum)
-export type Platform =
-  | 'wordpress'
-  | 'shopify'
-  | 'woocommerce'
-  | 'custom';
+export type Platform = 'wordpress';
 
 // Quote status lifecycle
 export type QuoteStatus =

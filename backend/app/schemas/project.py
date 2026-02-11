@@ -9,10 +9,11 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.project import Platform, ProjectStatus
 from app.schemas.auth import APIResponse
+from app.schemas.client import ClientCreate, ClientResponse
 
 
 # =============================================================================
@@ -52,6 +53,12 @@ class ProjectBase(BaseModel):
         description="Detailed project description",
         examples=["Complete redesign of the client's WordPress e-commerce site with new branding"],
     )
+    additional_instructions: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="Additional information or instructions for the project",
+        examples=["Please ensure all forms have custom validation. Client prefers blue color scheme."],
+    )
     platform: Optional[Platform] = Field(
         default=Platform.WORDPRESS,
         description="Target e-commerce platform (defaults to WordPress)",
@@ -62,7 +69,23 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     """Schema for project creation request."""
 
-    pass
+    # Client selection: provide either client_id OR new_client
+    client_id: Optional[UUID] = Field(
+        default=None,
+        description="Existing client ID (if selecting existing client)",
+    )
+
+    new_client: Optional[ClientCreate] = Field(
+        default=None,
+        description="New client data (if creating new client)",
+    )
+
+    @model_validator(mode="after")
+    def validate_client_selection(self) -> "ProjectCreate":
+        """Ensure at most one of client_id or new_client is provided."""
+        if self.client_id and self.new_client:
+            raise ValueError("Provide either client_id or new_client, not both")
+        return self
 
 
 class ProjectUpdate(BaseModel):
@@ -78,6 +101,11 @@ class ProjectUpdate(BaseModel):
         default=None,
         max_length=5000,
         description="Detailed project description",
+    )
+    additional_instructions: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="Additional information or instructions for the project",
     )
     platform: Optional[Platform] = Field(
         default=None,
@@ -102,6 +130,7 @@ class ProjectResponse(BaseModel):
     id: UUID = Field(..., description="Unique project identifier")
     name: str = Field(..., description="Project name")
     description: Optional[str] = Field(None, description="Project description")
+    additional_instructions: Optional[str] = Field(None, description="Additional information or instructions")
     platform: Platform = Field(..., description="Target e-commerce platform")
     status: ProjectStatus = Field(..., description="Current project status")
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -110,14 +139,8 @@ class ProjectResponse(BaseModel):
         default=0,
         description="Number of quotes associated with this project",
     )
-    client_name: Optional[str] = Field(
-        default=None,
-        description="Client name for the project",
-    )
-    client_email: Optional[str] = Field(
-        default=None,
-        description="Client email for the project",
-    )
+    # Client information (from relationship)
+    client: ClientResponse | None = Field(None, description="Associated client (optional)")
 
 
 class ProjectDetailResponse(ProjectResponse):

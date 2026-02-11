@@ -9,7 +9,7 @@ import type { User, UserRole } from './index';
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 
 // Platform options for projects (must match backend Platform enum - lowercase)
-export type ProjectPlatform = 'wordpress' | 'shopify' | 'woocommerce' | 'custom';
+export type ProjectPlatform = 'wordpress';
 
 // Team member type
 export interface TeamMember {
@@ -47,10 +47,14 @@ export interface Project extends ProjectSummary {
 export interface ProjectCreate {
   name: string;
   description?: string;
-  client_name?: string;
-  client_email?: string;
+  additional_instructions?: string;
   platform?: ProjectPlatform;
-  target_completion_date?: string;
+  // Optional client fields (for future use)
+  client_id?: string;
+  new_client?: {
+    name: string;
+    email?: string;
+  };
 }
 
 // Update project request

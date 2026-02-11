@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import ActiveUser, DbSession
+from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
 from app.models.chat_message import ChatMessage, MessageRole
 from app.models.project import Project
 from app.models.quote import Quote
@@ -47,67 +47,12 @@ router = APIRouter()
 # =============================================================================
 
 
-async def get_project_with_access_check(
-    project_id: UUID,
-    current_user,
-    db,
-) -> Project:
-    """
-    Get project and verify user has access.
-
-    Args:
-        project_id: The project UUID.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        Project: The project if found and accessible.
-
-    Raises:
-        HTTPException: If project not found or access denied.
-    """
-    query = select(Project).where(Project.id == project_id)
-    result = await db.execute(query)
-    project = result.scalar_one_or_none()
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "PROJECT_NOT_FOUND",
-                "message": "Project not found",
-            },
-        )
-
-    # Check access
-    if project.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this project",
-            },
-        )
-
-    return project
-
-
 async def get_conversation_context(
     project_id: UUID,
     db,
     max_messages: int = 20,
 ) -> list[dict[str, str]]:
-    """
-    Get recent conversation history for context.
-
-    Args:
-        project_id: The project UUID.
-        db: Database session.
-        max_messages: Maximum messages to include.
-
-    Returns:
-        List of message dictionaries for LLM context.
-    """
+    """Get recent conversation history for context."""
     query = (
         select(ChatMessage)
         .where(ChatMessage.project_id == project_id)
@@ -117,7 +62,6 @@ async def get_conversation_context(
     result = await db.execute(query)
     messages = result.scalars().all()
 
-    # Reverse to get chronological order
     messages = list(reversed(messages))
 
     return [
@@ -130,17 +74,7 @@ async def build_project_context(
     project: Project,
     db,
 ) -> dict:
-    """
-    Build project context for AI responses.
-
-    Args:
-        project: The project.
-        db: Database session.
-
-    Returns:
-        Dictionary with project context.
-    """
-    # Get recent quotes
+    """Build project context for AI responses."""
     quote_query = (
         select(Quote)
         .where(Quote.project_id == project.id)
@@ -163,6 +97,7 @@ async def build_project_context(
         "project_name": project.name,
         "platform": project.platform.value,
         "description": project.description,
+        "additional_instructions": project.additional_instructions,
         "recent_quotes": quote_summaries,
     }
 
@@ -176,7 +111,7 @@ async def build_project_context(
     "/projects/{project_id}/chat",
     response_model=ChatHistoryResponse,
     summary="Get chat history",
-    description="Returns paginated chat history for a project (max 100 messages).",
+    description="Returns paginated chat history for a project.",
     responses={
         200: {"description": "Chat history retrieved successfully"},
         401: {"description": "Not authenticated"},
@@ -196,49 +131,33 @@ async def get_chat_history(
 
     Returns messages in chronological order (oldest first within page).
     Pagination returns most recent messages first (page 1 = newest).
-
-    Args:
-        project_id: The project UUID.
-        current_user: The authenticated user.
-        db: Database session.
-        page: Page number (1-indexed).
-        page_size: Number of items per page.
-
-    Returns:
-        ChatHistoryResponse: Paginated chat history.
     """
     logger.debug("Getting chat history: project=%s, page=%d", project_id, page)
 
-    # Verify project access
-    project = await get_project_with_access_check(project_id, current_user, db)
+    project = await get_project_with_access(project_id, current_user, db)
 
-    # Get total count
+    # Get real total count (no artificial cap)
     count_query = select(func.count()).where(ChatMessage.project_id == project_id)
     total_result = await db.execute(count_query)
     total_items = total_result.scalar() or 0
 
-    # Cap at 100 messages total
-    total_items = min(total_items, 100)
-
-    # Calculate pagination
     total_pages = ceil(total_items / page_size) if total_items > 0 else 1
     offset = (page - 1) * page_size
 
-    # Fetch messages with user info
-    # Order by created_at desc to get newest first, then reverse in response
+    # Fetch messages with user info eagerly loaded
     query = (
         select(ChatMessage)
         .options(selectinload(ChatMessage.user))
         .where(ChatMessage.project_id == project_id)
         .order_by(ChatMessage.created_at.desc())
         .offset(offset)
-        .limit(min(page_size, 100 - offset))  # Cap total at 100
+        .limit(page_size)
     )
 
     result = await db.execute(query)
     messages = result.scalars().all()
 
-    # Convert to response format (reverse for chronological order within page)
+    # Reverse for chronological order within page
     message_responses = [
         ChatMessageWithUser(
             id=msg.id,
@@ -249,7 +168,7 @@ async def get_chat_history(
             attachments=[
                 Attachment(**att) for att in msg.attachments
             ] if msg.attachments else None,
-            metadata=msg.metadata,
+            extra_data=msg.extra_data,
             created_at=msg.created_at,
             user_name=msg.user.full_name if msg.user else None,
             user_avatar=msg.user.avatar_url if msg.user else None,
@@ -303,38 +222,19 @@ async def send_chat_message(
     current_user: ActiveUser,
     db: DbSession,
 ) -> ChatSendDataResponse:
-    """
-    Send a chat message and get AI response.
-
-    Creates both the user message and assistant response in the database.
-
-    Args:
-        project_id: The project UUID.
-        message_data: The message to send.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        ChatSendDataResponse: User message and AI response.
-    """
     logger.info("Chat message: project=%s, user=%s", project_id, current_user.email)
 
     start_time = time.time()
 
-    # Verify project access
-    project = await get_project_with_access_check(project_id, current_user, db)
+    project = await get_project_with_access(project_id, current_user, db)
 
-    # Process attachments if any
     attachments = None
     if message_data.attachments:
-        # In a real implementation, you'd validate file_ids and get URLs
-        # For now, we'll store the references
         attachments = [
             {"id": att.file_id, "name": "attachment", "type": "file", "url": ""}
             for att in message_data.attachments
         ]
 
-    # Save user message
     user_message = ChatMessage(
         project_id=project_id,
         user_id=current_user.id,
@@ -345,16 +245,11 @@ async def send_chat_message(
     db.add(user_message)
     await db.flush()
 
-    # Get conversation context
     conversation = await get_conversation_context(project_id, db)
-
-    # Add current message to conversation
     conversation.append({"role": "user", "content": message_data.content})
 
-    # Build project context
     project_context = await build_project_context(project, db)
 
-    # Generate AI response
     try:
         llm_service = get_llm_service()
         response_content = await llm_service.chat_response(
@@ -363,26 +258,22 @@ async def send_chat_message(
         )
     except Exception as e:
         logger.error("Chat response generation failed: %s", str(e))
-        # Rollback user message
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "CHAT_RESPONSE_FAILED",
-                "message": f"Failed to generate response: {str(e)}",
-            },
+        raise api_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "CHAT_RESPONSE_FAILED",
+            f"Failed to generate response: {str(e)}",
         )
 
     response_time_ms = int((time.time() - start_time) * 1000)
 
-    # Save assistant message
     assistant_message = ChatMessage(
         project_id=project_id,
-        user_id=None,  # Assistant has no user_id
+        user_id=None,
         role=MessageRole.ASSISTANT,
         content=response_content,
-        metadata={
-            "model_used": "fast",  # Default model for chat
+        extra_data={
+            "model_used": "fast",
             "response_time_ms": response_time_ms,
         },
     )
@@ -410,7 +301,7 @@ async def send_chat_message(
                 attachments=[
                     Attachment(**att) for att in user_message.attachments
                 ] if user_message.attachments else None,
-                metadata=user_message.metadata,
+                extra_data=user_message.extra_data,
                 created_at=user_message.created_at,
             ),
             assistant_message=ChatMessageResponse(
@@ -420,12 +311,12 @@ async def send_chat_message(
                 role=assistant_message.role,
                 content=assistant_message.content,
                 attachments=None,
-                metadata=assistant_message.metadata,
+                extra_data=assistant_message.extra_data,
                 created_at=assistant_message.created_at,
             ),
             response_metadata=ChatResponseMetadata(
                 model_used="fast",
-                tokens_used=0,  # Would be tracked from actual response
+                tokens_used=0,
                 response_time_ms=response_time_ms,
                 rag_context_used=False,
             ),
@@ -456,31 +347,10 @@ async def stream_chat_response(
     current_user: ActiveUser,
     db: DbSession,
 ) -> StreamingResponse:
-    """
-    Stream chat response using Server-Sent Events.
-
-    The response is streamed in chunks as they are generated by the LLM.
-    Each chunk is a JSON object with a 'type' field indicating the chunk type:
-    - 'content': Contains generated content
-    - 'metadata': Contains response metadata
-    - 'error': Contains error message
-    - 'done': Indicates completion
-
-    Args:
-        project_id: The project UUID.
-        message_data: The message to send.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        StreamingResponse: Server-Sent Events stream.
-    """
     logger.info("Chat stream: project=%s, user=%s", project_id, current_user.email)
 
-    # Verify project access
-    project = await get_project_with_access_check(project_id, current_user, db)
+    project = await get_project_with_access(project_id, current_user, db)
 
-    # Process attachments if any
     attachments = None
     if message_data.attachments:
         attachments = [
@@ -488,7 +358,6 @@ async def stream_chat_response(
             for att in message_data.attachments
         ]
 
-    # Save user message first
     user_message = ChatMessage(
         project_id=project_id,
         user_id=current_user.id,
@@ -507,16 +376,13 @@ async def stream_chat_response(
         tokens_used = 0
 
         try:
-            # Get conversation context
             conversation = await get_conversation_context(project_id, db)
             conversation.append({"role": "user", "content": message_data.content})
 
-            # Build project context if requested
             project_context = None
             if message_data.include_context:
                 project_context = await build_project_context(project, db)
 
-            # Stream response from LLM
             llm_service = get_llm_service()
 
             async for chunk in llm_service.chat_response_stream(
@@ -529,13 +395,12 @@ async def stream_chat_response(
 
             response_time_ms = int((time.time() - start_time) * 1000)
 
-            # Save assistant message
             assistant_message = ChatMessage(
                 project_id=project_id,
                 user_id=None,
                 role=MessageRole.ASSISTANT,
                 content=full_response,
-                metadata={
+                extra_data={
                     "model_used": "fast",
                     "response_time_ms": response_time_ms,
                     "streamed": True,
@@ -545,7 +410,6 @@ async def stream_chat_response(
             await db.commit()
             await db.refresh(assistant_message)
 
-            # Send metadata
             metadata = {
                 "type": "metadata",
                 "metadata": {
@@ -557,7 +421,6 @@ async def stream_chat_response(
             }
             yield f"data: {json.dumps(metadata)}\n\n"
 
-            # Send done message
             done = {
                 "type": "done",
                 "message_id": str(assistant_message.id),
@@ -581,6 +444,6 @@ async def stream_chat_response(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )

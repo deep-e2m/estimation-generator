@@ -1,13 +1,15 @@
-"""
-Pytest configuration and shared fixtures.
-
-This module provides common fixtures for all test modules.
-"""
+"""Shared test fixtures."""
 
 import pytest
 
 
-@pytest.fixture(scope="session")
-def anyio_backend():
-    """Specify asyncio as the async backend."""
-    return "asyncio"
+@pytest.fixture
+def app_settings():
+    """Override settings for testing."""
+    from app.config import Settings
+
+    return Settings(
+        ENVIRONMENT="development",
+        SECRET_KEY="test-secret-key-that-is-long-enough-for-validation",
+        DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/test_quote_assistant",
+    )

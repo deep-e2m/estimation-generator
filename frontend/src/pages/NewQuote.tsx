@@ -34,12 +34,9 @@ import type {
 const MIN_REQUIREMENTS_LENGTH = 50;
 const MAX_REQUIREMENTS_LENGTH = 50000;
 
-// Platform options
+// Platform options - only WordPress is supported
 const PLATFORMS: Array<{ value: Platform; label: string; description: string }> = [
-  { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging' },
-  { value: 'shopify', label: 'Shopify', description: 'Hosted e-commerce platform' },
-  { value: 'woocommerce', label: 'WooCommerce', description: 'WordPress e-commerce plugin' },
-  { value: 'custom', label: 'Custom', description: 'React, Vue, Angular, Magento, or other frameworks' },
+  { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging platform' },
 ];
 
 // Generation step labels

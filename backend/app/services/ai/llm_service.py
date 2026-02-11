@@ -143,7 +143,7 @@ class LLMService:
 
         Args:
             requirements: Client requirements text.
-            platform: Target platform (wordpress, shopify, custom).
+            platform: Target platform (wordpress only).
             rag_context: Pre-built RAG context from similar quotes.
             formatting_template: Optional template for output format.
             project_context: Additional context (client name, industry, etc.).

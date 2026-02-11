@@ -13,9 +13,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, chat, documents, knowledge, projects, quotes
+from app.api.v1 import auth, chat, clients, documents, knowledge, projects, quotes
 from app.config import settings
 from app.core.database import close_db_connection, init_db_connection
+from app.core.redis import close_redis_client, get_redis_client, redis_ping
 
 # Configure logging
 logging.basicConfig(
@@ -44,10 +45,24 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db_connection()
     logger.info("Database connection pool initialized")
 
+    # Initialize Redis connection
+    try:
+        await get_redis_client()
+        if await redis_ping():
+            logger.info("Redis connection initialized")
+        else:
+            logger.warning("Redis is not available - caching will be disabled")
+    except Exception as e:
+        logger.warning("Failed to initialize Redis: %s - caching will be disabled", str(e))
+
     yield
 
     # Shutdown
     logger.info("Shutting down %s", settings.APP_NAME)
+
+    # Close Redis connection
+    await close_redis_client()
+    logger.info("Redis connection closed")
 
     # Close database connection pool
     await close_db_connection()
@@ -91,6 +106,12 @@ def create_application() -> FastAPI:
         auth.router,
         prefix=f"{settings.API_V1_PREFIX}/auth",
         tags=["Authentication"],
+    )
+
+    app.include_router(
+        clients.router,
+        prefix=f"{settings.API_V1_PREFIX}",
+        tags=["Clients"],
     )
 
     app.include_router(

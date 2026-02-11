@@ -1,9 +1,9 @@
 /**
  * Projects Page
- * List all projects in a card grid with filtering and search
+ * List all projects in a vertical list format with filtering and search
  *
  * Features:
- * - Project cards with summary info
+ * - Project rows with summary info
  * - Search and filter controls
  * - Create new project button
  * - Pagination support
@@ -25,9 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
 import { projectsService } from '@/services';
-import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import type { ProjectSummary, ProjectStatus, ProjectFilters, ProjectPlatform } from '@/types';
 import '@/styles/projects.css';
@@ -53,63 +51,69 @@ function getStatusLabel(status: ProjectStatus): string {
 }
 
 /**
- * Project Card Component
+ * Project Row Component - List view format
  */
-interface ProjectCardProps {
+interface ProjectRowProps {
   project: ProjectSummary;
   onClick: () => void;
 }
 
-function ProjectCard({ project, onClick }: ProjectCardProps) {
+function ProjectRow({ project, onClick }: ProjectRowProps) {
   return (
-    <Card
-      className="project-card cursor-pointer hover:shadow-lg transition-all duration-200 hover:border-primary-200"
+    <div
+      className="project-row cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
       onClick={onClick}
     >
-      <CardContent className="p-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100 shrink-0">
-              <FolderOpen className="h-5 w-5 text-primary-600" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
-              {project.client_name && (
-                <p className="text-sm text-gray-500 truncate">{project.client_name}</p>
-              )}
-            </div>
-          </div>
-          <Badge variant={getStatusBadgeVariant(project.status)}>
-            {getStatusLabel(project.status)}
-          </Badge>
+      <div className="flex items-center gap-4 px-4 py-4">
+        {/* Icon */}
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100 shrink-0">
+          <FolderOpen className="h-5 w-5 text-primary-600" />
         </div>
 
-        {/* Description */}
-        {project.description && (
-          <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-            {project.description}
-          </p>
-        )}
+        {/* Project Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+            <Badge variant={getStatusBadgeVariant(project.status)} className="shrink-0">
+              {getStatusLabel(project.status)}
+            </Badge>
+          </div>
+          {project.description && (
+            <p className="text-sm text-gray-500 truncate mt-0.5">
+              {project.description}
+            </p>
+          )}
+        </div>
 
-        {/* Metrics */}
-        <div className="flex items-center gap-4 pt-3 border-t border-gray-100">
-          <div className="flex items-center gap-1.5 text-sm text-gray-500">
+        {/* Metadata - visible on larger screens */}
+        <div className="hidden sm:flex items-center gap-6 shrink-0">
+          {/* Quotes count */}
+          <div className="flex items-center gap-1.5 text-sm text-gray-500 min-w-[80px]">
             <FileText className="h-4 w-4" />
             <span>{project.quotes_count} {project.quotes_count === 1 ? 'quote' : 'quotes'}</span>
           </div>
+
+          {/* Platform */}
           {project.platform && (
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded min-w-[80px] text-center">
               {project.platform}
             </span>
           )}
-          <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-auto">
-            <Clock className="h-3.5 w-3.5" />
-            {formatRelativeTime(project.updated_at)}
+
+          {/* Updated time */}
+          <div className="flex items-center gap-1.5 text-sm text-gray-400 min-w-[100px]">
+            <Clock className="h-4 w-4" />
+            <span>{formatRelativeTime(project.updated_at)}</span>
           </div>
         </div>
-      </CardContent>
-    </Card>
+
+        {/* Mobile metadata */}
+        <div className="flex sm:hidden items-center gap-2 text-xs text-gray-400 shrink-0">
+          <Clock className="h-3.5 w-3.5" />
+          <span>{formatRelativeTime(project.updated_at)}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -154,32 +158,26 @@ function EmptyState({ hasFilters, onCreateProject, onClearFilters }: EmptyStateP
 }
 
 /**
- * Loading skeleton
+ * Loading skeleton - List view format
  */
 function LoadingSkeleton() {
   return (
-    <div className="projects-grid">
+    <div className="projects-list bg-white rounded-lg border border-gray-200">
       {[1, 2, 3, 4, 5, 6].map((i) => (
-        <Card key={i} className="animate-pulse">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-gray-200 rounded-lg" />
-                <div>
-                  <div className="h-5 w-32 bg-gray-200 rounded mb-1" />
-                  <div className="h-4 w-24 bg-gray-100 rounded" />
-                </div>
-              </div>
-              <div className="h-6 w-16 bg-gray-200 rounded-full" />
+        <div key={i} className="animate-pulse border-b border-gray-100 last:border-b-0">
+          <div className="flex items-center gap-4 px-4 py-4">
+            <div className="h-10 w-10 bg-gray-200 rounded-lg shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="h-5 w-48 bg-gray-200 rounded mb-2" />
+              <div className="h-4 w-64 bg-gray-100 rounded" />
             </div>
-            <div className="h-4 w-full bg-gray-100 rounded mb-2" />
-            <div className="h-4 w-3/4 bg-gray-100 rounded mb-3" />
-            <div className="flex items-center gap-4 pt-3 border-t border-gray-100">
+            <div className="hidden sm:flex items-center gap-6">
               <div className="h-4 w-16 bg-gray-100 rounded" />
-              <div className="h-4 w-20 bg-gray-100 rounded" />
+              <div className="h-6 w-20 bg-gray-100 rounded" />
+              <div className="h-4 w-24 bg-gray-100 rounded" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -390,9 +388,9 @@ export function ProjectsPage() {
         />
       ) : (
         <>
-          <div className="projects-grid">
+          <div className="projects-list bg-white rounded-lg border border-gray-200 overflow-hidden">
             {projects.map((project) => (
-              <ProjectCard
+              <ProjectRow
                 key={project.id}
                 project={project}
                 onClick={() => handleProjectClick(project.id)}

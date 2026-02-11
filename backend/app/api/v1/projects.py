@@ -9,11 +9,12 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import ActiveUser, DbSession
+from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
+from app.models.client import Client
 from app.models.project import Platform, Project, ProjectStatus
 from app.models.quote import Quote
 from app.schemas.project import (
@@ -52,48 +53,69 @@ async def create_project(
     current_user: ActiveUser,
     db: DbSession,
 ) -> ProjectDataResponse:
-    """
-    Create a new project.
-
-    Args:
-        project_data: Project creation data.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        ProjectDataResponse: The created project.
-    """
     logger.info("Creating project: name=%s, user=%s", project_data.name, current_user.email)
 
-    # Create new project
+    # Handle optional client selection
+    client_id = None
+
+    if project_data.new_client:
+        # Create new client
+        client = Client(
+            name=project_data.new_client.name,
+            email=project_data.new_client.email,
+            created_by=current_user.id,
+        )
+        db.add(client)
+        await db.flush()
+        client_id = client.id
+        logger.info("Created new client: id=%s, name=%s", client.id, client.name)
+    elif project_data.client_id:
+        # Validate existing client
+        client_id = project_data.client_id
+        client_query = select(Client).where(
+            Client.id == client_id,
+            Client.created_by == current_user.id,
+        )
+        client_result = await db.execute(client_query)
+        client = client_result.scalar_one_or_none()
+
+        if not client:
+            raise api_error(
+                status.HTTP_404_NOT_FOUND,
+                "CLIENT_NOT_FOUND",
+                "Client not found or access denied",
+            )
+        logger.info("Using existing client: id=%s, name=%s", client.id, client.name)
+    else:
+        logger.info("Creating project without client association")
+
     new_project = Project(
         name=project_data.name,
         description=project_data.description,
+        additional_instructions=project_data.additional_instructions,
         platform=project_data.platform,
         status=ProjectStatus.ACTIVE,
+        client_id=client_id,
         created_by=current_user.id,
     )
 
     db.add(new_project)
     await db.commit()
-    await db.refresh(new_project)
+
+    # Re-fetch with eager-loaded relationships
+    query = (
+        select(Project)
+        .options(selectinload(Project.client))
+        .where(Project.id == new_project.id)
+    )
+    result = await db.execute(query)
+    new_project = result.scalar_one()
 
     logger.info("Project created: id=%s, name=%s", new_project.id, new_project.name)
 
     return ProjectDataResponse(
         success=True,
-        data=ProjectResponse(
-            id=new_project.id,
-            name=new_project.name,
-            description=new_project.description,
-            platform=new_project.platform,
-            status=new_project.status,
-            created_at=new_project.created_at,
-            updated_at=new_project.updated_at,
-            quotes_count=0,
-            client_name=None,
-            client_email=None,
-        ),
+        data=new_project,
     )
 
 
@@ -122,21 +144,6 @@ async def list_projects(
         default=None, max_length=100, description="Search in project name"
     ),
 ) -> ProjectListResponse:
-    """
-    List projects for the current user with cursor-based pagination.
-
-    Args:
-        current_user: The authenticated user.
-        db: Database session.
-        cursor: Cursor for pagination (project ID to start after).
-        limit: Number of items per page.
-        status_filter: Optional status filter.
-        platform_filter: Optional platform filter.
-        search: Optional search term for project name.
-
-    Returns:
-        ProjectListResponse: Paginated list of projects.
-    """
     logger.debug(
         "Listing projects: user=%s, cursor=%s, limit=%d",
         current_user.email,
@@ -144,8 +151,12 @@ async def list_projects(
         limit,
     )
 
-    # Build base query
-    base_query = select(Project).where(Project.created_by == current_user.id)
+    # Build base query with eager loads for client
+    base_query = (
+        select(Project)
+        .options(selectinload(Project.client))
+        .where(Project.created_by == current_user.id)
+    )
 
     # Apply filters
     if status_filter:
@@ -156,29 +167,32 @@ async def list_projects(
         base_query = base_query.where(Project.name.ilike(f"%{search}%"))
 
     # Get total count
-    count_query = select(func.count()).select_from(base_query.subquery())
-    total_result = await db.execute(count_query)
+    count_query = select(func.count()).select_from(
+        select(Project.id).where(Project.created_by == current_user.id)
+        .correlate(None)
+        .subquery()
+    )
+    if status_filter:
+        count_query = select(func.count()).select_from(base_query.with_only_columns(Project.id).subquery())
+    total_result = await db.execute(
+        select(func.count()).select_from(base_query.with_only_columns(Project.id).subquery())
+    )
     total_count = total_result.scalar() or 0
 
     # Apply cursor-based pagination
-    # Order by updated_at desc (nulls first), then created_at desc
     paginated_query = base_query.order_by(
         Project.updated_at.desc().nullsfirst(),
         Project.created_at.desc()
     )
 
-    # If cursor is provided, filter to items after the cursor
-    # Cursor is the last project ID from the previous page
     if cursor:
         try:
             from uuid import UUID as UUIDType
             cursor_uuid = UUIDType(cursor)
-            # Get the cursor project to find its position
             cursor_project_query = select(Project).where(Project.id == cursor_uuid)
             cursor_result = await db.execute(cursor_project_query)
             cursor_project = cursor_result.scalar_one_or_none()
             if cursor_project:
-                # Filter to projects that come after the cursor in sort order
                 paginated_query = paginated_query.where(
                     (Project.updated_at < cursor_project.updated_at) |
                     ((Project.updated_at == cursor_project.updated_at) &
@@ -188,45 +202,37 @@ async def list_projects(
                      (Project.id < cursor_project.id))
                 )
         except (ValueError, TypeError):
-            # Invalid cursor, ignore it
             pass
 
-    # Fetch one extra to determine if there are more
     paginated_query = paginated_query.limit(limit + 1)
 
     result = await db.execute(paginated_query)
     projects = list(result.scalars().all())
 
-    # Check if there are more items
     has_more = len(projects) > limit
     if has_more:
-        projects = projects[:limit]  # Remove the extra item
+        projects = projects[:limit]
 
-    # Determine next cursor
     next_cursor = str(projects[-1].id) if has_more and projects else None
 
-    # Get quote counts for each project
+    # Batch-fetch quote counts instead of N+1 queries
+    if projects:
+        project_ids = [p.id for p in projects]
+        quote_count_query = (
+            select(Quote.project_id, func.count().label("cnt"))
+            .where(Quote.project_id.in_(project_ids))
+            .group_by(Quote.project_id)
+        )
+        quote_counts_result = await db.execute(quote_count_query)
+        quote_counts = {row.project_id: row.cnt for row in quote_counts_result}
+    else:
+        quote_counts = {}
+
     project_responses = []
     for project in projects:
-        # Get quote count
-        quote_count_query = select(func.count()).where(Quote.project_id == project.id)
-        quote_count_result = await db.execute(quote_count_query)
-        quote_count = quote_count_result.scalar() or 0
-
-        project_responses.append(
-            ProjectResponse(
-                id=project.id,
-                name=project.name,
-                description=project.description,
-                platform=project.platform,
-                status=project.status,
-                created_at=project.created_at,
-                updated_at=project.updated_at,
-                quotes_count=quote_count,
-                client_name=None,  # TODO: Add client fields to Project model if needed
-                client_email=None,
-            )
-        )
+        project_response = ProjectResponse.model_validate(project)
+        project_response.quotes_count = quote_counts.get(project.id, 0)
+        project_responses.append(project_response)
 
     pagination = CursorPaginationMeta(
         cursor=next_cursor,
@@ -260,56 +266,16 @@ async def get_project(
     current_user: ActiveUser,
     db: DbSession,
 ) -> ProjectDetailDataResponse:
-    """
-    Get project details by ID.
-
-    Args:
-        project_id: The project UUID.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        ProjectDetailDataResponse: The project details.
-
-    Raises:
-        HTTPException: If project not found or access denied.
-    """
     logger.debug("Getting project: id=%s, user=%s", project_id, current_user.email)
 
-    # Fetch project with creator
-    query = (
-        select(Project)
-        .options(selectinload(Project.creator))
-        .where(Project.id == project_id)
-    )
-    result = await db.execute(query)
-    project = result.scalar_one_or_none()
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "PROJECT_NOT_FOUND",
-                "message": "Project not found",
-            },
-        )
-
-    # Check access - user must be creator or admin
-    if project.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this project",
-            },
-        )
+    project = await get_project_with_access(project_id, current_user, db)
 
     # Get quote count
     quote_count_query = select(func.count()).where(Quote.project_id == project.id)
     quote_count_result = await db.execute(quote_count_query)
     quote_count = quote_count_result.scalar() or 0
 
-    # Build owner object from creator
+    # Build owner from eagerly-loaded creator
     owner = ProjectOwner(
         id=project.creator.id,
         full_name=project.creator.full_name,
@@ -322,24 +288,29 @@ async def get_project(
         avatar_url=None,
     )
 
+    # Build response with all required fields
+    # Can't use model_validate(project) directly because 'owner' is required
+    # but doesn't exist on the Project model
+    detail_response = ProjectDetailResponse(
+        id=project.id,
+        name=project.name,
+        description=project.description,
+        additional_instructions=project.additional_instructions,
+        platform=project.platform,
+        status=project.status,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+        quotes_count=quote_count,
+        client=project.client,
+        owner=owner,
+        team_members=[],
+        target_completion_date=None,
+        requirements_count=0,
+    )
+
     return ProjectDetailDataResponse(
         success=True,
-        data=ProjectDetailResponse(
-            id=project.id,
-            name=project.name,
-            description=project.description,
-            platform=project.platform,
-            status=project.status,
-            created_at=project.created_at,
-            updated_at=project.updated_at,
-            quotes_count=quote_count,
-            client_name=None,  # TODO: Add client fields to Project model if needed
-            client_email=None,
-            owner=owner,
-            team_members=[],  # TODO: Implement team members if needed
-            target_completion_date=None,
-            requirements_count=0,
-        ),
+        data=detail_response,
     )
 
 
@@ -361,48 +332,10 @@ async def update_project(
     current_user: ActiveUser,
     db: DbSession,
 ) -> ProjectDataResponse:
-    """
-    Update an existing project.
-
-    Args:
-        project_id: The project UUID.
-        project_data: Project update data.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        ProjectDataResponse: The updated project.
-
-    Raises:
-        HTTPException: If project not found or access denied.
-    """
     logger.info("Updating project: id=%s, user=%s", project_id, current_user.email)
 
-    # Fetch project
-    query = select(Project).where(Project.id == project_id)
-    result = await db.execute(query)
-    project = result.scalar_one_or_none()
+    project = await get_project_with_access(project_id, current_user, db)
 
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "PROJECT_NOT_FOUND",
-                "message": "Project not found",
-            },
-        )
-
-    # Check access
-    if project.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have permission to update this project",
-            },
-        )
-
-    # Update fields
     update_data = project_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(project, field, value)
@@ -417,20 +350,12 @@ async def update_project(
     quote_count_result = await db.execute(quote_count_query)
     quote_count = quote_count_result.scalar() or 0
 
+    project_response = ProjectResponse.model_validate(project)
+    project_response.quotes_count = quote_count
+
     return ProjectDataResponse(
         success=True,
-        data=ProjectResponse(
-            id=project.id,
-            name=project.name,
-            description=project.description,
-            platform=project.platform,
-            status=project.status,
-            created_at=project.created_at,
-            updated_at=project.updated_at,
-            quotes_count=quote_count,
-            client_name=None,
-            client_email=None,
-        ),
+        data=project_response,
     )
 
 
@@ -451,52 +376,11 @@ async def delete_project(
     current_user: ActiveUser,
     db: DbSession,
 ) -> ProjectDeleteResponse:
-    """
-    Delete a project and all associated data.
-
-    This operation cascades to delete all quotes and chat messages
-    associated with the project.
-
-    Args:
-        project_id: The project UUID.
-        current_user: The authenticated user.
-        db: Database session.
-
-    Returns:
-        ProjectDeleteResponse: Deletion confirmation.
-
-    Raises:
-        HTTPException: If project not found or access denied.
-    """
     logger.info("Deleting project: id=%s, user=%s", project_id, current_user.email)
 
-    # Fetch project
-    query = select(Project).where(Project.id == project_id)
-    result = await db.execute(query)
-    project = result.scalar_one_or_none()
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "PROJECT_NOT_FOUND",
-                "message": "Project not found",
-            },
-        )
-
-    # Check access
-    if project.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have permission to delete this project",
-            },
-        )
-
+    project = await get_project_with_access(project_id, current_user, db)
     project_name = project.name
 
-    # Delete project (cascade will handle quotes and messages)
     await db.delete(project)
     await db.commit()
 

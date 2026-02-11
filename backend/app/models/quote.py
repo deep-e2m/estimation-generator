@@ -184,25 +184,22 @@ class Quote(Base, UUIDMixin, TimestampMixin):
         doc="Additional metadata (AI model used, version, etc.)",
     )
 
-    # Relationships
+    # Relationships (lazy="select" by default — use selectinload() in queries where eager loading is needed)
     project: Mapped["Project"] = relationship(
         "Project",
         back_populates="quotes",
-        lazy="selectin",
     )
 
     creator: Mapped["User"] = relationship(
         "User",
         foreign_keys=[created_by],
         back_populates="created_quotes",
-        lazy="selectin",
     )
 
     approver: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[approved_by],
         back_populates="approved_quotes",
-        lazy="selectin",
     )
 
     def __repr__(self) -> str:

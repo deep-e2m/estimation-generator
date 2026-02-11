@@ -38,9 +38,6 @@ const statusOptions: { value: QuoteStatus | ''; label: string }[] = [
 const platformOptions: { value: Platform | ''; label: string }[] = [
   { value: '', label: 'All Platforms' },
   { value: 'wordpress', label: 'WordPress' },
-  { value: 'shopify', label: 'Shopify' },
-  { value: 'woocommerce', label: 'WooCommerce' },
-  { value: 'custom', label: 'Custom' },
 ];
 
 const sortOptions = [

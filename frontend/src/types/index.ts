@@ -43,7 +43,7 @@ export interface User {
 }
 
 // Platform Type (used by both Project and Quote)
-export type Platform = 'wordpress' | 'shopify' | 'woocommerce' | 'custom';
+export type Platform = 'wordpress';
 
 // Project Types
 export type ProjectStatus = 'active' | 'archived' | 'completed';

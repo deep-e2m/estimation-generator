@@ -3,6 +3,8 @@ RAG (Retrieval-Augmented Generation) Service.
 
 Provides vector similarity search for finding relevant historical quotes
 and knowledge base content to enhance quote generation.
+
+Includes Redis caching for improved performance on repeated queries.
 """
 
 import json
@@ -14,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.database import get_session_factory
+from app.core.redis import make_cache_key, rag_cache
 from app.services.ai.openrouter_client import OpenRouterClient
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,7 @@ class RAGService:
         top_k: int = 5,
         similarity_threshold: float = 0.7,
         db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar historical quotes using vector similarity.
@@ -78,13 +82,17 @@ class RAGService:
         Uses pgvector for fast similarity search based on embedding
         distance between query and stored quote embeddings.
 
+        Results are cached in Redis for 5 minutes to improve performance
+        on repeated queries.
+
         Args:
             query: Search query (requirements text).
-            platform: Optional platform filter (wordpress, shopify, etc.).
+            platform: Optional platform filter (wordpress only).
             project_type: Optional project type filter.
             top_k: Number of results to return.
             similarity_threshold: Minimum similarity score (0-1).
             db_session: Optional database session. Creates new if not provided.
+            use_cache: Whether to use Redis cache (default True).
 
         Returns:
             List of similar quotes with metadata and similarity scores.
@@ -113,6 +121,21 @@ class RAGService:
             top_k,
         )
 
+        # Try cache first
+        if use_cache:
+            cache_key = make_cache_key(
+                query[:200],  # Truncate for key stability
+                platform,
+                project_type,
+                top_k,
+                similarity_threshold,
+                prefix="similar",
+            )
+            cached_results = await rag_cache.get(cache_key)
+            if cached_results is not None:
+                logger.debug("Cache hit for similar quotes search")
+                return cached_results
+
         # Generate embedding for query
         try:
             query_embedding = await self.client.generate_embedding(query)
@@ -129,6 +152,10 @@ class RAGService:
             similarity_threshold=similarity_threshold,
             db_session=db_session,
         )
+
+        # Cache results
+        if use_cache and results:
+            await rag_cache.set(cache_key, results)
 
         logger.info("Found %d similar quotes", len(results))
         return results
@@ -239,12 +266,15 @@ class RAGService:
         max_context_length: int = 8000,
         top_k: int = 5,
         db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
     ) -> str:
         """
         Build RAG context string for LLM prompt.
 
         Searches for similar quotes and formats them into a context
         string suitable for inclusion in the LLM prompt.
+
+        Results are cached in Redis for 5 minutes to improve performance.
 
         Args:
             query: Search query (requirements text).
@@ -253,6 +283,7 @@ class RAGService:
             max_context_length: Maximum characters for context.
             top_k: Maximum number of quotes to include.
             db_session: Optional database session.
+            use_cache: Whether to use Redis cache (default True).
 
         Returns:
             Formatted context string with similar quotes.
@@ -273,13 +304,29 @@ class RAGService:
             top_k,
         )
 
-        # Search for similar quotes
+        # Try cache first
+        if use_cache:
+            cache_key = make_cache_key(
+                query[:200],  # Truncate for key stability
+                platform,
+                project_type,
+                max_context_length,
+                top_k,
+                prefix="context",
+            )
+            cached_context = await rag_cache.get(cache_key)
+            if cached_context is not None:
+                logger.debug("Cache hit for RAG context")
+                return cached_context
+
+        # Search for similar quotes (skip cache since we're caching the full context)
         similar_quotes = await self.search_similar_quotes(
             query=query,
             platform=platform,
             project_type=project_type,
             top_k=top_k,
             db_session=db_session,
+            use_cache=False,  # Avoid double caching
         )
 
         if not similar_quotes:
@@ -308,6 +355,10 @@ class RAGService:
             current_length += quote_length
 
         context = "\n\n---\n\n".join(context_parts)
+
+        # Cache the built context
+        if use_cache and context:
+            await rag_cache.set(cache_key, context)
 
         logger.info(
             "Built RAG context: %d quotes, %d characters",
@@ -372,12 +423,13 @@ class RAGService:
         top_k: int = 10,
         similarity_threshold: float = 0.65,
         db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Search the knowledge base for relevant content.
 
         More general search across all knowledge types,
-        not just quotes.
+        not just quotes. Results are cached in Redis.
 
         Args:
             query: Search query.
@@ -386,6 +438,7 @@ class RAGService:
             top_k: Number of results.
             similarity_threshold: Minimum similarity score.
             db_session: Database session.
+            use_cache: Whether to use Redis cache (default True).
 
         Returns:
             List of relevant knowledge items.
@@ -401,6 +454,20 @@ class RAGService:
             query[:50],
             source_types,
         )
+
+        # Try cache first
+        if use_cache:
+            cache_key = make_cache_key(
+                query[:200],
+                source_types,
+                top_k,
+                similarity_threshold,
+                prefix="knowledge",
+            )
+            cached_results = await rag_cache.get(cache_key)
+            if cached_results is not None:
+                logger.debug("Cache hit for knowledge search")
+                return cached_results
 
         # Generate query embedding
         try:
@@ -451,7 +518,7 @@ class RAGService:
                     result = await session.execute(text(base_query), params)
                     rows = result.fetchall()
 
-            return [
+            results = [
                 {
                     "id": str(row.id),
                     "content": row.content,
@@ -462,6 +529,12 @@ class RAGService:
                 }
                 for row in rows
             ]
+
+            # Cache results
+            if use_cache and results:
+                await rag_cache.set(cache_key, results)
+
+            return results
 
         except Exception as e:
             logger.error("Knowledge search failed: %s", str(e))
