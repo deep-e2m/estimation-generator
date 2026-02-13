@@ -15,9 +15,7 @@ import {
   Plus,
   Trash2,
   GripVertical,
-  Save,
   Check,
-  X,
   Edit2,
   AlertCircle,
   Loader2,
@@ -28,9 +26,9 @@ import {
   Undo,
   Redo,
 } from 'lucide-react';
-import { cn, generateId, calculateExpectedHours, debounce } from '../../lib/utils';
+import { cn, generateId, calculateExpectedHours } from '../../lib/utils';
 import { useAutoSave } from '../../hooks/useAutoSave';
-import type { Quote, Deliverable, QuoteContent, HoursEstimate } from '../../types/quote.types';
+import type { Quote, Deliverable, QuoteContent } from '../../types/quote.types';
 
 interface QuoteEditorProps {
   quote: Quote;
@@ -77,11 +75,17 @@ export const QuoteEditor: React.FC<QuoteEditorProps> = ({
 
     return {
       executive_summary: executiveSummary,
-      deliverables: deliverables.map(({ isEditing, isNew, ...d }) => d),
+      deliverables: deliverables.map(({ isEditing: _isEditing, isNew: _isNew, ...d }) => ({
+        ...d,
+        estimate: {
+          ...d.estimate,
+          cost: d.estimate.cost ?? (d.estimate.expected_hours * (quote.content?.totals?.hourly_rate ?? 0)),
+        },
+      })),
       assumptions,
       totals,
     };
-  }, [deliverables, assumptions, executiveSummary, quote.content.totals]);
+  }, [deliverables, assumptions, executiveSummary, quote.content?.totals?.hourly_rate]);
 
   // Auto-save hook
   const { status: saveStatus, lastSaved, error: saveError } = useAutoSave({
@@ -289,7 +293,7 @@ export const QuoteEditor: React.FC<QuoteEditorProps> = ({
               </tr>
             </thead>
             <tbody>
-              {deliverables.map((item, index) => (
+              {deliverables.map((item) => (
                 <DeliverableRow
                   key={item.id}
                   deliverable={item}
@@ -372,7 +376,7 @@ interface SaveStatusIndicatorProps {
 const SaveStatusIndicator: React.FC<SaveStatusIndicatorProps> = ({
   status,
   lastSaved,
-  error,
+  error: _error,
 }) => {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -604,7 +608,7 @@ interface RichTextEditorProps {
 const RichTextEditor: React.FC<RichTextEditorProps> = ({
   content,
   onChange,
-  placeholder,
+  placeholder: _placeholder,
 }) => {
   const editor = useEditor({
     extensions: [StarterKit],

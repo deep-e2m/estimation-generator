@@ -3,10 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuote, useQuoteVersions, useDeleteQuote, useExportQuote, useExportStatus } from '@/hooks/useQuotes';
 import { cn, formatCurrency, getStatusColor, downloadUrl } from '@/lib/utils';
 import { formatDate, formatSmartDate } from '@/lib/date';
-import { QuoteDetailSkeleton, SidebarSkeleton } from '@/components/common/Skeleton';
-import { ErrorFallback } from '@/components/common/ErrorBoundary';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Skeleton, SkeletonCard } from '@/components/common/Skeleton';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogHeader,
@@ -14,7 +13,7 @@ import {
   DialogDescription,
   DialogContent,
   DialogFooter,
-} from '@/components/ui/Dialog';
+} from '@/components/ui/dialog';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 import type { Quote, QuoteVersion, ExportFormat } from '@/types';
 import {
@@ -114,7 +113,7 @@ export function QuoteDetail() {
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <QuoteDetailSkeleton />
+          <Skeleton className="h-8 w-64" />
         </div>
       </div>
     );
@@ -123,10 +122,25 @@ export function QuoteDetail() {
   // Error state
   if (isError || !quote) {
     return (
-      <ErrorFallback
-        error={error instanceof Error ? error : new Error('Quote not found')}
-        resetErrorBoundary={refetch}
-      />
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-gray-200 bg-white p-12 text-center">
+          <AlertTriangle className="h-12 w-12 text-red-500" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Failed to load quote</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              {error instanceof Error ? error.message : 'Quote not found'}
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => refetch()}>
+            Try again
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -221,7 +235,7 @@ export function QuoteDetail() {
           </div>
 
           <Button
-            variant="destructive"
+            variant="danger"
             leftIcon={<Trash2 className="h-4 w-4" />}
             onClick={() => setShowDeleteDialog(true)}
           >
@@ -401,7 +415,7 @@ export function QuoteDetail() {
                       <Badge
                         variant={
                           risk.impact === 'high'
-                            ? 'destructive'
+                            ? 'error'
                             : risk.impact === 'medium'
                             ? 'warning'
                             : 'secondary'
@@ -467,7 +481,11 @@ export function QuoteDetail() {
             <div className="sticky top-4 rounded-lg border border-gray-200 bg-white p-4">
               <h3 className="mb-4 font-semibold text-gray-900">Version History</h3>
               {versionsLoading ? (
-                <SidebarSkeleton items={4} />
+                <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
               ) : versions && versions.length > 0 ? (
                 <div className="space-y-3">
                   {versions.map((version) => (
@@ -488,26 +506,31 @@ export function QuoteDetail() {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onClose={() => setShowDeleteDialog(false)}>
-        <DialogHeader onClose={() => setShowDeleteDialog(false)}>
-          <DialogTitle>Delete Quote</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete {quote.quote_number}? This action cannot
-            be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            isLoading={deleteQuote.isPending}
-          >
-            Delete Quote
-          </Button>
-        </DialogFooter>
+      <Dialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => setShowDeleteDialog(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Quote</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {quote.quote_number}? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              isLoading={deleteQuote.isPending}
+            >
+              Delete Quote
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

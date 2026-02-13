@@ -21,7 +21,7 @@ import {
 import { cn } from '../lib/utils';
 import { FileUploader } from '../components/upload/FileUploader';
 import { useFileUpload } from '../hooks/useFileUpload';
-import { quoteService } from '../services/quote.service';
+import { quoteService } from '@/services';
 import type {
   Platform,
   GenerationProgress,

@@ -1,225 +1,235 @@
 /**
- * Login Page - Beautiful Modern Design
+ * Login Page
+ * 
+ * Uses centralized CSS classes from styles/pages.css
+ * Features animated branding with Framer Motion
  */
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Mail, Lock, ArrowRight, Sparkles } from 'lucide-react'
-
+import { Button } from '@/components/ui/button'
+import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/store/authStore'
-import { loginSchema, type LoginFormData } from '@/lib/validations'
-import { Button } from '@/components/ui/Button'
-import { Alert, AlertDescription } from '@/components/ui/Alert'
-import '@/styles/auth.css'
 
-export default function LoginPage() {
+// Form validation schema
+const loginSchema = z.object({
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+  remember: z.boolean().optional(),
+})
+
+type LoginForm = z.infer<typeof loginSchema>
+
+export default function Login() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
-  const [showError, setShowError] = useState(true)
+  const login = useAuthStore((state) => state.login)
 
-  const { login, isLoading, error, clearError } = useAuthStore()
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard'
+  // Get redirect path from location state
+  const from = (location.state as { from?: string })?.from || '/dashboard'
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormData>({
+  } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
       password: '',
-      remember_me: false,
+      remember: false,
     },
   })
 
-  const onSubmit = async (data: LoginFormData) => {
-    setShowError(true)
-    clearError()
+  const onSubmit = async (data: LoginForm) => {
+    setIsLoading(true)
+    setError(null)
 
     try {
-      await login({
-        email: data.email,
-        password: data.password,
-        remember_me: data.remember_me,
-      })
+      await login({ email: data.email, password: data.password, remember_me: data.remember })
       navigate(from, { replace: true })
-    } catch {
-      // Error handled in store
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Invalid email or password. Please try again.'
+      )
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const dismissError = () => {
-    setShowError(false)
-    clearError()
-  }
-
   return (
-    <div className="min-h-screen w-full flex">
-      {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
-        {/* Decorative Elements */}
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-white/10 rounded-full" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-white/10 rounded-full" />
+    <div className="auth-page">
+      {/* Left side - Branding */}
+      <div className="auth-branding">
+        {/* Decorative elements */}
+        <div className="auth-branding-decor">
+          <div className="auth-branding-blur-1" />
+          <div className="auth-branding-blur-2" />
+          <div className="auth-branding-circle auth-branding-circle-1" />
+          <div className="auth-branding-circle auth-branding-circle-2" />
+          <div className="auth-branding-circle auth-branding-circle-3" />
         </div>
 
-        {/* Content */}
-        <div className="relative z-10 w-full flex flex-col justify-center px-8 lg:px-12 xl:px-16 text-white">
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <span className="text-4xl font-bold">Estimate AI</span>
-          </div>
+        {/* Centered branding content */}
+        <div className="auth-branding-content">
+          <motion.div 
+            className="auth-branding-logo"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
+            <motion.div 
+              className="auth-branding-icon"
+              animate={{ y: [0, -12, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Sparkles style={{ width: 36, height: 36, color: 'white' }} />
+            </motion.div>
+            <motion.h1 
+              className="auth-branding-title"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              Estimate AI
+            </motion.h1>
+          </motion.div>
+          <motion.p 
+            className="auth-branding-tagline"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+          >
+            Transform your estimation process with AI-powered accuracy and efficiency.
+          </motion.p>
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 bg-gray-50">
-        <div className="auth-form-wrapper">
-          {/* Mobile Logo */}
-          <div className="auth-mobile-logo">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl mb-4">
-              <Sparkles className="w-8 h-8 text-white" />
+      {/* Right side - Form */}
+      <div className="auth-form-section">
+        <div className="auth-form-container">
+          {/* Mobile logo */}
+          <div className="auth-form-logo-mobile lg:hidden">
+            <div className="auth-form-logo-icon">
+              <Sparkles style={{ width: 32, height: 32, color: 'white' }} />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Estimate AI</h1>
+            <h1 className="auth-form-title">Estimate AI</h1>
           </div>
 
-          {/* Form Card */}
-          <div className="auth-form-card">
-            <div className="auth-form-header">
-              <h2 className="auth-form-title">Welcome back</h2>
-              <p className="auth-form-subtitle">Enter your credentials to continue</p>
-            </div>
+          {/* Form header */}
+          <div style={{ textAlign: 'center', marginBottom: 'var(--space-8)' }}>
+            <h2 className="auth-form-title">Welcome back</h2>
+            <p className="auth-form-subtitle">Sign in to continue to your dashboard</p>
+          </div>
 
-            {error && showError && (
-              <Alert variant="error" dismissible onDismiss={dismissError} className="auth-form-alert">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+          {/* Error alert */}
+          {error && (
+            <Alert variant="error" dismissible onDismiss={() => setError(null)} style={{ marginBottom: 'var(--space-6)' }}>
+              {error}
+            </Alert>
+          )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
-              {/* Email Field */}
-              <div className="auth-form-field">
-                <label htmlFor="email" className="auth-form-label">
-                  Email Address
-                </label>
-                <div className={`flex rounded-xl border-2 overflow-hidden transition-all duration-200 ${
-                  errors.email
-                    ? 'border-red-300 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/10'
-                    : 'border-gray-200 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'
-                }`}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Mail className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('email')}
-                  />
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
+            {/* Email field */}
+            <div className="auth-form-field">
+              <label htmlFor="email" className="label">
+                Email Address
+              </label>
+              <div className={`auth-input-wrapper ${errors.email ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Mail style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
                 </div>
-                {errors.email && (
-                  <p className="auth-form-error">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* Password Field */}
-              <div className="auth-form-field">
-                <div className="auth-form-label-wrapper">
-                  <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
-                    Password
-                  </label>
-                  <Link
-                    to="/auth/forgot-password"
-                    className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className={`flex rounded-xl border-2 overflow-hidden transition-all duration-200 ${
-                  errors.password
-                    ? 'border-red-300 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/10'
-                    : 'border-gray-200 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'
-                }`}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Lock className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    autoComplete="current-password"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('password')}
-                  />
-                </div>
-                {errors.password && (
-                  <p className="auth-form-error">{errors.password.message}</p>
-                )}
-              </div>
-
-              {/* Remember Me */}
-              <div className="auth-remember-me">
                 <input
-                  id="remember_me"
-                  type="checkbox"
-                  className="h-5 w-5 rounded-md border-2 border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer transition-colors"
-                  {...register('remember_me')}
+                  id="email"
+                  type="email"
+                  className="auth-input"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  {...register('email')}
                 />
-                <label htmlFor="remember_me" className="text-sm text-gray-600 select-none cursor-pointer">
-                  Remember me for 30 days
-                </label>
               </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full h-14 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 transition-all duration-200 auth-form-submit"
-                size="lg"
-                isLoading={isLoading}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  Sign in
-                  <ArrowRight className="h-5 w-5" />
-                </span>
-              </Button>
-            </form>
-
-            {/* Divider */}
-            <div className="auth-form-divider">
-              <div className="auth-form-divider-line"></div>
-              <div className="auth-form-divider-text">
-                <span>New to Estimate AI?</span>
-              </div>
+              {errors.email && (
+                <p className="auth-error-text">{errors.email.message}</p>
+              )}
             </div>
 
-            {/* Register Link */}
-            <Link
-              to="/auth/register"
-              className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all duration-200"
+            {/* Password field */}
+            <div className="auth-form-field">
+              <label htmlFor="password" className="label">
+                Password
+              </label>
+              <div className={`auth-input-wrapper ${errors.password ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Lock style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                </div>
+                <input
+                  id="password"
+                  type="password"
+                  className="auth-input"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  {...register('password')}
+                />
+              </div>
+              {errors.password && (
+                <p className="auth-error-text">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Remember me & Forgot password */}
+            <div className="auth-form-row">
+              <label className="auth-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="auth-checkbox"
+                  {...register('remember')}
+                />
+                Remember me
+              </label>
+              <Link to="/auth/forgot-password" className="auth-link">
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* Submit button */}
+            <Button
+              type="submit"
+              className="auth-submit-btn"
+              isLoading={isLoading}
+              rightIcon={<ArrowRight style={{ width: 20, height: 20 }} />}
             >
-              Create an account
-            </Link>
+              {isLoading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="auth-divider">
+            <div className="auth-divider-line" />
+            <span className="auth-divider-text">or</span>
           </div>
+
+          {/* Create account link */}
+          <Link to="/auth/register">
+            <Button variant="outline" className="auth-secondary-btn">
+              Create a new account
+            </Button>
+          </Link>
 
           {/* Footer */}
-          <p className="auth-form-footer">
+          <p className="auth-footer">
             By signing in, you agree to our{' '}
-            <a href="#" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
-              Terms
-            </a>{' '}
-            and{' '}
-            <a href="#" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
-              Privacy Policy
-            </a>
+            <a href="#">Terms of Service</a> and{' '}
+            <a href="#">Privacy Policy</a>
           </p>
         </div>
       </div>

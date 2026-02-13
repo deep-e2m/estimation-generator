@@ -8,7 +8,7 @@
 
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import { PageSpinner } from '@/components/ui/Spinner'
+import { PageSpinner } from '@/components/ui/spinner'
 import type { UserRole } from '@/types/auth.types'
 
 interface ProtectedRouteProps {

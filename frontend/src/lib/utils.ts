@@ -3,13 +3,12 @@
  */
 
 import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 
 /**
- * Merge class names with Tailwind CSS support
+ * Merge class names
  */
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return clsx(inputs);
 }
 
 /**
@@ -185,21 +184,21 @@ export function buildQueryString(params: Record<string, string | number | boolea
 }
 
 /**
- * Get status badge color classes
+ * Get status badge CSS class
  */
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
-    draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    generating: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-    finalized: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    sent: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-    accepted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-    archived: 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-400',
-    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    completed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    draft: 'badge-status badge-draft',
+    generating: 'badge-status badge-default',
+    finalized: 'badge-status badge-success',
+    sent: 'badge-status badge-default',
+    accepted: 'badge-status badge-success',
+    rejected: 'badge-status badge-error',
+    archived: 'badge-status badge-archived',
+    active: 'badge-status badge-active',
+    completed: 'badge-status badge-completed',
   };
-  return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-400';
+  return colors[status] || 'badge-status badge-secondary';
 }
 
 /**

@@ -400,9 +400,9 @@ import {
 import { cn } from '@/lib/utils';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { projectsService, quotesService } from '@/services';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChatInterface } from '@/components/chat';
 import { QuoteList } from '@/components/quote';
 import type { Project, QuoteSummary, ProjectStatus } from '@/types';

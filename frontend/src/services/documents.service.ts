@@ -4,7 +4,6 @@
  */
 
 import { apiClient } from './api';
-import type { ApiResponse } from '@/types';
 
 export interface Document {
   id: string;

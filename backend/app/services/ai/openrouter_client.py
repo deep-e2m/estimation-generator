@@ -86,31 +86,34 @@ class OpenRouterClient:
 
     BASE_URL = "https://openrouter.ai/api/v1"
 
-    # Model configurations with OpenRouter identifiers
+    # Model configurations with OpenRouter identifiers (UAT)
     MODELS: Dict[str, str] = {
-        # Primary generation model (free tier with rate limits)
-        "generation": "google/gemini-2.0-flash-thinking-exp:free",
-        # Fallback generation model (paid, highly reliable)
-        "generation_fallback": "openai/gpt-4o",
-        # Research model with web search capabilities
+        # Primary quote generation, refinement (new + regenerate, feedback, conversational)
+        "generation": "deepseek/deepseek-chat",
+        # Fallback when generation fails
+        "generation_fallback": "openai/gpt-4o-mini",
+        # Second fallback for generation/refinement
+        "generation_fallback_2": "openai/gpt-4o",
+        # Research with web search
         "research": "perplexity/llama-3.1-sonar-large-128k-online",
-        # Vision-capable model for image analysis
+        # Image / UI analysis
         "vision": "openai/gpt-4o",
-        # Fast model for simple tasks (cost-effective)
-        "fast": "google/gemini-2.0-flash-001",
-        # Embedding model for vector generation
+        # Chat, clarification questions, requirements analysis
+        "fast": "google/gemini-2.5-flash-lite",
+        # RAG embeddings
         "embedding": "openai/text-embedding-3-small",
-        # Alternative high-quality model
+        # Last-resort fallback
         "claude": "anthropic/claude-3-5-sonnet",
     }
 
     # Fallback chain for automatic model switching
     FALLBACK_CHAINS: Dict[str, List[str]] = {
-        "generation": ["generation_fallback", "claude"],
-        "generation_fallback": ["claude", "generation"],
-        "research": ["generation", "generation_fallback"],
+        "generation": ["generation_fallback", "generation_fallback_2", "claude"],
+        "generation_fallback": ["generation_fallback_2", "claude", "generation"],
+        "generation_fallback_2": ["generation_fallback", "claude"],
+        "research": ["generation_fallback", "generation_fallback_2"],
         "vision": ["claude"],
-        "fast": ["generation", "generation_fallback"],
+        "fast": ["generation_fallback", "generation"],
     }
 
     def __init__(
@@ -329,12 +332,13 @@ class OpenRouterClient:
                         **kwargs,
                     }
 
-                    logger.debug(
-                        "OpenRouter request: model=%s, retry=%d/%d, tokens=%d",
+                    logger.info(
+                        "OpenRouter request: model=%s, retry=%d/%d, max_tokens=%d, temp=%.2f",
                         attempt_model,
                         retry + 1,
                         max_retries,
                         max_tokens,
+                        temperature,
                     )
 
                     async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -345,12 +349,41 @@ class OpenRouterClient:
                         )
 
                     if response.status_code != 200:
+                        logger.error(
+                            "OpenRouter API error: status=%d, model=%s, response=%s",
+                            response.status_code,
+                            attempt_model,
+                            response.text[:500] if response.text else "No response body",
+                        )
                         await self._handle_error_response(response, attempt_model)
 
                     data = response.json()
 
+                    # Validate response structure
+                    if "choices" not in data or not data["choices"]:
+                        logger.error("Invalid OpenRouter response: missing 'choices' field. Response: %s", str(data)[:500])
+                        raise OpenRouterError(
+                            f"Invalid response from model {attempt_model}: missing choices",
+                            model=attempt_model,
+                        )
+
                     # Parse response
                     choice = data["choices"][0]
+                    if "message" not in choice or "content" not in choice["message"]:
+                        logger.error("Invalid choice structure: %s", str(choice))
+                        raise OpenRouterError(
+                            f"Invalid response from model {attempt_model}: missing message content",
+                            model=attempt_model,
+                        )
+
+                    content = choice["message"]["content"]
+                    if not content or not isinstance(content, str):
+                        logger.error("Empty or invalid content from model %s: %s", attempt_model, content)
+                        raise OpenRouterError(
+                            f"Model {attempt_model} returned empty or invalid content",
+                            model=attempt_model,
+                        )
+
                     usage_data = data.get("usage", {})
 
                     # Check for content filter
@@ -361,7 +394,7 @@ class OpenRouterClient:
                         )
 
                     result = OpenRouterResponse(
-                        content=choice["message"]["content"],
+                        content=content,
                         model=data.get("model", attempt_model),
                         finish_reason=choice.get("finish_reason", "stop"),
                         usage=OpenRouterUsage(

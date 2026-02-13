@@ -5,7 +5,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { queryClient } from './lib/query-client'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
-import './index.css'
+// Import centralized CSS
+import './styles/main.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
@@ -18,7 +19,7 @@ createRoot(document.getElementById('root')!).render(
             position="top-right"
             toastOptions={{
               duration: 4000,
-              className: 'rounded-lg',
+              className: 'rounded-xl',
             }}
             richColors
             closeButton

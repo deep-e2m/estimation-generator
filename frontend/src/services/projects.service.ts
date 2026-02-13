@@ -11,7 +11,6 @@ import type {
   ProjectUpdate,
   ProjectListResponse,
   ProjectFilters,
-  ProjectSummary,
 } from '@/types';
 
 // Build query params from filters

@@ -6,7 +6,7 @@
 
 import React, { useCallback } from 'react';
 import { useDropzone, Accept } from 'react-dropzone';
-import { Upload, X, FileText, Image, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, X, FileText, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { FileWithPreview, formatFileSize, DEFAULT_ACCEPTED_FILES } from '../../types/file.types';
 

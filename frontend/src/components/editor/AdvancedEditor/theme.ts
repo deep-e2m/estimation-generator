@@ -1,5 +1,5 @@
 /**
- * Lexical Editor Theme
+ * Tiptap Editor Theme
  * Styling configuration for the advanced editor
  */
 

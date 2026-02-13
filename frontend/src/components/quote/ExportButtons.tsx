@@ -16,7 +16,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { quoteService } from '../../services/quote.service';
+import { quoteService } from '@/services';
 import type { Quote, ExportOptions } from '../../types/quote.types';
 
 interface ExportButtonsProps {
@@ -89,7 +89,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
             : await quoteService.exportToDocx(projectId, quote.id, exportOptions);
 
         // Poll for completion
-        const downloadUrl = await quoteService.waitForExport(
+        const _downloadUrl = await quoteService.waitForExport(
           exportJob.export_job_id,
           (progress) => {
             setExportState((prev) => ({ ...prev, progress }));
@@ -307,12 +307,12 @@ interface ExportButtonProps {
 }
 
 const ExportButton: React.FC<ExportButtonProps> = ({
-  format,
+  format: _format,
   label,
   icon,
   iconColor,
   isExporting,
-  isSuccess,
+  isSuccess: _isSuccess,
   progress,
   error,
   onExport,
@@ -423,7 +423,7 @@ export const InlineExportButton: React.FC<InlineExportButtonProps> = ({
           ? await quoteService.exportToPdf(projectId, quote.id)
           : await quoteService.exportToDocx(projectId, quote.id);
 
-      const downloadUrl = await quoteService.waitForExport(
+      const _downloadUrl = await quoteService.waitForExport(
         exportJob.export_job_id,
         (progress) => setState((prev) => ({ ...prev, progress }))
       );

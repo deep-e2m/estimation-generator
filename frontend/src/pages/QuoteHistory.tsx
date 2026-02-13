@@ -3,23 +3,21 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuotesList } from '@/hooks/useQuotes';
 import { cn, formatCurrency, debounce, getStatusColor } from '@/lib/utils';
 import { formatSmartDate } from '@/lib/date';
-import { TableSkeleton } from '@/components/common/Skeleton';
-import { NoQuotes, NoSearchResults } from '@/components/common/EmptyState';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Badge } from '@/components/ui/Badge';
-import { Select } from '@/components/ui/Select';
+import { SkeletonCard } from '@/components/common/Skeleton';
+import { EmptyState } from '@/components/common/EmptyState';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { NativeSelect } from '@/components/ui/native-select';
 import type { QuoteFilters, QuoteStatus, Platform, QuoteSummary } from '@/types';
 import {
   Search,
   Filter,
   ChevronDown,
   ChevronUp,
-  ArrowUpDown,
   Plus,
   FileText,
   X,
-  ChevronLeft,
   ChevronRight,
   Calendar,
   RefreshCw,
@@ -220,17 +218,12 @@ export function QuoteHistory() {
           </Button>
 
           {/* Sort Dropdown */}
-          <Select
+          <NativeSelect
+            options={sortOptions}
             value={`${filters.sort_by || 'created_at'}:${filters.sort_order || 'desc'}`}
             onChange={(e) => updateFilters({ sort: e.target.value })}
             className="w-full sm:w-48"
-          >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          />
         </div>
 
         {/* Expanded Filters */}
@@ -242,18 +235,13 @@ export function QuoteHistory() {
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   Status
                 </label>
-                <Select
+                <NativeSelect
+                  options={statusOptions}
                   value={filters.status || ''}
                   onChange={(e) =>
                     updateFilters({ status: (e.target.value as QuoteStatus) || undefined })
                   }
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
+                />
               </div>
 
               {/* Platform Filter */}
@@ -261,18 +249,13 @@ export function QuoteHistory() {
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
                   Platform
                 </label>
-                <Select
+                <NativeSelect
+                  options={platformOptions}
                   value={filters.platform || ''}
                   onChange={(e) =>
                     updateFilters({ platform: (e.target.value as Platform) || undefined })
                   }
-                >
-                  {platformOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
+                />
               </div>
 
               {/* Date From */}
@@ -325,13 +308,35 @@ export function QuoteHistory() {
 
       {/* Loading State */}
       {isLoading ? (
-        <TableSkeleton rows={8} columns={6} />
+        <div className="space-y-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       ) : quotes.length === 0 ? (
         // Empty States
         hasActiveFilters ? (
-          <NoSearchResults query={searchValue || 'filtered'} onClear={clearFilters} />
+          <EmptyState
+            icon={<Search className="h-12 w-12 text-gray-400" />}
+            title="No search results"
+            description={`No quotes match "${searchValue || 'your filters'}". Try adjusting your search or filters.`}
+            action={
+              <Button variant="outline" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          />
         ) : (
-          <NoQuotes onCreateQuote={() => window.location.href = '/quotes/new'} />
+          <EmptyState
+            icon={<FileText className="h-12 w-12 text-gray-400" />}
+            title="No quotes yet"
+            description="Create your first quote to get started."
+            action={
+              <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => (window.location.href = '/quotes/new')}>
+                Create quote
+              </Button>
+            }
+          />
         )
       ) : (
         <>

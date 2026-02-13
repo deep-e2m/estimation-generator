@@ -21,17 +21,19 @@ export function useQuotesList(filters: QuoteFilters = {}) {
 }
 
 /**
- * Hook for fetching quotes for a specific project
+ * Hook for fetching quotes for a specific project (page-based pagination)
  */
 export function useProjectQuotes(projectId: string) {
   return useInfiniteQuery({
     queryKey: queryKeys.projects.quotes(projectId),
     queryFn: async ({ pageParam }) => {
-      return quotesApi.listByProject(projectId, pageParam as string | undefined, 20);
+      return quotesApi.listByProject(projectId, pageParam as number, 20);
     },
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: 1,
     getNextPageParam: (lastPage) =>
-      lastPage.pagination.has_more ? lastPage.pagination.cursor : undefined,
+      lastPage.pagination.has_more
+        ? (lastPage.pagination.page ?? 0) + 1
+        : undefined,
     enabled: !!projectId,
   });
 }

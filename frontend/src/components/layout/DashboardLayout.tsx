@@ -2,14 +2,16 @@
  * Dashboard Layout
  *
  * Main application layout with:
- * - Collapsible sidebar navigation
+ * - Animated hover-to-expand sidebar
+ * - Pin button to lock sidebar open
+ * - Smooth Framer Motion animations
  * - Header with user menu
  * - Main content area
- * - Clean, professional design
  */
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
   FolderOpen,
@@ -22,13 +24,13 @@ import {
   Bell,
   Search,
   Plus,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 
 import { useAuthStore, useUser } from '@/store/authStore'
-import { Avatar } from '@/components/ui/Avatar'
-import { Button } from '@/components/ui/Button'
+import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import '@/styles/layout.css'
 
 // Navigation items
 const mainNavItems = [
@@ -57,33 +59,69 @@ const bottomNavItems = [
   },
 ]
 
-// Sidebar navigation link component
+// Sidebar navigation link component with tooltip
 function NavItem({
   href,
   icon: Icon,
   label,
-  collapsed,
+  isExpanded,
 }: {
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
   label: string
-  collapsed: boolean
+  isExpanded: boolean
 }) {
+  const [showTooltip, setShowTooltip] = useState(false)
+
   return (
-    <NavLink
-      to={href}
-      className={({ isActive }) =>
-        cn(
-          'sidebar-nav-item',
-          isActive && 'active',
-          collapsed && 'justify-center px-2.5'
-        )
-      }
-      title={collapsed ? label : undefined}
-    >
-      <Icon className="h-5 w-5 shrink-0" />
-      {!collapsed && <span className="truncate">{label}</span>}
-    </NavLink>
+    <div style={{ position: 'relative' }}>
+      <NavLink
+        to={href}
+        className={({ isActive }) =>
+          cn('nav-item', isActive && 'nav-item-active', !isExpanded && 'nav-item-collapsed')
+        }
+        onMouseEnter={() => !isExpanded && setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        <motion.div
+          initial={false}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Icon className="nav-item-icon" style={{ width: 22, height: 22, flexShrink: 0 }} />
+        </motion.div>
+        <AnimatePresence mode="wait">
+          {isExpanded && (
+            <motion.span
+              className="nav-item-label"
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: 'auto' }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              {label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </NavLink>
+
+      {/* Tooltip when collapsed */}
+      <AnimatePresence>
+        {showTooltip && !isExpanded && (
+          <motion.div
+            className="nav-tooltip"
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.15 }}
+          >
+            {label}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -100,10 +138,10 @@ function UserMenu() {
   }
 
   return (
-    <div className="relative">
+    <div className="user-menu">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-3 rounded-lg p-2 hover:bg-gray-100 transition-all duration-200"
+        className="user-menu-trigger"
         aria-expanded={open}
         aria-haspopup="true"
       >
@@ -112,18 +150,24 @@ function UserMenu() {
           alt={user?.full_name || 'User'}
           size="sm"
         />
-        <div className="hidden md:block text-left">
-          <p className="text-sm font-medium text-gray-700 truncate max-w-[150px]">
+        <div className="user-menu-info md:block hidden">
+          <p className="user-menu-name">
             {user?.full_name || 'User'}
           </p>
-          <p className="text-xs text-gray-500 truncate max-w-[150px]">
+          <p className="user-menu-email">
             {user?.email}
           </p>
         </div>
-        <ChevronDown className={cn(
-          "hidden md:block h-4 w-4 text-gray-400 transition-transform duration-200",
-          open && "rotate-180"
-        )} />
+        <ChevronDown 
+          className="md:block hidden"
+          style={{ 
+            width: 16, 
+            height: 16, 
+            color: 'var(--color-gray-400)',
+            transition: 'transform var(--transition-fast)',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          }} 
+        />
       </button>
 
       {/* Dropdown Menu */}
@@ -136,32 +180,33 @@ function UserMenu() {
           />
 
           {/* Menu */}
-          <div className="absolute right-0 mt-2 w-60 rounded-xl border border-gray-200 bg-white shadow-xl z-50 animate-fadeIn">
-            <div className="p-4 border-b border-gray-100">
+          <div className="user-menu-dropdown">
+            <div className="user-menu-header">
               <p className="text-sm font-semibold text-gray-900">{user?.full_name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{user?.email}</p>
-              <span className="mt-2 inline-flex items-center rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
+              <p className="text-xs text-gray-500 mt-1">{user?.email}</p>
+              <span className="user-menu-role">
                 {user?.role}
               </span>
             </div>
 
-            <div className="py-2">
+            <div style={{ padding: '8px 0' }}>
               <NavLink
                 to="/settings/profile"
-                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="dropdown-item"
                 onClick={() => setOpen(false)}
               >
-                <Settings className="h-4 w-4 text-gray-500" />
+                <Settings style={{ width: 16, height: 16, color: 'var(--color-gray-500)' }} />
                 Account Settings
               </NavLink>
             </div>
 
-            <div className="border-t border-gray-100 py-2">
+            <div style={{ borderTop: '1px solid var(--color-gray-100)', padding: '8px 0' }}>
               <button
                 onClick={handleLogout}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-error-600 hover:bg-error-50 transition-colors"
+                className="dropdown-item dropdown-item-danger"
+                style={{ width: '100%' }}
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut style={{ width: 16, height: 16 }} />
                 Sign out
               </button>
             </div>
@@ -174,9 +219,26 @@ function UserMenu() {
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isPinned, setIsPinned] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Sidebar is expanded when pinned OR hovered
+  const isExpanded = isPinned || isHovered
+
+  // Handle mouse events for hover-to-expand
+  const handleMouseEnter = useCallback(() => {
+    if (!isPinned) {
+      setIsHovered(true)
+    }
+  }, [isPinned])
+
+  const handleMouseLeave = useCallback(() => {
+    if (!isPinned) {
+      setIsHovered(false)
+    }
+  }, [isPinned])
 
   // Get current page title
   const getPageTitle = () => {
@@ -188,155 +250,230 @@ export default function DashboardLayout() {
     return 'Estimate AI'
   }
 
+  // Sidebar animation variants
+  const sidebarVariants = {
+    collapsed: {
+      width: 72, // var(--sidebar-collapsed-width)
+      transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const }
+    },
+    expanded: {
+      width: 260, // var(--sidebar-width)
+      transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const }
+    }
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="layout">
       {/* Mobile Sidebar Backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            className="sidebar-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSidebarOpen(false)}
+            style={{ display: 'block' }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
-      <aside
+      <motion.aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-gray-200 transition-all duration-300',
-          'lg:static lg:z-auto',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-          sidebarCollapsed ? 'w-16' : 'w-64'
+          'sidebar',
+          isExpanded && 'sidebar-expanded',
+          sidebarOpen && 'sidebar-open'
         )}
+        variants={sidebarVariants}
+        initial="collapsed"
+        animate={isExpanded || sidebarOpen ? 'expanded' : 'collapsed'}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         {/* Sidebar Header */}
-        <div className={cn(
-          'flex h-16 items-center border-b border-gray-200 px-4',
-          sidebarCollapsed ? 'justify-center' : 'justify-between'
-        )}>
-          {!sidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white font-bold shadow-sm">
-                E
-              </div>
-              <span className="font-semibold text-gray-900">Estimate AI</span>
-            </div>
-          )}
-
-          {sidebarCollapsed && (
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white font-bold shadow-sm">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <motion.div 
+              className="sidebar-logo-icon"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
               E
-            </div>
-          )}
+            </motion.div>
+            <AnimatePresence mode="wait">
+              {isExpanded && (
+                <motion.span
+                  className="sidebar-logo-text"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  Estimate AI
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
 
-          {/* Collapse button (desktop) */}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={cn(
-              "hidden lg:flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors",
-              sidebarCollapsed && "absolute -right-3 top-4 bg-white border border-gray-200 shadow-sm"
+          {/* Pin button (desktop) - only show when expanded */}
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.button
+                onClick={() => setIsPinned(!isPinned)}
+                className={cn('sidebar-pin', isPinned && 'sidebar-pin-active')}
+                aria-label={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.15 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                title={isPinned ? 'Unpin sidebar' : 'Pin sidebar to keep open'}
+              >
+                {isPinned ? (
+                  <PinOff style={{ width: 16, height: 16 }} />
+                ) : (
+                  <Pin style={{ width: 16, height: 16 }} />
+                )}
+              </motion.button>
             )}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <Menu className="h-4 w-4" />
-          </button>
+          </AnimatePresence>
 
-          {/* Close button (mobile) */}
+          {/* Close button (mobile) - shown via CSS on mobile */}
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            className="sidebar-close-btn"
             aria-label="Close sidebar"
           >
-            <X className="h-5 w-5" />
+            <X style={{ width: 20, height: 20 }} />
           </button>
         </div>
 
         {/* Navigation */}
         <nav className="sidebar-nav">
           {/* New Project Button */}
-          <button
+          <motion.button
             onClick={() => navigate('/projects/new')}
-            className={cn('sidebar-new-quote-btn', sidebarCollapsed && 'px-2')}
+            className="nav-button-primary"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-            <Plus className="h-4 w-4" />
-            {!sidebarCollapsed && 'New Project'}
-          </button>
+            <Plus style={{ width: 20, height: 20, flexShrink: 0 }} />
+            <AnimatePresence mode="wait">
+              {isExpanded && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  New Project
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
 
           {/* Main Navigation */}
-          <div className="sidebar-nav-section">
-            {mainNavItems.map((item) => (
-              <NavItem
+          <div className="sidebar-section">
+            {mainNavItems.map((item, index) => (
+              <motion.div
                 key={item.href}
-                href={item.href}
-                icon={item.icon}
-                label={item.label}
-                collapsed={sidebarCollapsed}
-              />
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <NavItem
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  isExpanded={isExpanded}
+                />
+              </motion.div>
             ))}
           </div>
         </nav>
 
         {/* Bottom Navigation */}
         <div className="sidebar-footer">
-          <div className="sidebar-nav-section">
-            {bottomNavItems.map((item) => (
+          {bottomNavItems.map((item, index) => (
+            <motion.div
+              key={item.href}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
               <NavItem
-                key={item.href}
                 href={item.href}
                 icon={item.icon}
                 label={item.label}
-                collapsed={sidebarCollapsed}
+                isExpanded={isExpanded}
               />
-            ))}
-          </div>
+            </motion.div>
+          ))}
         </div>
-      </aside>
+      </motion.aside>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <motion.div
+        className={cn('main-wrapper', isPinned && 'main-wrapper-pinned')}
+        initial={false}
+        animate={{
+          marginLeft: isPinned ? 260 : 72
+        }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      >
         {/* Header */}
-        <header className="header shadow-sm">
+        <header className="header">
           {/* Left side */}
-          <div className="flex items-center gap-4">
+          <div className="header-left">
             {/* Mobile menu button */}
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden flex items-center justify-center h-10 w-10 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+              className="header-icon-btn"
               aria-label="Open sidebar"
+              style={{ display: 'none' }}
             >
-              <Menu className="h-6 w-6" />
+              <Menu style={{ width: 24, height: 24 }} />
             </button>
 
             {/* Page Title */}
-            <h1 className="text-xl font-semibold text-gray-900">
+            <motion.h1
+              className="header-title"
+              key={getPageTitle()}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
               {getPageTitle()}
-            </h1>
+            </motion.h1>
           </div>
 
           {/* Right side */}
-          <div className="flex items-center gap-2 md:gap-3">
-            {/* Search (hidden on mobile) */}
-            <div className="hidden md:flex items-center">
-              <div className="header-search">
-                <Search className="header-search-icon" />
-                <input
-                  type="search"
-                  placeholder="Search projects, quotes..."
-                  className="header-search-input"
-                />
-              </div>
+          <div className="header-right">
+            {/* Search */}
+            <div className="header-search" style={{ display: 'flex' }}>
+              <Search style={{ width: 16, height: 16, color: 'var(--color-gray-400)', flexShrink: 0 }} />
+              <input
+                type="search"
+                placeholder="Search projects, quotes..."
+                className="header-search-input"
+              />
             </div>
 
             {/* Notifications */}
-            <button
-              className="relative flex items-center justify-center h-10 w-10 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            <motion.button
+              className="header-icon-btn"
               aria-label="Notifications"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              <Bell className="h-5 w-5" />
-              {/* Notification badge */}
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-error-500 ring-2 ring-white" />
-            </button>
+              <Bell style={{ width: 20, height: 20 }} />
+              <span className="header-icon-btn-badge" />
+            </motion.button>
 
             {/* Divider */}
-            <div className="hidden md:block h-8 w-px bg-gray-200 mx-1" />
+            <div style={{ height: 32, width: 1, backgroundColor: 'var(--color-gray-200)', margin: '0 4px' }} />
 
             {/* User Menu */}
             <UserMenu />
@@ -344,10 +481,16 @@ export default function DashboardLayout() {
         </header>
 
         {/* Main Content */}
-        <main className="main-content">
-          <Outlet />
+        <main className="page-content">
+          <div className={cn(
+            'page-container', 
+            location.pathname === '/dashboard' && 'dashboard-container',
+            location.pathname === '/projects' && 'projects-container'
+          )}>
+            <Outlet />
+          </div>
         </main>
-      </div>
+      </motion.div>
     </div>
   )
 }

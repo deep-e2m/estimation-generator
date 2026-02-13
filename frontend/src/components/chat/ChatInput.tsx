@@ -109,8 +109,8 @@ export function ChatInput({
   const canSend = message.trim().length > 0 && !isDisabled;
 
   return (
-    <div className={cn('chat-input-container', className)}>
-      <div className="chat-input-wrapper">
+    <div className={cn('space-y-2', className)}>
+      <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -120,7 +120,7 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={isDisabled}
           rows={1}
-          className="chat-input-textarea"
+          className="flex-1 resize-none border-none bg-transparent px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
           aria-label="Message input"
           aria-describedby={showCharacterCount ? 'chat-char-count' : undefined}
         />
@@ -130,8 +130,10 @@ export function ChatInput({
           onClick={handleSubmit}
           disabled={!canSend}
           className={cn(
-            'chat-send-btn',
-            canSend && 'chat-send-btn-active'
+            'flex items-center justify-center h-10 w-10 rounded-xl shrink-0 transition-all',
+            canSend
+              ? 'bg-primary-600 text-white shadow-sm hover:bg-primary-700'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
           )}
           aria-label={isLoading ? 'Sending message...' : 'Send message'}
         >
@@ -148,8 +150,8 @@ export function ChatInput({
         <div
           id="chat-char-count"
           className={cn(
-            'chat-char-count',
-            isNearLimit && 'chat-char-count-warning'
+            'text-right text-xs',
+            isNearLimit ? 'text-error-600 font-medium' : 'text-slate-400'
           )}
         >
           {characterCount.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()}
@@ -157,8 +159,8 @@ export function ChatInput({
       )}
 
       {/* Keyboard hint */}
-      <div className="chat-input-hint">
-        Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line
+      <div className="text-center text-xs text-slate-400">
+        Press <kbd className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono text-[10px]">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono text-[10px]">Shift + Enter</kbd> for new line
       </div>
     </div>
   );

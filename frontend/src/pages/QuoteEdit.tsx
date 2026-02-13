@@ -20,8 +20,8 @@ import {
   Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { AdvancedEditor } from '@/components/editor/AdvancedEditor';
 import { useQuote, useUpdateQuote } from '@/hooks/useQuotes';
 import { useAuthStore } from '@/store/authStore';

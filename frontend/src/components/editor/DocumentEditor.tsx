@@ -25,15 +25,10 @@ import {
   Users,
   Wifi,
   WifiOff,
-  Type,
-  Heading1,
-  Heading2,
-  Heading3,
-  Quote,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { documentsService, type Document } from '@/services/documents.service';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 
 interface ActiveUser {
   id: string;
@@ -62,7 +57,7 @@ function getUserColor(userId: string): string {
 }
 
 export function DocumentEditor({ projectId, documentId, onClose }: DocumentEditorProps) {
-  const [document, setDocument] = useState<Document | null>(null);
+  const [_document, setDocument] = useState<Document | null>(null);
   const [title, setTitle] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -155,7 +150,7 @@ export function DocumentEditor({ projectId, documentId, onClose }: DocumentEdito
           }
         }
       },
-      onContentUpdate: (updatedContent, version, userId, userName) => {
+      onContentUpdate: (updatedContent, _version, _userId, _userName) => {
         // Update content from other users
         if (updatedContent && typeof updatedContent === 'object' && editor) {
           const html = (updatedContent as { html?: string }).html;
@@ -172,7 +167,7 @@ export function DocumentEditor({ projectId, documentId, onClose }: DocumentEdito
               const newFrom = Math.min(from, docLength - 1);
               const newTo = Math.min(to, docLength - 1);
               editor.commands.setTextSelection({ from: newFrom, to: newTo });
-            } catch (e) {
+            } catch (_e) {
               // Ignore selection restoration errors
             }
           }

@@ -8,7 +8,7 @@ The services layer provides API client interfaces for the Estimate AI applicatio
 
 We have **two quote-related services** with distinct purposes and patterns:
 
-### `quote.service.ts` - Quote Generation (Class-based)
+### `quote-generation.service.ts` - Quote Generation (Class-based)
 - **Pattern:** Class-based with instance methods
 - **Use Cases:**
   - Generating quotes with real-time progress tracking
@@ -27,7 +27,7 @@ We have **two quote-related services** with distinct purposes and patterns:
 
 **Example:**
 ```typescript
-import { quoteService } from '@/services/quote.service';
+import { quoteService } from '@/services/quote-generation.service';
 
 // Generate with progress
 const cancel = quoteService.generateQuoteWithProgress(
@@ -118,7 +118,7 @@ These services may be consolidated in the future, but currently serve distinct n
 1. **Import from specific service files:**
    ```typescript
    // ✅ Good
-   import { quoteService } from '@/services/quote.service';
+   import { quoteService } from '@/services/quote-generation.service';
    import { quotesService } from '@/services/quotes.service';
 
    // ❌ Avoid
@@ -126,7 +126,7 @@ These services may be consolidated in the future, but currently serve distinct n
    ```
 
 2. **Use appropriate service for the task:**
-   - Need progress tracking? → `quote.service.ts`
+   - Need progress tracking? → `quote-generation.service.ts`
    - Need to fetch/list quotes? → `quotes.service.ts`
 
 3. **Handle errors appropriately:**

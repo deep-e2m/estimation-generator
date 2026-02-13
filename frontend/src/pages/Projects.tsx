@@ -1,419 +1,418 @@
 /**
- * Projects Page
- * List all projects in a vertical list format with filtering and search
- *
- * Features:
- * - Project rows with summary info
- * - Search and filter controls
- * - Create new project button
- * - Pagination support
+ * Projects Page - Stitch Design
+ * 
+ * Professional full-width layout with status filter tabs,
+ * colorful project cards, and proper pagination.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
-  FolderOpen,
   Plus,
   Search,
-  Filter,
-  FileText,
+  FolderOpen,
   Clock,
-  Loader2,
-  AlertCircle,
-  ChevronDown,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { formatRelativeTime } from '@/lib/utils';
-import { projectsService } from '@/services';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import type { ProjectSummary, ProjectStatus, ProjectFilters, ProjectPlatform } from '@/types';
-import '@/styles/projects.css';
+  FileText,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Archive,
+  Trash2,
+  Edit,
+} from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Dropdown } from '@/components/ui/dropdown'
+import { Spinner } from '@/components/ui/spinner'
+import { NativeSelect } from '@/components/ui'
+import { projectsService } from '@/services'
+import { formatRelativeTime } from '@/lib/utils'
+import type { ProjectStatus } from '@/types'
+import type { ProjectSummary } from '@/types/project'
 
-// Status badge variants
-function getStatusBadgeVariant(status: ProjectStatus): 'default' | 'success' | 'secondary' {
-  const variants: Record<ProjectStatus, 'default' | 'success' | 'secondary'> = {
-    active: 'default',
-    completed: 'success',
-    archived: 'secondary',
-  };
-  return variants[status] || 'secondary';
+// Status tabs configuration
+const STATUS_TABS = [
+  { value: 'all', label: 'All Status' },
+  { value: 'active', label: 'Active' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'completed', label: 'Completed' },
+] as const
+
+// Folder icon colors - matching Stitch design
+const FOLDER_COLORS = [
+  { bg: '#dbeafe', color: '#2563eb' }, // Blue
+  { bg: '#f3e8ff', color: '#9333ea' }, // Purple
+  { bg: '#fef3c7', color: '#d97706' }, // Yellow/Orange
+  { bg: '#fee2e2', color: '#dc2626' }, // Red
+  { bg: '#d1fae5', color: '#059669' }, // Green
+] as const
+
+// Status badge component
+function StatusBadge({ status }: { status: string }) {
+  const variant = {
+    active: 'active' as const,
+    completed: 'completed' as const,
+    archived: 'archived' as const,
+    draft: 'draft' as const,
+  }[status] || 'secondary'
+
+  return <Badge variant={variant}>{status.toUpperCase()}</Badge>
 }
 
-// Status labels
-function getStatusLabel(status: ProjectStatus): string {
-  const labels: Record<ProjectStatus, string> = {
-    active: 'Active',
-    completed: 'Completed',
-    archived: 'Archived',
-  };
-  return labels[status] || status;
-}
+// Project card component - Stitch Design
+function ProjectCard({ 
+  project, 
+  index,
+  onClick 
+}: { 
+  project: ProjectSummary
+  index: number
+  onClick: () => void 
+}) {
+  const handleAction = (action: string) => {
+    console.log(`Action: ${action} on project: ${project.id}`)
+    // TODO: Implement actions
+  }
 
-/**
- * Project Row Component - List view format
- */
-interface ProjectRowProps {
-  project: ProjectSummary;
-  onClick: () => void;
-}
+  const dropdownOptions = [
+    { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
+    { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
+    { value: 'divider', label: '', divider: true },
+    { value: 'delete', label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true },
+  ]
 
-function ProjectRow({ project, onClick }: ProjectRowProps) {
+  // Cycle through colors
+  const colors = FOLDER_COLORS[index % FOLDER_COLORS.length]
+
   return (
-    <div
-      className="project-row cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
-      onClick={onClick}
-    >
-      <div className="flex items-center gap-4 px-4 py-4">
-        {/* Icon */}
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100 shrink-0">
-          <FolderOpen className="h-5 w-5 text-primary-600" />
+    <div className="projects-card" onClick={onClick}>
+      {/* Folder icon */}
+      <div className="projects-card-icon" style={{ backgroundColor: colors.bg }}>
+        <FolderOpen style={{ width: 24, height: 24, color: colors.color }} />
+      </div>
+
+      {/* Project info */}
+      <div className="projects-card-info">
+        <div className="projects-card-title-row">
+          <h3 className="projects-card-title">{project.name}</h3>
+          <StatusBadge status={project.status} />
         </div>
+        {project.description && (
+          <p className="projects-card-description">{project.description}</p>
+        )}
+      </div>
 
-        {/* Project Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
-            <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
-            <Badge variant={getStatusBadgeVariant(project.status)} className="shrink-0">
-              {getStatusLabel(project.status)}
-            </Badge>
-          </div>
-          {project.description && (
-            <p className="text-sm text-gray-500 truncate mt-0.5">
-              {project.description}
-            </p>
-          )}
+      {/* Meta info */}
+      <div className="projects-card-meta">
+        <div className="projects-card-meta-item">
+          <FileText style={{ width: 14, height: 14 }} />
+          <span>{project.quotes_count || 0} quotes</span>
         </div>
-
-        {/* Metadata - visible on larger screens */}
-        <div className="hidden sm:flex items-center gap-6 shrink-0">
-          {/* Quotes count */}
-          <div className="flex items-center gap-1.5 text-sm text-gray-500 min-w-[80px]">
-            <FileText className="h-4 w-4" />
-            <span>{project.quotes_count} {project.quotes_count === 1 ? 'quote' : 'quotes'}</span>
-          </div>
-
-          {/* Platform */}
-          {project.platform && (
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded min-w-[80px] text-center">
-              {project.platform}
-            </span>
-          )}
-
-          {/* Updated time */}
-          <div className="flex items-center gap-1.5 text-sm text-gray-400 min-w-[100px]">
-            <Clock className="h-4 w-4" />
-            <span>{formatRelativeTime(project.updated_at)}</span>
-          </div>
-        </div>
-
-        {/* Mobile metadata */}
-        <div className="flex sm:hidden items-center gap-2 text-xs text-gray-400 shrink-0">
-          <Clock className="h-3.5 w-3.5" />
-          <span>{formatRelativeTime(project.updated_at)}</span>
+        {project.platform && (
+          <div className="projects-card-platform">{project.platform}</div>
+        )}
+        <div className="projects-card-meta-item">
+          <Clock style={{ width: 14, height: 14 }} />
+          <span>{formatRelativeTime(project.updated_at || project.created_at)}</span>
         </div>
       </div>
-    </div>
-  );
-}
 
-/**
- * Empty state when no projects exist
- */
-interface EmptyStateProps {
-  hasFilters: boolean;
-  onCreateProject: () => void;
-  onClearFilters: () => void;
-}
-
-function EmptyState({ hasFilters, onCreateProject, onClearFilters }: EmptyStateProps) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 mb-6">
-        <FolderOpen className="h-10 w-10 text-gray-400" />
-      </div>
-      {hasFilters ? (
-        <>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No matching projects</h3>
-          <p className="text-sm text-gray-500 text-center max-w-sm mb-6">
-            Try adjusting your search or filters to find what you're looking for.
-          </p>
-          <Button variant="outline" onClick={onClearFilters}>
-            Clear filters
-          </Button>
-        </>
-      ) : (
-        <>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No projects yet</h3>
-          <p className="text-sm text-gray-500 text-center max-w-sm mb-6">
-            Create your first project to start generating quotes
-          </p>
-          <Button onClick={onCreateProject} leftIcon={<Plus className="h-4 w-4" />}>
-            Create Project
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * Loading skeleton - List view format
- */
-function LoadingSkeleton() {
-  return (
-    <div className="projects-list bg-white rounded-lg border border-gray-200">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="animate-pulse border-b border-gray-100 last:border-b-0">
-          <div className="flex items-center gap-4 px-4 py-4">
-            <div className="h-10 w-10 bg-gray-200 rounded-lg shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="h-5 w-48 bg-gray-200 rounded mb-2" />
-              <div className="h-4 w-64 bg-gray-100 rounded" />
-            </div>
-            <div className="hidden sm:flex items-center gap-6">
-              <div className="h-4 w-16 bg-gray-100 rounded" />
-              <div className="h-6 w-20 bg-gray-100 rounded" />
-              <div className="h-4 w-24 bg-gray-100 rounded" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Filter dropdown component
- */
-interface FilterDropdownProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  label: string;
-}
-
-function FilterDropdown({ value, onChange, options, label }: FilterDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((o) => o.value === value);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-      >
-        <Filter className="h-4 w-4 text-gray-400" />
-        <span>{selectedOption?.label || label}</span>
-        <ChevronDown
-          className={cn(
-            'h-4 w-4 text-gray-400 transition-transform',
-            isOpen && 'rotate-180'
-          )}
+      {/* Actions */}
+      <div className="projects-card-actions" onClick={(e) => e.stopPropagation()}>
+        <Dropdown
+          trigger={
+            <button className="projects-card-actions-btn">
+              <MoreVertical style={{ width: 18, height: 18 }} />
+            </button>
+          }
+          options={dropdownOptions}
+          onSelect={handleAction}
         />
-      </button>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  'w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg',
-                  option.value === value && 'bg-primary-50 text-primary-700 font-medium'
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      </div>
     </div>
-  );
+  )
 }
 
-/**
- * Main Projects Page Component
- */
-export function ProjectsPage() {
-  const navigate = useNavigate();
+// Empty state component
+function EmptyState({ onCreateNew }: { onCreateNew: () => void }) {
+  return (
+    <Card>
+      <div className="projects-empty">
+        <div className="projects-empty-icon">
+          <FolderOpen style={{ width: 48, height: 48, color: 'var(--color-primary-500)' }} />
+        </div>
+        <h3 className="projects-empty-title">No projects yet</h3>
+        <p className="projects-empty-description">
+          Create your first project to start generating accurate AI-powered estimates.
+        </p>
+        <Button onClick={onCreateNew}>
+          <Plus style={{ width: 20, height: 20, marginRight: '8px' }} />
+          Create Project
+        </Button>
+      </div>
+    </Card>
+  )
+}
 
-  // State
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [hasMore, setHasMore] = useState(false);
-  const [cursor, setCursor] = useState<string | null>(null);
+// Pagination component - Stitch Design with ellipsis
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage,
+  onPageChange,
+}: {
+  currentPage: number
+  totalPages: number
+  totalItems: number
+  itemsPerPage: number
+  onPageChange: (page: number) => void
+}) {
+  const startItem = (currentPage - 1) * itemsPerPage + 1
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems)
 
-  // Filter options
-  const statusOptions = [
-    { value: '', label: 'All Status' },
-    { value: 'active', label: 'Active' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'archived', label: 'Archived' },
-  ];
-
-  // Load projects
-  const loadProjects = useCallback(async (resetCursor = true) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const filters: ProjectFilters = {};
-      if (searchQuery) filters.search = searchQuery;
-      if (statusFilter) filters.status = statusFilter as ProjectStatus;
-
-      const response = await projectsService.list(
-        filters,
-        resetCursor ? undefined : cursor || undefined,
-        20
-      );
-
-      if (resetCursor) {
-        setProjects(response.data);
-      } else {
-        setProjects((prev) => [...prev, ...response.data]);
+  // Generate page numbers to show with ellipsis
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = []
+    
+    if (totalPages <= 5) {
+      // Show all pages if 5 or fewer
+      for (let i = 1; i <= totalPages; i++) pages.push(i)
+    } else {
+      // Always show first page
+      pages.push(1)
+      
+      if (currentPage > 3) {
+        pages.push('ellipsis')
       }
-
-      setHasMore(response.pagination.has_more);
-      setCursor(response.pagination.cursor);
-    } catch (err) {
-      setError('Failed to load projects. Please try again.');
-      console.error('Failed to load projects:', err);
-    } finally {
-      setIsLoading(false);
+      
+      // Show pages around current page
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      
+      if (currentPage < totalPages - 2) {
+        pages.push('ellipsis')
+      }
+      
+      // Always show last page
+      pages.push(totalPages)
     }
-  }, [searchQuery, statusFilter, cursor]);
+    
+    return pages
+  }
 
-  // Load projects on mount and when filters change
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      loadProjects(true);
-    }, 300);
+  return (
+    <div className="projects-pagination">
+      <p className="projects-pagination-info">
+        Showing <strong>{startItem}</strong> to <strong>{endItem}</strong> of <strong>{totalItems}</strong> results
+      </p>
 
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, statusFilter]);
+      <div className="projects-pagination-controls">
+        <button
+          className="projects-pagination-btn projects-pagination-nav"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          aria-label="Previous page"
+        >
+          <ChevronLeft style={{ width: 18, height: 18 }} />
+        </button>
 
-  // Handlers
-  const handleCreateProject = () => {
-    navigate('/projects/new');
-  };
+        {getPageNumbers().map((page, index) =>
+          page === 'ellipsis' ? (
+            <span key={`ellipsis-${index}`} className="projects-pagination-ellipsis">...</span>
+          ) : (
+            <button
+              key={page}
+              className={`projects-pagination-btn ${currentPage === page ? 'projects-pagination-btn-active' : ''}`}
+              onClick={() => onPageChange(page)}
+            >
+              {page}
+            </button>
+          )
+        )}
 
-  const handleProjectClick = (projectId: string) => {
-    navigate(`/projects/${projectId}`);
-  };
+        <button
+          className="projects-pagination-btn projects-pagination-nav"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          aria-label="Next page"
+        >
+          <ChevronRight style={{ width: 18, height: 18 }} />
+        </button>
+      </div>
+    </div>
+  )
+}
 
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setStatusFilter('');
-  };
+export default function Projects() {
+  const navigate = useNavigate()
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10)
 
-  const handleLoadMore = () => {
-    if (hasMore && !isLoading) {
-      loadProjects(false);
-    }
-  };
+  // Handle items per page change
+  const handleItemsPerPageChange = (newSize: number) => {
+    setItemsPerPage(newSize)
+    setPage(1) // Reset to first page
+  }
 
-  const hasFilters = searchQuery.length > 0 || statusFilter.length > 0;
+  // Fetch projects
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['projects', page, search, statusFilter, itemsPerPage],
+    queryFn: () =>
+      projectsService.list(
+        {
+          search: search || undefined,
+          status: statusFilter !== 'all' ? (statusFilter as ProjectStatus) : undefined,
+        },
+        undefined, // cursor
+        itemsPerPage
+      ),
+  })
+
+  const projects = data?.data || []
+  const totalItems = data?.pagination?.total_count || 0
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+
+  // Handle status tab change
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value)
+    setPage(1)
+  }
 
   return (
     <div className="projects-page">
-      {/* Page Header */}
-      <div className="projects-header">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="text-gray-500 mt-1">
-            Manage your projects and generate quotes
+      {/* Page Header - Stitch Design */}
+      <div className="projects-page-header">
+        <div className="projects-page-header-left">
+          <div className="projects-page-title-row">
+            <h1 className="projects-page-title">Projects</h1>
+            <span className="projects-page-count">{totalItems}</span>
+          </div>
+          <p className="projects-page-subtitle">
+            Manage your projects and generate professional quotes seamlessly.
           </p>
         </div>
-        <Button onClick={handleCreateProject} leftIcon={<Plus className="h-4 w-4" />}>
+        <Button onClick={() => navigate('/projects/new')} size="lg">
+          <Plus style={{ width: 20, height: 20, marginRight: '8px' }} />
           New Project
         </Button>
       </div>
 
-      {/* Search and Filters */}
-      <div className="projects-filters">
-        <div className="projects-search">
-          <Search className="projects-search-icon" />
+      {/* Search and Filters Row */}
+      <div className="projects-toolbar">
+        {/* Search */}
+        <div className="projects-search-box">
+          <Search style={{ width: 18, height: 18, color: 'var(--color-gray-400)', flexShrink: 0 }} />
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
             placeholder="Search projects..."
-            className="projects-search-input"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
           />
         </div>
 
-        <FilterDropdown
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={statusOptions}
-          label="Filter by status"
-        />
+        {/* Status Tabs */}
+        <div className="projects-status-tabs">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              className={`projects-status-tab ${statusFilter === tab.value ? 'projects-status-tab-active' : ''}`}
+              onClick={() => handleStatusChange(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Per-Page Selector */}
+        <div className="projects-per-page">
+          <span className="projects-per-page-label">Show</span>
+          <NativeSelect
+            value={String(itemsPerPage)}
+            onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+            options={[
+              { value: '10', label: '10' },
+              { value: '25', label: '25' },
+              { value: '50', label: '50' },
+              { value: '100', label: '100' },
+            ]}
+            className="projects-per-page-select"
+          />
+          <span className="projects-per-page-suffix">per page</span>
+        </div>
       </div>
 
-      {/* Error State */}
-      {error && (
-        <div className="flex items-center gap-3 p-4 bg-error-50 border border-error-200 rounded-lg text-error-700 mb-6">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{error}</span>
+      {/* Content */}
+      {isLoading ? (
+        <div className="projects-loading">
+          <Spinner size="lg" />
+        </div>
+      ) : error ? (
+        <Card className="projects-error-card">
+          <p className="text-error">Failed to load projects. Please try again.</p>
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => loadProjects(true)}
-            className="ml-auto"
+            variant="outline"
+            onClick={() => window.location.reload()}
+            style={{ marginTop: 'var(--space-4)' }}
           >
             Retry
           </Button>
-        </div>
-      )}
-
-      {/* Content */}
-      {isLoading && projects.length === 0 ? (
-        <LoadingSkeleton />
+        </Card>
+      ) : projects.length === 0 && !search && statusFilter === 'all' ? (
+        <EmptyState onCreateNew={() => navigate('/projects/new')} />
       ) : projects.length === 0 ? (
-        <EmptyState
-          hasFilters={hasFilters}
-          onCreateProject={handleCreateProject}
-          onClearFilters={handleClearFilters}
-        />
+        <Card className="projects-no-results">
+          <FolderOpen style={{ width: 40, height: 40, color: 'var(--color-gray-300)', marginBottom: 'var(--space-4)' }} />
+          <p>No projects found{search ? ` matching "${search}"` : ''}</p>
+          {statusFilter !== 'all' && (
+            <button 
+              className="projects-clear-filter"
+              onClick={() => {
+                setStatusFilter('all')
+                setSearch('')
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </Card>
       ) : (
         <>
-          <div className="projects-list bg-white rounded-lg border border-gray-200 overflow-hidden">
-            {projects.map((project) => (
-              <ProjectRow
+          {/* Projects List */}
+          <div className="projects-list">
+            {projects.map((project, index) => (
+              <ProjectCard
                 key={project.id}
                 project={project}
-                onClick={() => handleProjectClick(project.id)}
+                index={index}
+                onClick={() => navigate(`/projects/${project.id}`)}
               />
             ))}
           </div>
 
-          {/* Load More */}
-          {hasMore && (
-            <div className="flex justify-center mt-8">
-              <Button
-                variant="outline"
-                onClick={handleLoadMore}
-                isLoading={isLoading}
-              >
-                Load More
-              </Button>
-            </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setPage}
+            />
           )}
         </>
       )}
     </div>
-  );
+  )
 }
-
-export default ProjectsPage;
