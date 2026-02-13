@@ -7,7 +7,7 @@
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   Search,
@@ -65,17 +65,14 @@ function StatusBadge({ status }: { status: string }) {
 function ProjectCard({ 
   project, 
   index,
-  onClick 
+  onClick,
+  onAction,
 }: { 
   project: ProjectSummary
   index: number
-  onClick: () => void 
+  onClick: () => void
+  onAction: (action: string, project: ProjectSummary) => void
 }) {
-  const handleAction = (action: string) => {
-    console.log(`Action: ${action} on project: ${project.id}`)
-    // TODO: Implement actions
-  }
-
   const dropdownOptions = [
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
     { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
@@ -128,7 +125,7 @@ function ProjectCard({
             </button>
           }
           options={dropdownOptions}
-          onSelect={handleAction}
+          onSelect={(action) => onAction(action, project)}
         />
       </div>
     </div>
@@ -252,6 +249,7 @@ function Pagination({
 
 export default function Projects() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -263,6 +261,49 @@ export default function Projects() {
     setPage(1) // Reset to first page
   }
 
+  // Delete project mutation
+  const deleteMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+    },
+  })
+
+  // Archive project mutation
+  const archiveMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.archive(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+    },
+  })
+
+  // Handle dropdown actions
+  const handleProjectAction = async (action: string, project: ProjectSummary) => {
+    switch (action) {
+      case 'edit':
+        navigate(`/projects/${project.id}/edit`)
+        break
+      case 'archive':
+        try {
+          await archiveMutation.mutateAsync(project.id)
+        } catch (err) {
+          console.error('Failed to archive project:', err)
+        }
+        break
+      case 'delete':
+        if (window.confirm(`Are you sure you want to delete "${project.name}"?\n\nThis will permanently delete the project and all associated quotes, estimates, and chat history. This action cannot be undone.`)) {
+          try {
+            await deleteMutation.mutateAsync(project.id)
+          } catch (err) {
+            console.error('Failed to delete project:', err)
+          }
+        }
+        break
+    }
+  }
+
   // Fetch projects
   const { data, isLoading, error } = useQuery({
     queryKey: ['projects', page, search, statusFilter, itemsPerPage],
@@ -272,7 +313,7 @@ export default function Projects() {
           search: search || undefined,
           status: statusFilter !== 'all' ? (statusFilter as ProjectStatus) : undefined,
         },
-        undefined, // cursor
+        page,
         itemsPerPage
       ),
   })
@@ -397,6 +438,7 @@ export default function Projects() {
                 project={project}
                 index={index}
                 onClick={() => navigate(`/projects/${project.id}`)}
+                onAction={handleProjectAction}
               />
             ))}
           </div>

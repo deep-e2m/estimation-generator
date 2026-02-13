@@ -415,16 +415,6 @@ const TotalsSummary: React.FC<TotalsSummaryProps> = ({ totals }) => {
           </p>
         </div>
 
-        {/* Total Cost */}
-        <div>
-          <div className="flex items-center gap-2 text-gray-600 mb-1">
-            <DollarSign className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase">Total Cost</span>
-          </div>
-          <p className="text-2xl font-bold text-green-600">
-            {formatCurrency(totals.total_cost, totals.currency)}
-          </p>
-        </div>
       </div>
     </div>
   );

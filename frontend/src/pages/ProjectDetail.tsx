@@ -21,7 +21,6 @@ import {
   FileText,
   Zap,
   Calendar,
-  DollarSign,
   ListChecks,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -162,9 +161,33 @@ export function ProjectDetailPage() {
 
   // Calculate stats
   const totalHours = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
-  const totalCost = quote?.total_cost ?? quote?.content?.totals?.total_cost ?? 0;
   const requirementsCount = quote?.content?.deliverables?.length ?? 0;
   const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
+
+  // Prepare stat cards data for EstimateChat
+  const statCardsData = [
+    {
+      label: 'Total Hours',
+      value: totalHours > 0 ? `${totalHours}h` : '—',
+      subtext: totalHours > 0 ? 'Estimated effort' : 'No estimate yet',
+      icon: <Clock style={{ width: 24, height: 24 }} />,
+      iconClass: 'hours',
+    },
+    {
+      label: 'Requirements',
+      value: requirementsCount > 0 ? requirementsCount : '—',
+      subtext: requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements',
+      icon: <ListChecks style={{ width: 24, height: 24 }} />,
+      iconClass: 'requirements',
+    },
+    {
+      label: 'Last Updated',
+      value: formatRelativeTime(lastUpdated),
+      subtext: formatDate(lastUpdated),
+      icon: <FileText style={{ width: 24, height: 24 }} />,
+      iconClass: 'updated',
+    },
+  ];
 
   if (!id) {
     return (
@@ -244,58 +267,31 @@ export function ProjectDetailPage() {
         </div>
       </header>
 
-      {/* Project Title Section */}
+      {/* Project Title Section - Compact Layout */}
       <div className="project-detail-title-section">
         <div className="project-detail-title-row">
-          <h1 className="project-detail-page-title">{project.name}</h1>
-          <Badge variant={getStatusBadgeVariant(project.status)}>
-            {project.status.toUpperCase()}
-          </Badge>
+          <div className="project-detail-title-left">
+            <h1 className="project-detail-page-title">{project.name}</h1>
+            <Badge variant={getStatusBadgeVariant(project.status)}>
+              {project.status.toUpperCase()}
+            </Badge>
+          </div>
+          <div className="project-detail-title-right">
+            {project.platform && (
+              <span className="project-detail-platform">{project.platform}</span>
+            )}
+            <span className="project-detail-meta-item">
+              <Calendar style={{ width: 14, height: 14 }} />
+              {formatDate(project.created_at)}
+            </span>
+          </div>
         </div>
-        <div className="project-detail-meta">
-          {project.platform && (
-            <span className="project-detail-platform">{project.platform}</span>
-          )}
-          <span className="project-detail-meta-item">
-            <Calendar style={{ width: 14, height: 14 }} />
-            Created {formatDate(project.created_at)}
-          </span>
-          {project.description && (
+        {project.description && (
+          <div className="project-detail-description-row">
+            <span className="project-detail-description-label">Description</span>
             <p className="project-detail-description">{project.description}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="project-stat-cards">
-        <StatCard
-          label="Total Hours"
-          value={totalHours > 0 ? `${totalHours}h` : '—'}
-          subtext={totalHours > 0 ? 'Estimated effort' : 'No estimate yet'}
-          icon={<Clock style={{ width: 24, height: 24 }} />}
-          iconClass="hours"
-        />
-        <StatCard
-          label="Total Cost"
-          value={totalCost > 0 ? `$${totalCost.toLocaleString()}` : '—'}
-          subtext={totalCost > 0 ? 'Project budget' : 'No cost calculated'}
-          icon={<DollarSign style={{ width: 24, height: 24 }} />}
-          iconClass="cost"
-        />
-        <StatCard
-          label="Requirements"
-          value={requirementsCount > 0 ? requirementsCount : '—'}
-          subtext={requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements'}
-          icon={<ListChecks style={{ width: 24, height: 24 }} />}
-          iconClass="requirements"
-        />
-        <StatCard
-          label="Last Updated"
-          value={formatRelativeTime(lastUpdated)}
-          subtext={formatDate(lastUpdated)}
-          icon={<FileText style={{ width: 24, height: 24 }} />}
-          iconClass="updated"
-        />
+          </div>
+        )}
       </div>
 
       {/* Main Content - EstimateChat handles the full workflow */}
@@ -310,6 +306,7 @@ export function ProjectDetailPage() {
             project={project}
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
+            statCards={statCardsData}
           />
         )}
       </div>

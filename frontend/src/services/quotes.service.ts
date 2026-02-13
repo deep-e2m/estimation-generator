@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from './api';
+import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
 import type {
   ApiResponse,
   Quote,
@@ -63,11 +64,12 @@ export const quotesService = {
    * Generate a new quote for a project
    */
   generate: async (projectId: string, data: QuoteGenerateRequest): Promise<Quote> => {
-    const response = await apiClient.post<ApiResponse<Quote>>(
+    const response = await apiClient.post<ApiResponse<ApiQuote>>(
       `/api/v1/projects/${projectId}/quotes`,
       data
     );
-    return response.data.data;
+    // Normalize API response to frontend Quote format
+    return normalizeQuoteFromApi(response.data.data);
   },
 
   /**
@@ -88,7 +90,7 @@ export const quotesService = {
       project_id: string;
       title: string;
       total_hours: number;
-      total_cost: number;
+      total_cost?: number;
       platform: string;
       complexity: string;
       status: string;
@@ -147,31 +149,84 @@ export const quotesService = {
     limit: number = 20
   ): Promise<PaginatedResponse<QuoteSummary>> => {
     const params = buildQuoteQueryParams(filters, cursor, limit);
-    const response = await apiClient.get<ApiResponse<PaginatedResponse<QuoteSummary>>>(
+
+    interface BackendQuote {
+      id: string;
+      quote_number: string;
+      project_id: string;
+      title: string;
+      total_hours: number;
+      total_cost?: number;
+      platform: string;
+      complexity: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+    }
+
+    const response = await apiClient.get<ApiResponse<{
+      quotes: BackendQuote[];
+      pagination: {
+        page: number;
+        page_size: number;
+        total_items: number;
+        total_pages: number;
+        has_next: boolean;
+        has_previous: boolean;
+      };
+    }>>(
       `/api/v1/quotes?${params.toString()}`
     );
-    return response.data.data;
+
+    // Map backend response to frontend format
+    const backendData = response.data.data;
+    const mappedQuotes: QuoteSummary[] = (backendData.quotes || []).map((q) => ({
+      id: q.id,
+      quote_number: q.quote_number || `QT-${q.id.slice(0, 8).toUpperCase()}`,
+      version: 1,
+      status: (q.status as QuoteSummary['status']) || 'draft',
+      platform: q.platform as QuoteSummary['platform'],
+      totals: {
+        total_expected_hours: Number(q.total_hours) || 0,
+        total_cost: Number(q.total_cost) || 0,
+        currency: 'USD',
+      },
+      created_by: { id: '', full_name: '' },
+      created_at: q.created_at,
+      updated_at: q.updated_at,
+    }));
+
+    return {
+      data: mappedQuotes,
+      pagination: {
+        cursor: null,
+        has_more: backendData.pagination?.has_next || false,
+        total_count: backendData.pagination?.total_items || 0,
+      },
+    };
   },
 
   /**
    * Get a single quote by ID
    */
   get: async (quoteId: string): Promise<Quote> => {
-    const response = await apiClient.get<ApiResponse<Quote>>(
+    const response = await apiClient.get<ApiResponse<ApiQuote>>(
       `/api/v1/quotes/${quoteId}`
     );
-    return response.data.data;
+    // Normalize API response (content as string) to frontend Quote format
+    return normalizeQuoteFromApi(response.data.data);
   },
 
   /**
    * Update a quote
    */
   update: async (quoteId: string, data: QuoteUpdateRequest): Promise<Quote> => {
-    const response = await apiClient.put<ApiResponse<Quote>>(
+    const response = await apiClient.put<ApiResponse<ApiQuote>>(
       `/api/v1/quotes/${quoteId}`,
       data
     );
-    return response.data.data;
+    // Normalize API response to frontend Quote format
+    return normalizeQuoteFromApi(response.data.data);
   },
 
   /**

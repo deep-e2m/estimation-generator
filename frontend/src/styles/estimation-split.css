@@ -1,6 +1,6 @@
 /**
  * Estimation Split View Styles
- * Enhanced 2-column layout with tabs, resizable divider, and validation
+ * Enhanced 2-column layout with tabs and resizable divider
  */
 
 /* =============================================================================
@@ -59,73 +59,6 @@
   border-bottom-color: var(--color-primary-600);
 }
 
-.estimation-validation-badge {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-warning-50);
-  color: var(--color-warning-700);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-/* =============================================================================
-   Validation Banner
-   ============================================================================= */
-
-.estimation-validation-banner {
-  padding: var(--space-4) var(--space-5);
-  background: var(--color-warning-50);
-  border-bottom: 1px solid var(--color-warning-200);
-  flex-shrink: 0;
-}
-
-.estimation-validation-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-  color: var(--color-warning-800);
-}
-
-.estimation-validation-header h4 {
-  margin: 0;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-}
-
-.estimation-validation-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.estimation-validation-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: white;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-}
-
-.estimation-validation-item.warning {
-  color: var(--color-warning-800);
-  border-left: 3px solid var(--color-warning-500);
-}
-
-.estimation-validation-item.error {
-  color: var(--color-error-800);
-  border-left: 3px solid var(--color-error-500);
-  background: var(--color-error-50);
-}
-
 /* =============================================================================
    Main Split Container
    ============================================================================= */
@@ -150,8 +83,8 @@
 .estimation-chat-panel {
   display: flex;
   flex-direction: column;
-  min-width: 300px;
-  max-width: 65%;
+  width: 100%;
+  height: 100%;
   background: white;
   overflow: hidden;
 }
@@ -172,7 +105,7 @@
   transition: background var(--transition-fast);
   flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: 50;
 }
 
 .estimation-resize-handle:hover,
@@ -227,6 +160,7 @@
 
 .estimation-chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-4);
   display: flex;
@@ -341,6 +275,7 @@
 }
 
 .estimation-chat-input-container {
+  flex-shrink: 0;
   padding: var(--space-4);
   border-top: 1px solid var(--color-gray-200);
   background: white;
@@ -420,10 +355,11 @@
    ============================================================================= */
 
 .estimation-preview-panel {
-  flex: 1;
+  width: 100%;
+  height: 100%;
   overflow-y: auto;
-  background: var(--color-gray-50);
-  padding: var(--space-6);
+  background: white;
+  padding: var(--space-6) var(--space-4);
 }
 
 .estimation-preview-header {
@@ -467,9 +403,7 @@
 
 .estimation-preview-content {
   background: white;
-  padding: var(--space-6);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  padding: 0;
   min-height: 400px;
 }
 
@@ -804,10 +738,6 @@
   .estimation-tabs-list {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .estimation-validation-banner {
-    padding: var(--space-3);
   }
 
   .estimation-tab-content {
@@ -1372,11 +1302,11 @@
 }
 
 .chat-message-assistant .chat-message-bubble {
-  background: white;
-  color: var(--color-gray-800);
-  border: 1px solid var(--color-gray-200);
+  background: var(--color-gray-100);
+  color: var(--color-gray-900);
+  border: 1px solid var(--color-gray-300);
   border-bottom-left-radius: var(--radius-sm);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .chat-message-system .chat-message-bubble {
@@ -1392,6 +1322,14 @@
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
   white-space: pre-wrap;
+}
+
+.chat-message-user .chat-message-text {
+  color: white;
+}
+
+.chat-message-assistant .chat-message-text {
+  color: var(--color-gray-900);
 }
 
 .chat-message-time {
@@ -1602,6 +1540,7 @@
    ============================================================================= */
 
 .chat-input-container {
+  flex-shrink: 0;
   padding: var(--space-4);
   border-top: 1px solid var(--color-gray-200);
   background: white;
@@ -2274,34 +2213,32 @@
 }
 
 /* =============================================================================
-   PHASE 3: Risks Styles
+   PHASE 3: Risks Styles - Professional Document Format
    ============================================================================= */
 
 .risks-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .risk-item {
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  border-left: 4px solid;
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  border-left: 5px solid;
+  background: transparent;
+  margin-bottom: var(--space-3);
 }
 
 .risk-item.risk-high {
-  background: var(--color-error-50);
-  border-left-color: var(--color-error-500);
+  border-left-color: var(--color-error-600);
 }
 
 .risk-item.risk-medium {
-  background: var(--color-warning-50);
-  border-left-color: var(--color-warning-500);
+  border-left-color: var(--color-warning-600);
 }
 
 .risk-item.risk-low {
-  background: var(--color-success-50);
-  border-left-color: var(--color-success-500);
+  border-left-color: var(--color-success-600);
 }
 
 .risk-item-header {
@@ -2310,39 +2247,42 @@
 
 .risk-badge {
   display: inline-flex;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .risk-badge.risk-high {
-  background: var(--color-error-100);
-  color: var(--color-error-700);
+  background: var(--color-error-600);
+  color: white;
 }
 
 .risk-badge.risk-medium {
-  background: var(--color-warning-100);
-  color: var(--color-warning-700);
+  background: var(--color-warning-600);
+  color: white;
 }
 
 .risk-badge.risk-low {
-  background: var(--color-success-100);
-  color: var(--color-success-700);
+  background: var(--color-success-600);
+  color: white;
 }
 
 .risk-description {
-  font-size: var(--font-size-sm);
-  color: var(--color-gray-800);
+  font-size: 15px;
+  color: var(--color-gray-900);
   margin: 0 0 var(--space-2);
-  font-weight: var(--font-weight-medium);
+  font-weight: 600;
+  line-height: 1.7;
 }
 
 .risk-mitigation {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-600);
+  font-size: 14px;
+  color: var(--color-gray-700);
   margin: 0;
+  line-height: 1.7;
 }
 
 /* =============================================================================
@@ -2406,6 +2346,737 @@
   color: var(--color-error-400);
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+/* =============================================================================
+   PROFESSIONAL DOCUMENT STYLES
+   ============================================================================= */
+
+/* Document Container - Professional layout with max width */
+.doc-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-6) 0;
+  background: white;
+}
+
+/* Document Header - Professional title section */
+.doc-header {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 3px solid var(--color-gray-900);
+  text-align: center;
+}
+
+.doc-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  margin: 0 0 var(--space-4);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.doc-metadata {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.doc-metadata-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.doc-metadata-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.doc-metadata-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-gray-900);
+}
+
+/* Section Styling - Professional hierarchy */
+.doc-section {
+  margin-bottom: 48px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.doc-section:last-of-type {
+  border-bottom: none;
+}
+
+.doc-section-number {
+  display: inline-block;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-primary-600);
+  margin-bottom: var(--space-3);
+}
+
+.doc-section-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  margin: 0 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-gray-300);
+}
+
+.doc-subsection-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+/* Body Text - Professional typography */
+.doc-body-text {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--color-gray-700);
+  margin-bottom: var(--space-4);
+}
+
+/* Lists - Professional formatting */
+.doc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.doc-list-item {
+  position: relative;
+  padding-left: 24px;
+  margin-bottom: var(--space-3);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-gray-700);
+}
+
+.doc-list-item::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  font-size: 18px;
+}
+
+.doc-list-ordered {
+  list-style: none;
+  counter-reset: doc-counter;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.doc-list-ordered-item {
+  position: relative;
+  padding-left: 32px;
+  margin-bottom: var(--space-3);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-gray-700);
+  counter-increment: doc-counter;
+}
+
+.doc-list-ordered-item::before {
+  content: counter(doc-counter) ".";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--color-gray-900);
+}
+
+/* Sub-lists */
+.doc-sublist {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding-left: 24px;
+}
+
+.doc-sublist-item {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: var(--space-2);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+}
+
+.doc-sublist-item::before {
+  content: "◦";
+  position: absolute;
+  left: 0;
+  font-weight: 600;
+  color: var(--color-gray-700);
+  font-size: 16px;
+}
+
+/* Emphasis */
+.doc-emphasis {
+  font-weight: 600;
+  color: var(--color-gray-900);
+}
+
+/* Separator */
+.doc-separator {
+  height: 1px;
+  background: var(--color-gray-300);
+  margin: var(--space-6) 0;
+  border: none;
+}
+
+/* Category Headers for Deliverables */
+.doc-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.doc-category-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  margin: 0;
+}
+
+.doc-category-hours {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary-600);
+}
+
+/* Deliverable Items */
+.doc-deliverable-item {
+  padding: var(--space-3) 0;
+  border-bottom: 1px dashed var(--color-gray-200);
+}
+
+.doc-deliverable-item:last-child {
+  border-bottom: none;
+}
+
+.doc-deliverable-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.doc-deliverable-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  flex: 1;
+}
+
+.doc-deliverable-hours {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary-600);
+  white-space: nowrap;
+  margin-left: var(--space-4);
+}
+
+.doc-deliverable-desc {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+  padding-left: 16px;
+  margin-bottom: var(--space-2);
+}
+
+.doc-deliverable-estimates {
+  display: flex;
+  gap: var(--space-4);
+  padding-left: 16px;
+  font-size: 13px;
+  color: var(--color-gray-500);
+}
+
+.doc-deliverable-estimates span {
+  display: inline-block;
+}
+
+/* Scope Items */
+.doc-scope-item {
+  position: relative;
+  padding-left: 24px;
+  margin-bottom: var(--space-2);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-gray-700);
+}
+
+.doc-scope-item.included::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--color-success-600);
+  font-size: 18px;
+}
+
+.doc-scope-item.excluded::before {
+  content: "✗";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--color-error-600);
+  font-size: 18px;
+}
+
+/* Timeline Items */
+.doc-timeline-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.doc-timeline-date {
+  font-weight: 600;
+  color: var(--color-gray-900);
+  min-width: 120px;
+}
+
+.doc-timeline-milestone {
+  color: var(--color-gray-700);
+  flex: 1;
+}
+
+/* Totals Section - Prominent display */
+.doc-totals {
+  background: linear-gradient(135deg, var(--color-gray-50), white);
+  border: 3px solid var(--color-gray-900);
+  border-radius: 12px;
+  padding: var(--space-6);
+  margin: var(--space-8) 0 var(--space-4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.doc-totals-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  margin: 0 0 var(--space-4);
+  text-align: center;
+}
+
+.doc-totals-main {
+  text-align: center;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-gray-300);
+  margin-bottom: var(--space-4);
+}
+
+.doc-totals-main-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-gray-600);
+  margin-bottom: var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.doc-totals-main-value {
+  display: block;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-primary-600);
+}
+
+.doc-totals-breakdown {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--space-4);
+}
+
+.doc-totals-breakdown-item {
+  text-align: center;
+}
+
+.doc-totals-breakdown-label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-gray-500);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.doc-totals-breakdown-value {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.doc-totals-breakdown-value.optimistic {
+  color: var(--color-success-600);
+}
+
+.doc-totals-breakdown-value.likely {
+  color: var(--color-primary-600);
+}
+
+.doc-totals-breakdown-value.pessimistic {
+  color: var(--color-error-600);
+}
+
+/* Responsive adjustments for professional doc */
+@media (max-width: 768px) {
+  .doc-container {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .doc-title {
+    font-size: 24px;
+  }
+
+  .doc-section-title {
+    font-size: 20px;
+  }
+
+  .doc-subsection-title {
+    font-size: 16px;
+  }
+
+  .doc-totals-main-value {
+    font-size: 28px;
+  }
+
+  .doc-totals-breakdown {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+}
+
+/* =============================================================================
+   MARKDOWN BODY STYLES - Professional Document Format
+   Handles AI-generated content with markdown (### headers, **bold**, etc.)
+   ============================================================================= */
+
+/* Content body wrapper for markdown-only estimates */
+.doc-content-body {
+  padding: var(--space-4) 0;
+}
+
+/* Main document container */
+.markdown-body.md-document {
+  font-family: var(--font-family-sans);
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--color-gray-700);
+  max-width: 100%;
+}
+
+/* ============================================
+   DOCUMENT TITLE
+   Website Development Scope & Commercial Estimate
+   ============================================ */
+.markdown-body .md-doc-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  text-align: center;
+  margin: var(--space-4) 0 var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 2px solid var(--color-primary-500);
+  letter-spacing: 0.01em;
+}
+
+/* ============================================
+   METADATA BLOCK
+   Prepared for, Platform, Date, etc.
+   ============================================ */
+.markdown-body .md-metadata-block {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+.markdown-body .md-metadata-row {
+  display: flex;
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  font-size: 14px;
+}
+
+.markdown-body .md-metadata-label {
+  font-weight: 600;
+  color: var(--color-gray-700);
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.markdown-body .md-metadata-value {
+  color: var(--color-gray-900);
+  font-weight: 500;
+}
+
+/* ============================================
+   SECTION HEADERS
+   1. Project Overview, 2. Website Structure, etc.
+   ============================================ */
+.markdown-body .md-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  margin: var(--space-8) 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-primary-500);
+}
+
+.markdown-body .md-section-header:first-of-type {
+  margin-top: var(--space-4);
+}
+
+.markdown-body .md-section-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--color-primary-600);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.markdown-body .md-section-text {
+  flex: 1;
+}
+
+/* ============================================
+   SUBSECTION HEADERS
+   2.1 English Website, 2.2 Blog Infrastructure, etc.
+   ============================================ */
+.markdown-body .md-subsection-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  margin: var(--space-6) 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 4px solid var(--color-primary-400);
+}
+
+.markdown-body .md-subsection-number {
+  color: var(--color-primary-600);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.markdown-body .md-subsection-text {
+  flex: 1;
+}
+
+/* ============================================
+   PAGE/FEATURE NAMES
+   **Homepage**, **Dashboard**, etc.
+   ============================================ */
+.markdown-body .md-page-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-gray-300);
+}
+
+/* ============================================
+   BULLET LISTS
+   - Feature items
+   ============================================ */
+.markdown-body .md-bullet-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.markdown-body .md-bullet-item {
+  position: relative;
+  padding-left: var(--space-6);
+  margin: var(--space-2) 0;
+  line-height: 1.65;
+  color: var(--color-gray-700);
+  font-size: 14px;
+}
+
+.markdown-body .md-bullet-item::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  background: var(--color-primary-500);
+  border-radius: 50%;
+}
+
+.markdown-body .md-bullet-item strong {
+  color: var(--color-gray-800);
+}
+
+/* ============================================
+   PARAGRAPHS
+   ============================================ */
+.markdown-body .md-paragraph {
+  margin: var(--space-3) 0;
+  line-height: 1.75;
+  color: var(--color-gray-700);
+  font-size: 15px;
+}
+
+.markdown-body .md-paragraph strong {
+  color: var(--color-gray-900);
+  font-weight: 600;
+}
+
+/* ============================================
+   SEPARATORS
+   ---
+   ============================================ */
+.markdown-body .md-separator {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-gray-300) 20%,
+    var(--color-gray-300) 80%,
+    transparent
+  );
+  margin: var(--space-6) 0;
+}
+
+/* ============================================
+   SPACERS (empty lines)
+   ============================================ */
+.markdown-body .md-spacer {
+  height: var(--space-2);
+}
+
+/* ============================================
+   INLINE FORMATTING
+   ============================================ */
+.markdown-body strong {
+  font-weight: 600;
+  color: var(--color-gray-900);
+}
+
+/* ============================================
+   RESPONSIVE STYLES
+   ============================================ */
+@media (max-width: 768px) {
+  .markdown-body.md-document {
+    font-size: 14px;
+  }
+
+  .markdown-body .md-doc-title {
+    font-size: 18px;
+  }
+
+  .markdown-body .md-section-header {
+    font-size: 17px;
+    gap: var(--space-2);
+  }
+
+  .markdown-body .md-section-number {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  .markdown-body .md-subsection-header {
+    font-size: 15px;
+  }
+
+  .markdown-body .md-metadata-block {
+    padding: var(--space-3);
+  }
+
+  .markdown-body .md-metadata-row {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .markdown-body .md-metadata-label {
+    min-width: auto;
+  }
+
+  .markdown-body .md-bullet-item {
+    padding-left: var(--space-5);
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  .markdown-body.md-document {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  .markdown-body .md-section-header {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .markdown-body .md-subsection-header {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .markdown-body .md-bullet-list {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .markdown-body .md-separator {
+    display: none;
+  }
+
+  .markdown-body .md-metadata-block {
+    background: none;
+    border: 1px solid #ccc;
+  }
+
+  .markdown-body .md-section-number {
+    background: #333;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* =============================================================================
@@ -2659,18 +3330,6 @@
   background: var(--color-gray-200);
 }
 
-.estimation-mobile-validation {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-warning-100);
-  color: var(--color-warning-700);
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
 /* Mobile Panel */
 .estimation-mobile-panel {
   flex: 1;
@@ -2699,11 +3358,115 @@
 }
 
 /* Panel classes for better specificity */
-.estimation-panel-chat,
+.estimation-panel-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 .estimation-panel-preview {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+}
+
+/* Preview wrap: live preview fills full width */
+.estimation-panel-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Stat cards above preview */
+.estimation-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background-color: var(--color-gray-50);
+  border-bottom: 1px solid var(--color-gray-200);
+  flex-shrink: 0;
+}
+
+.estimation-stat-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  background-color: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-200);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.estimation-stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.estimation-stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.estimation-stat-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-gray-900);
+  line-height: 1;
+}
+
+.estimation-stat-subtext {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  margin-top: 2px;
+}
+
+.estimation-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.estimation-stat-icon.hours {
+  background: linear-gradient(135deg, var(--color-primary-100), var(--color-primary-50));
+  color: var(--color-primary-600);
+}
+
+.estimation-stat-icon.requirements {
+  background: linear-gradient(135deg, var(--color-success-100), var(--color-success-50));
+  color: var(--color-success-600);
+}
+
+.estimation-stat-icon.updated {
+  background: linear-gradient(135deg, var(--color-gray-200), var(--color-gray-100));
+  color: var(--color-gray-600);
+}
+
+.estimation-panel-preview-inner {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 /* Large screens (1280px+) - Default split */
@@ -2712,14 +3475,14 @@
     display: flex;
     flex-direction: row;
   }
-  
+
   .estimation-panel-chat {
-    min-width: 350px;
-    max-width: 600px;
+    min-width: 320px;
   }
-  
+
   .estimation-panel-preview {
-    min-width: 400px;
+    min-width: 360px;
+    flex: 1;
   }
 }
 
@@ -2729,14 +3492,13 @@
     display: flex;
     flex-direction: row;
   }
-  
+
   .estimation-panel-chat {
-    width: 35% !important;
     min-width: 300px;
   }
-  
+
   .estimation-panel-preview {
-    width: 65% !important;
+    min-width: 360px;
   }
 }
 
@@ -2745,28 +3507,32 @@
   .estimation-tabs {
     display: none;
   }
-  
+
   .estimation-mobile-tabs {
     display: flex;
   }
-  
+
   .estimation-split-container {
     flex-direction: column;
   }
-  
+
   .estimation-resize-handle {
     display: none;
   }
-  
+
   .estimation-panel-chat,
   .estimation-panel-preview {
     width: 100% !important;
     display: none;
   }
-  
+
   .estimation-mobile-panel {
     display: flex;
     flex: 1;
+  }
+
+  .estimation-stat-cards {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -2775,20 +3541,34 @@
   .estimation-mobile-tabs {
     padding: var(--space-2) var(--space-3);
   }
-  
+
   .estimation-mobile-tab {
     padding: var(--space-2-5);
     font-size: var(--font-size-xs);
   }
-  
+
   .chat-empty-state {
     padding: var(--space-4);
     min-height: auto;
   }
-  
+
   .preview-header {
     padding: var(--space-3);
     margin-bottom: var(--space-3);
+  }
+
+  .estimation-stat-cards {
+    grid-template-columns: 1fr;
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .estimation-stat-card {
+    padding: var(--space-2-5);
+  }
+
+  .estimation-stat-value {
+    font-size: var(--font-size-xl);
   }
   
   .preview-metrics-grid {
@@ -2882,22 +3662,53 @@
   }
 }
 
-/* Print styles */
+/* Print styles - Professional document formatting */
 @media print {
   .estimation-tabs,
   .estimation-mobile-tabs,
   .estimation-resize-handle,
   .chat-input-container,
   .estimation-panel-chat,
-  .preview-export-btn {
+  .preview-export-btn,
+  .preview-header {
     display: none !important;
   }
-  
+
   .estimation-panel-preview {
     width: 100% !important;
   }
-  
-  .document-section {
+
+  .estimation-preview-panel {
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .doc-container {
+    max-width: 100%;
+    padding: 20mm;
+  }
+
+  .doc-section,
+  .doc-deliverable-item,
+  .risk-item {
     break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .doc-header {
+    border-bottom-color: black;
+  }
+
+  .doc-title {
+    color: black;
+  }
+
+  /* Ensure proper spacing for print */
+  .doc-section {
+    margin-bottom: 32px;
+  }
+
+  .doc-separator {
+    background: black;
   }
 }

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.models.project import Platform, ProjectStatus
 from app.schemas.auth import APIResponse
@@ -49,7 +49,6 @@ class ProjectBase(BaseModel):
     )
     description: Optional[str] = Field(
         default=None,
-        max_length=5000,
         description="Detailed project description",
         examples=["Complete redesign of the client's WordPress e-commerce site with new branding"],
     )
@@ -99,7 +98,6 @@ class ProjectUpdate(BaseModel):
     )
     description: Optional[str] = Field(
         default=None,
-        max_length=5000,
         description="Detailed project description",
     )
     additional_instructions: Optional[str] = Field(
@@ -175,7 +173,7 @@ class CursorPaginationMeta(BaseModel):
 
 
 class PaginationMeta(BaseModel):
-    """Page-based pagination metadata schema (for backward compatibility)."""
+    """Page-based pagination metadata schema (aligned with quotes, chat endpoints)."""
 
     page: int = Field(..., description="Current page number (1-indexed)")
     page_size: int = Field(..., description="Number of items per page")
@@ -184,12 +182,18 @@ class PaginationMeta(BaseModel):
     has_next: bool = Field(..., description="Whether there is a next page")
     has_previous: bool = Field(..., description="Whether there is a previous page")
 
+    @computed_field
+    @property
+    def total_count(self) -> int:
+        """Alias for total_items (frontend compatibility)."""
+        return self.total_items
+
 
 class ProjectListData(BaseModel):
     """Data container for project list response."""
 
     data: list[ProjectResponse] = Field(..., description="List of projects")
-    pagination: CursorPaginationMeta = Field(..., description="Pagination information")
+    pagination: PaginationMeta = Field(..., description="Pagination information")
 
 
 class ProjectListResponse(APIResponse):

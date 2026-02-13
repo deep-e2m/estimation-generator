@@ -3,7 +3,7 @@
  * Backend sends content as markdown string; frontend UI expects QuoteContent (or renderable markdown).
  */
 
-import type { Quote, QuoteContent, QuoteSummary } from '@/types';
+import type { Quote, QuoteContent, QuoteSummary, Deliverable } from '@/types';
 
 /** Backend quote response shape (content and requirements are strings) */
 export interface ApiQuote {
@@ -28,6 +28,13 @@ export interface ApiQuote {
   /** Present when returned from quote detail endpoint */
   project_name?: string | null;
   creator_name?: string | null;
+}
+
+/** Backend breakdown item structure (stored in metadata.breakdown) */
+interface BackendBreakdownItem {
+  phase: string;
+  hours_min?: number;
+  hours_max?: number;
 }
 
 const emptyQuoteContent: QuoteContent = {
@@ -57,16 +64,78 @@ function numeric(value: number | string | undefined | null): number {
 }
 
 /**
+ * Convert backend breakdown items to frontend Deliverable format
+ */
+function convertBreakdownToDeliverables(breakdown: unknown): Deliverable[] {
+  if (!Array.isArray(breakdown)) {
+    return [];
+  }
+
+  return breakdown
+    .filter((item): item is BackendBreakdownItem => {
+      return (
+        typeof item === 'object' &&
+        item !== null &&
+        'phase' in item &&
+        typeof item.phase === 'string'
+      );
+    })
+    .map((item, index) => {
+      const hours_min = numeric(item.hours_min);
+      const hours_max = numeric(item.hours_max);
+      const expected_hours = hours_max > 0 ? hours_max : hours_min;
+      const most_likely_hours = hours_min > 0 && hours_max > 0
+        ? (hours_min + hours_max) / 2
+        : expected_hours;
+
+      return {
+        id: `deliverable-${index}`,
+        name: item.phase,
+        description: `${item.phase} phase`,
+        estimate: {
+          optimistic_hours: hours_min,
+          most_likely_hours: most_likely_hours,
+          pessimistic_hours: hours_max,
+          expected_hours: expected_hours,
+          cost: 0, // Cost is not used in the current implementation
+        },
+      };
+    });
+}
+
+/**
  * Build QuoteContent from backend payload. If content is a string (markdown),
  * use it as executive_summary and derive totals from root-level hours/cost.
+ * Extract deliverables from metadata.breakdown if available.
  */
 function buildContent(api: ApiQuote): QuoteContent {
   const hours = numeric(api.total_hours);
   const cost = numeric(api.total_cost);
 
+  // Extract deliverables from metadata.breakdown
+  const deliverables = api.metadata?.breakdown
+    ? convertBreakdownToDeliverables(api.metadata.breakdown)
+    : [];
+
+  // Extract assumptions from metadata
+  const assumptions = Array.isArray(api.metadata?.assumptions)
+    ? (api.metadata.assumptions as string[])
+    : [];
+
+  // Extract exclusions from metadata
+  const exclusions = Array.isArray(api.metadata?.exclusions)
+    ? (api.metadata.exclusions as string[])
+    : [];
+
   if (typeof api.content !== 'string' || !api.content.trim()) {
     return {
       ...emptyQuoteContent,
+      deliverables,
+      assumptions,
+      scope: {
+        included: [],
+        excluded: exclusions,
+      },
       totals: {
         ...emptyQuoteContent.totals,
         total_expected_hours: hours,
@@ -81,6 +150,12 @@ function buildContent(api: ApiQuote): QuoteContent {
   return {
     ...emptyQuoteContent,
     executive_summary: api.content,
+    deliverables,
+    assumptions,
+    scope: {
+      included: [],
+      excluded: exclusions,
+    },
     totals: {
       ...emptyQuoteContent.totals,
       total_expected_hours: hours,
@@ -143,11 +218,42 @@ export function normalizeQuoteFromApi(
   };
 }
 
-/** Detect if content is markdown-only (no structured deliverables/scope from parser) */
+/** 
+ * Detect if content is markdown-only (full AI response as markdown string).
+ * This is true when:
+ * - executive_summary contains the full AI response with section headers
+ * - The content has markdown patterns like "### 1." or "1. Project Overview"
+ * 
+ * We ignore scope.excluded because the backend extracts those from the markdown,
+ * but the markdown content already includes them - we don't want duplicate rendering.
+ */
 export function isMarkdownOnlyContent(content: QuoteContent): boolean {
+  const summary = content.executive_summary?.trim() || '';
+  
+  // If no summary, it's not markdown-only
+  if (!summary) return false;
+  
+  // Check if the summary looks like full markdown content
+  // (contains section headers or multiple sections)
+  const hasMarkdownSections = 
+    // Markdown headers: ### 1. Title, ## 2. Title
+    /^#{1,4}\s*\d+\.\s/m.test(summary) ||
+    // Plain numbered sections: 1. Project Overview, 2. Website Structure
+    /^\d+\.\s+[A-Z][a-zA-Z\s&]+/m.test(summary) ||
+    // Contains "Prepared for:" or "Platform:" metadata
+    /^(Prepared for|Prepared by|Platform|Languages):/im.test(summary) ||
+    // Contains multiple "---" separators (document structure)
+    (summary.match(/^-{3,}$/gm) || []).length >= 2;
+  
+  // If it has markdown sections, treat as markdown-only
+  // (ignore deliverables/scope that may have been extracted from the same content)
+  if (hasMarkdownSections) {
+    return true;
+  }
+  
+  // Fallback: original logic for truly simple content
   return (
     (!content.deliverables || content.deliverables.length === 0) &&
-    (!content.scope?.included?.length && !content.scope?.excluded?.length) &&
-    !!content.executive_summary?.trim()
+    (!content.scope?.included?.length && !content.scope?.excluded?.length)
   );
 }

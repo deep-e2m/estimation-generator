@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, DollarSign, TrendingUp, Calendar } from 'lucide-react';
+import { Clock, TrendingUp, Calendar } from 'lucide-react';
 import type { QuoteTotals, QuoteTimeline } from '@/types/quote.types';
 
 interface TotalsSummaryProps {
@@ -71,28 +71,6 @@ export function TotalsSummary({ totals, timeline, confidence }: TotalsSummaryPro
             <span className="totals-card-label">Expected Hours</span>
           </div>
         </div>
-
-        {/* Total Cost */}
-        {totals.total_cost > 0 && (
-          <div className="totals-card totals-card-success">
-            <div className="totals-card-icon">
-              <DollarSign className="h-5 w-5" />
-            </div>
-            <div className="totals-card-content">
-              <span className="totals-card-value">
-                {formatCurrency(totals.total_cost, totals.currency)}
-              </span>
-              <span className="totals-card-label">
-                Estimated Cost
-                {totals.hourly_rate > 0 && (
-                  <span className="totals-card-subtext">
-                    @ {formatCurrency(totals.hourly_rate, totals.currency)}/hr
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Duration */}
         {duration && (

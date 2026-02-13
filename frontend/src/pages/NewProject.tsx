@@ -318,23 +318,17 @@ export function NewProjectPage() {
 
             {/* Project Description */}
             <div className="new-project-form-group">
-              <div className="new-project-form-label-row">
-                <Label className="new-project-form-label new-project-form-label-required">
-                  Project Description
-                </Label>
-                <span className="new-project-char-count">
-                  {formData.description.length}/2000
-                </span>
-              </div>
+              <Label className="new-project-form-label new-project-form-label-required">
+                Project Description
+              </Label>
               <textarea
                 className={`input ${errors.description ? 'input-error' : ''}`}
                 value={formData.description}
                 onChange={handleChange('description')}
                 placeholder="Describe the project requirements, goals, and any important details..."
-                rows={3}
-                maxLength={2000}
+                rows={5}
                 disabled={isSubmitting}
-                style={{ resize: 'vertical', minHeight: '80px' }}
+                style={{ resize: 'vertical', minHeight: '120px' }}
               />
               {errors.description && (
                 <span className="new-project-form-error">{errors.description}</span>

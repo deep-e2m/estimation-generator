@@ -79,12 +79,22 @@ const ANALYSIS_STEPS: StepConfig[] = [
   },
 ];
 
+interface StatCardData {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  icon: React.ReactNode;
+  iconClass: string;
+}
+
 interface EstimateChatProps {
   project: Project;
   existingEstimate?: Quote | null;
   onEstimateGenerated?: (quote: Quote) => void;
   /** Use the new full-screen generation UI instead of inline progress */
   useFullscreenUI?: boolean;
+  /** Stat cards to display above the preview panel */
+  statCards?: StatCardData[];
 }
 
 export function EstimateChat({
@@ -92,13 +102,14 @@ export function EstimateChat({
   existingEstimate,
   onEstimateGenerated,
   useFullscreenUI = true, // Default to new fullscreen UI
+  statCards,
 }: EstimateChatProps) {
   const navigate = useNavigate();
 
   // State
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+  const [isComplete, setIsComplete] = useState(!!existingEstimate);
   const [generatedEstimate, setGeneratedEstimate] = useState<Quote | null>(
     existingEstimate || null
   );
@@ -116,6 +127,15 @@ export function EstimateChat({
 
   // Check if estimate already exists (enforces single estimate rule)
   const hasExistingEstimate = !!existingEstimate || !!generatedEstimate;
+
+  // Sync existingEstimate changes
+  useEffect(() => {
+    if (existingEstimate && !generatedEstimate) {
+      setGeneratedEstimate(existingEstimate);
+      setIsComplete(true);
+      setShowSplitView(true);
+    }
+  }, [existingEstimate, generatedEstimate]);
 
   // Progress simulation for steps
   useEffect(() => {
@@ -280,6 +300,7 @@ export function EstimateChat({
         project={project}
         initialQuote={generatedEstimate}
         onQuoteUpdated={onEstimateGenerated}
+        statCards={statCards}
       />
     );
   }
@@ -493,14 +514,7 @@ export function EstimateChat({
         {/* Existing Estimate (if loaded from backend) */}
         {!isGenerating && !isComplete && existingEstimate && (
           <div>
-            {(() => {
-              // Set the generated estimate from existing
-              if (!generatedEstimate) {
-                setGeneratedEstimate(existingEstimate);
-                setIsComplete(true);
-              }
-              return renderEstimateContent();
-            })()}
+            {renderEstimateContent()}
           </div>
         )}
       </div>

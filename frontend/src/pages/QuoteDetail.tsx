@@ -23,7 +23,6 @@ import {
   Download,
   Trash2,
   Clock,
-  DollarSign,
   AlertTriangle,
   CheckCircle,
   ExternalLink,
@@ -254,18 +253,6 @@ export function QuoteDetail() {
               value={`${quote.content.totals.total_expected_hours}`}
               subValue={`${quote.content.totals.total_optimistic_hours}-${quote.content.totals.total_pessimistic_hours} range`}
               icon={Clock}
-            />
-            <StatCard
-              label="Total Cost"
-              value={formatCurrency(
-                quote.content.totals.total_cost,
-                quote.content.totals.currency
-              )}
-              subValue={`@ ${formatCurrency(
-                quote.content.totals.hourly_rate,
-                quote.content.totals.currency
-              )}/hr`}
-              icon={DollarSign}
             />
             <StatCard
               label="Deliverables"

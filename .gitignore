@@ -169,8 +169,18 @@ aider.conf.yml
 # ==========================================
 # Project-specific
 # ==========================================
-# Knowledge base generated files
-Knowledge-based/formatting/
+# Knowledge base generated files (match actual dir: knowledge-based)
+knowledge-based/formatting/
+
+# Celery (docker-compose has celery-worker)
+celerybeat-schedule
+celerybeat.pid
+
+# Redis persistence (if run locally or volume in project)
+dump.rdb
+
+# Ruff linter cache
+.ruff_cache/
 
 # Temporary files
 *.tmp

@@ -162,12 +162,22 @@ export interface GenerationOptions {
   hourly_rate: number;
 }
 
+// Analysis metadata from quote generation
+export interface AnalysisMetadata {
+  requirements_count: number;
+  tasks_count: number;
+  sections_count: number;
+  pages_count: number;
+  complexity_factors: string[];
+}
+
 // Quote generation request - matches backend QuoteGenerateRequest schema
 export interface GenerateQuoteRequest {
   requirements: string;  // min 10 chars, max 50000 chars
   title?: string;        // optional title, max 500 chars
   hourly_rate?: number;  // optional hourly rate for cost calculation
   use_rag?: boolean;     // whether to use RAG context from knowledge base (default true)
+  regenerate?: boolean;  // if true, delete existing estimate and create new one
   project_context?: {    // additional project context
     platform?: Platform;
     client_name?: string;
