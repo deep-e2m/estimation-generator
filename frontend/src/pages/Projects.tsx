@@ -313,7 +313,7 @@ export default function Projects() {
           search: search || undefined,
           status: statusFilter !== 'all' ? (statusFilter as ProjectStatus) : undefined,
         },
-        undefined, // cursor
+        page,
         itemsPerPage
       ),
   })

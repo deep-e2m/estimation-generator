@@ -13,10 +13,10 @@ import type {
   ProjectFilters,
 } from '@/types';
 
-// Build query params from filters
+// Build query params from filters (page-based pagination)
 function buildProjectQueryParams(
   filters?: ProjectFilters,
-  cursor?: string,
+  page: number = 1,
   limit: number = 20
 ): URLSearchParams {
   const params = new URLSearchParams();
@@ -26,7 +26,7 @@ function buildProjectQueryParams(
   if (filters?.platform) params.append('platform', filters.platform);
   if (filters?.sort_by) params.append('sort_by', filters.sort_by);
   if (filters?.sort_order) params.append('sort_order', filters.sort_order);
-  if (cursor) params.append('cursor', cursor);
+  params.append('page', page.toString());
   params.append('limit', limit.toString());
 
   return params;
@@ -34,14 +34,14 @@ function buildProjectQueryParams(
 
 export const projectsService = {
   /**
-   * Get list of projects with optional filtering and pagination
+   * Get list of projects with optional filtering and page-based pagination
    */
   list: async (
     filters?: ProjectFilters,
-    cursor?: string,
+    page: number = 1,
     limit: number = 20
   ): Promise<ProjectListResponse> => {
-    const params = buildProjectQueryParams(filters, cursor, limit);
+    const params = buildProjectQueryParams(filters, page, limit);
     const response = await apiClient.get<ApiResponse<ProjectListResponse>>(
       `/api/v1/projects?${params.toString()}`
     );

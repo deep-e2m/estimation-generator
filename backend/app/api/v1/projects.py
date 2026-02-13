@@ -6,6 +6,7 @@ CRUD operations and listing with pagination.
 """
 
 import logging
+from math import ceil
 from typing import Optional
 from uuid import UUID
 
@@ -18,7 +19,7 @@ from app.models.client import Client
 from app.models.project import Platform, Project, ProjectStatus
 from app.models.quote import Quote
 from app.schemas.project import (
-    CursorPaginationMeta,
+    PaginationMeta,
     ProjectCreate,
     ProjectDataResponse,
     ProjectDeleteResponse,
@@ -132,7 +133,7 @@ async def create_project(
 async def list_projects(
     current_user: ActiveUser,
     db: DbSession,
-    cursor: Optional[str] = Query(default=None, description="Cursor for pagination"),
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
     status_filter: Optional[ProjectStatus] = Query(
         default=None, alias="status", description="Filter by project status"
@@ -145,9 +146,9 @@ async def list_projects(
     ),
 ) -> ProjectListResponse:
     logger.debug(
-        "Listing projects: user=%s, cursor=%s, limit=%d",
+        "Listing projects: user=%s, page=%d, limit=%d",
         current_user.email,
-        cursor,
+        page,
         limit,
     )
 
@@ -166,54 +167,28 @@ async def list_projects(
     if search:
         base_query = base_query.where(Project.name.ilike(f"%{search}%"))
 
-    # Get total count
-    count_query = select(func.count()).select_from(
-        select(Project.id).where(Project.created_by == current_user.id)
-        .correlate(None)
-        .subquery()
-    )
-    if status_filter:
-        count_query = select(func.count()).select_from(base_query.with_only_columns(Project.id).subquery())
-    total_result = await db.execute(
-        select(func.count()).select_from(base_query.with_only_columns(Project.id).subquery())
-    )
-    total_count = total_result.scalar() or 0
+    # Get total count (with filters applied)
+    count_subquery = base_query.with_only_columns(Project.id).subquery()
+    total_result = await db.execute(select(func.count()).select_from(count_subquery))
+    total_items = total_result.scalar() or 0
 
-    # Apply cursor-based pagination
-    paginated_query = base_query.order_by(
-        Project.updated_at.desc().nullsfirst(),
-        Project.created_at.desc()
+    # Calculate pagination (page-based, aligned with quotes endpoint)
+    total_pages = ceil(total_items / limit) if total_items > 0 else 1
+    offset = (page - 1) * limit
+
+    # Apply ordering and page-based pagination
+    paginated_query = (
+        base_query
+        .order_by(
+            Project.updated_at.desc().nullsfirst(),
+            Project.created_at.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
     )
-
-    if cursor:
-        try:
-            from uuid import UUID as UUIDType
-            cursor_uuid = UUIDType(cursor)
-            cursor_project_query = select(Project).where(Project.id == cursor_uuid)
-            cursor_result = await db.execute(cursor_project_query)
-            cursor_project = cursor_result.scalar_one_or_none()
-            if cursor_project:
-                paginated_query = paginated_query.where(
-                    (Project.updated_at < cursor_project.updated_at) |
-                    ((Project.updated_at == cursor_project.updated_at) &
-                     (Project.created_at < cursor_project.created_at)) |
-                    ((Project.updated_at == cursor_project.updated_at) &
-                     (Project.created_at == cursor_project.created_at) &
-                     (Project.id < cursor_project.id))
-                )
-        except (ValueError, TypeError):
-            pass
-
-    paginated_query = paginated_query.limit(limit + 1)
 
     result = await db.execute(paginated_query)
     projects = list(result.scalars().all())
-
-    has_more = len(projects) > limit
-    if has_more:
-        projects = projects[:limit]
-
-    next_cursor = str(projects[-1].id) if has_more and projects else None
 
     # Batch-fetch quote counts instead of N+1 queries
     if projects:
@@ -234,10 +209,13 @@ async def list_projects(
         project_response.quotes_count = quote_counts.get(project.id, 0)
         project_responses.append(project_response)
 
-    pagination = CursorPaginationMeta(
-        cursor=next_cursor,
-        has_more=has_more,
-        total_count=total_count,
+    pagination = PaginationMeta(
+        page=page,
+        page_size=limit,
+        total_items=total_items,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1,
     )
 
     return ProjectListResponse(

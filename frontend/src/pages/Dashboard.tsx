@@ -488,26 +488,22 @@ function QuickActionsCard() {
     {
       label: 'New Project',
       icon: Plus,
-      shortcut: 'Press N',
       onClick: () => navigate('/projects/new'),
     },
     {
       label: 'Import CSV',
       icon: Upload,
-      shortcut: 'Press I',
-      onClick: () => {/* TODO: Import functionality */},
+      onClick: () => navigate('/projects/new'),
     },
     {
       label: 'History',
       icon: History,
-      shortcut: 'Press H',
-      onClick: () => navigate('/quotes'),
+      onClick: () => navigate('/projects'),
     },
     {
       label: 'Share Report',
       icon: Share2,
-      shortcut: 'Press S',
-      onClick: () => {/* TODO: Share functionality */},
+      onClick: () => navigate('/projects'),
     },
   ]
 
@@ -525,7 +521,6 @@ function QuickActionsCard() {
               <action.icon style={{ width: 18, height: 18 }} />
             </div>
             <span className="dashboard-quick-action-label">{action.label}</span>
-            <span className="dashboard-quick-action-shortcut">{action.shortcut}</span>
           </button>
         ))}
       </div>
@@ -544,7 +539,7 @@ export default function Dashboard() {
   // Fetch real data from API
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['dashboard-projects'],
-    queryFn: () => projectsService.list({ sort_by: 'updated_at', sort_order: 'desc' }, undefined, 10),
+    queryFn: () => projectsService.list({ sort_by: 'updated_at', sort_order: 'desc' }, 1, 10),
     staleTime: 30000,
   })
 
