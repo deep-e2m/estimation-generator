@@ -11,12 +11,12 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Clock, DollarSign, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { FileText, Clock, DollarSign, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatRelativeTime } from '@/lib/utils';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import type { QuoteSummary, QuoteStatus } from '@/types';
 
 interface QuoteListProps {
@@ -29,14 +29,16 @@ interface QuoteListProps {
 }
 
 // Map status to badge variant
-function getStatusBadgeVariant(status: QuoteStatus): 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline' {
-  const variants: Record<QuoteStatus, 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline'> = {
+function getStatusBadgeVariant(status: QuoteStatus): 'default' | 'secondary' | 'success' | 'warning' | 'error' | 'outline' {
+  const variants: Record<QuoteStatus, 'default' | 'secondary' | 'success' | 'warning' | 'error' | 'outline'> = {
     generating: 'default',
     draft: 'warning',
+    published: 'default',
     finalized: 'success',
     sent: 'default',
     accepted: 'success',
-    rejected: 'destructive',
+    approved: 'success',
+    rejected: 'error',
     archived: 'secondary',
   };
   return variants[status] || 'secondary';
@@ -47,9 +49,11 @@ function getStatusLabel(status: QuoteStatus): string {
   const labels: Record<QuoteStatus, string> = {
     generating: 'Generating',
     draft: 'Draft',
+    published: 'Published',
     finalized: 'Finalized',
     sent: 'Sent',
     accepted: 'Accepted',
+    approved: 'Approved',
     rejected: 'Rejected',
     archived: 'Archived',
   };

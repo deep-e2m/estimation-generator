@@ -22,6 +22,7 @@ from app.models.project import Project
 from app.models.quote import Complexity, Quote, QuoteStatus
 from app.schemas.project import PaginationMeta
 from app.schemas.quote import (
+    ChangeDescription,
     QuoteCreate,
     QuoteDataResponse,
     QuoteDeleteResponse,
@@ -38,9 +39,13 @@ from app.schemas.quote import (
     QuoteStatusUpdate,
     QuoteSummaryResponse,
     QuoteUpdate,
+    RefineQuoteDataResponse,
+    RefineQuoteRequest,
+    RefineQuoteResponse,
 )
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
+from app.services.quote_refinement_service import get_refinement_service
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,125 @@ async def get_quote_with_access_check(
         raise api_error(status.HTTP_403_FORBIDDEN, "ACCESS_DENIED", "You don't have access to this quote")
 
     return quote
+
+
+# =============================================================================
+# Quote Listing Endpoints
+# =============================================================================
+
+
+@router.get(
+    "/quotes",
+    response_model=QuoteListResponse,
+    summary="List all quotes for current user",
+    description="Returns a paginated list of all quotes created by the current user across all projects.",
+    responses={
+        200: {"description": "Quotes retrieved successfully"},
+        401: {"description": "Not authenticated"},
+    },
+)
+async def list_all_quotes(
+    current_user: ActiveUser,
+    db: DbSession,
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    sort_by: str = Query(default="created_at", description="Field to sort by"),
+    sort_order: str = Query(default="desc", description="Sort order (asc/desc)"),
+    status_filter: Optional[QuoteStatus] = Query(
+        default=None, alias="status", description="Filter by quote status"
+    ),
+) -> QuoteListResponse:
+    """
+    List all quotes for the current user with pagination and sorting.
+
+    Args:
+        current_user: The authenticated user.
+        db: Database session.
+        page: Page number (1-indexed).
+        limit: Number of items per page.
+        sort_by: Field to sort by.
+        sort_order: Sort order (asc/desc).
+        status_filter: Optional status filter.
+
+    Returns:
+        QuoteListResponse: Paginated list of quotes.
+    """
+    # Build base query - get quotes created by current user
+    base_query = select(Quote).where(Quote.created_by == current_user.id)
+
+    if status_filter:
+        base_query = base_query.where(Quote.status == status_filter)
+
+    # Get total count
+    count_query = select(func.count()).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total_items = total_result.scalar() or 0
+
+    # Calculate pagination
+    total_pages = ceil(total_items / limit) if total_items > 0 else 1
+    offset = (page - 1) * limit
+
+    # Determine sort column
+    sort_column = Quote.created_at  # default
+    if sort_by == "updated_at":
+        sort_column = Quote.updated_at
+    elif sort_by == "title":
+        sort_column = Quote.title
+    elif sort_by == "total_cost":
+        sort_column = Quote.total_cost
+    elif sort_by == "status":
+        sort_column = Quote.status
+
+    # Apply sorting
+    if sort_order.lower() == "asc":
+        sort_expression = sort_column.asc()
+    else:
+        sort_expression = sort_column.desc()
+
+    # Fetch quotes with pagination and sorting
+    paginated_query = (
+        base_query
+        .order_by(sort_expression)
+        .offset(offset)
+        .limit(limit)
+    )
+
+    result = await db.execute(paginated_query)
+    quotes = result.scalars().all()
+
+    quote_responses = [
+        QuoteSummaryResponse(
+            id=quote.id,
+            quote_number=f"QT-{str(quote.id)[:8].upper()}",
+            project_id=quote.project_id,
+            title=quote.title,
+            total_hours=quote.total_hours,
+            total_cost=quote.total_cost,
+            platform=quote.platform,
+            complexity=quote.complexity,
+            status=quote.status,
+            created_at=quote.created_at,
+            updated_at=quote.updated_at,
+        )
+        for quote in quotes
+    ]
+
+    pagination = PaginationMeta(
+        page=page,
+        page_size=limit,
+        total_items=total_items,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_previous=page > 1,
+    )
+
+    return QuoteListResponse(
+        success=True,
+        data=QuoteListData(
+            quotes=quote_responses,
+            pagination=pagination,
+        ),
+    )
 
 
 # =============================================================================
@@ -876,6 +1000,157 @@ async def regenerate_quote(
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
             ),
+        ),
+    )
+
+
+# =============================================================================
+# Quote Refinement Endpoint
+# =============================================================================
+
+
+@router.post(
+    "/projects/{project_id}/quotes/{quote_id}/refine",
+    response_model=RefineQuoteDataResponse,
+    summary="Refine quote conversationally",
+    description="Applies conversational refinements to a quote using natural language.",
+    responses={
+        200: {"description": "Quote refined successfully"},
+        400: {"description": "Cannot refine finalized quote"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Access denied"},
+        404: {"description": "Quote not found"},
+        500: {"description": "Quote refinement failed"},
+    },
+)
+async def refine_quote(
+    project_id: UUID,
+    quote_id: UUID,
+    request: RefineQuoteRequest,
+    current_user: ActiveUser,
+    db: DbSession,
+) -> RefineQuoteDataResponse:
+    """
+    Refine a quote using natural language conversation.
+
+    This endpoint allows users to make changes to quotes through
+    natural language requests like:
+    - "Increase the hours for login feature to 20"
+    - "Add a new deliverable for password reset"
+    - "Update the executive summary to mention mobile responsiveness"
+
+    Args:
+        project_id: The project UUID.
+        quote_id: The quote UUID.
+        request: Refinement request with natural language message.
+        current_user: The authenticated user.
+        db: Database session.
+
+    Returns:
+        RefineQuoteDataResponse: Updated quote with changes applied.
+    """
+    logger.info(
+        "Refining quote conversationally: project_id=%s, quote_id=%s, user=%s",
+        project_id,
+        quote_id,
+        current_user.email,
+    )
+
+    # Verify project access
+    await get_project_with_access(project_id, current_user, db)
+
+    # Get quote
+    quote = await get_quote_with_access_check(quote_id, current_user, db)
+
+    # Verify quote belongs to project
+    if quote.project_id != project_id:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND,
+            "QUOTE_NOT_FOUND",
+            "Quote not found in this project",
+        )
+
+    # Check if quote can be refined
+    if quote.status in [QuoteStatus.APPROVED, QuoteStatus.REJECTED]:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "QUOTE_NOT_REFINABLE",
+            f"Cannot refine quote with status '{quote.status.value}'",
+        )
+
+    # Process refinement request
+    try:
+        refinement_service = get_refinement_service()
+        updated_content, ai_message, changes = await refinement_service.refine_quote_conversational(
+            quote=quote,
+            user_message=request.message,
+        )
+    except Exception as e:
+        logger.error("Quote refinement failed: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "QUOTE_REFINEMENT_FAILED",
+                "message": f"Failed to refine quote: {str(e)}",
+            },
+        )
+
+    # Update quote in database
+    quote.content = updated_content
+
+    # Update extra_data to track refinement
+    existing_metadata = quote.extra_data or {}
+    refinement_history = existing_metadata.get("refinement_history", [])
+    refinement_history.append({
+        "message": request.message,
+        "ai_response": ai_message,
+        "changes": [
+            {
+                "section": change.section,
+                "change_type": change.change_type,
+                "description": change.description,
+            }
+            for change in changes
+        ],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    existing_metadata["refinement_history"] = refinement_history
+    existing_metadata["refinement_count"] = len(refinement_history)
+    quote.extra_data = existing_metadata
+
+    await db.commit()
+    await db.refresh(quote)
+
+    logger.info(
+        "Quote refined successfully: quote_id=%s, changes=%d",
+        quote.id,
+        len(changes),
+    )
+
+    return RefineQuoteDataResponse(
+        success=True,
+        data=RefineQuoteResponse(
+            updated_quote=QuoteResponse(
+                id=quote.id,
+                quote_number=f"QT-{str(quote.id)[:8].upper()}",
+                project_id=quote.project_id,
+                title=quote.title,
+                content=quote.content,
+                requirements=quote.requirements,
+                total_hours=quote.total_hours,
+                total_cost=quote.total_cost,
+                platform=quote.platform,
+                complexity=quote.complexity,
+                status=quote.status,
+                created_by=quote.created_by,
+                approved_by=quote.approved_by,
+                approved_at=quote.approved_at,
+                metadata=quote.extra_data,
+                created_at=quote.created_at,
+                updated_at=quote.updated_at,
+            ),
+            ai_message=ai_message,
+            changes_applied=changes,
         ),
     )
 

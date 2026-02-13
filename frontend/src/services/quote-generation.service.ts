@@ -1,0 +1,436 @@
+/**
+ * Quote Generation Service
+ * Handles quote generation with streaming progress, exports (PDF/DOCX), and project-scoped operations
+ */
+
+import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
+import { apiClient, getErrorMessage } from './api';
+import type {
+  Quote,
+  QuoteListItem,
+  GenerateQuoteRequest,
+  GenerateQuoteResponse,
+  GenerationProgress,
+  UpdateQuoteRequest,
+  ExportOptions,
+  ExportJob,
+  Platform,
+} from '../types/quote.types';
+
+// Streaming progress callback types
+export type StreamProgressCallback = (progress: GenerationProgress) => void;
+export type StreamCompleteCallback = (quote: Quote) => void;
+export type StreamErrorCallback = (error: string) => void;
+
+class QuoteGenerationService {
+  private abortController: AbortController | null = null;
+
+  /**
+   * Generate a new quote with streaming progress updates
+   * @param projectId - Project ID
+   * @param request - Generation request with requirements
+   * @param onProgress - Callback for progress updates
+   * @param onComplete - Callback when generation completes
+   * @param onError - Callback for errors
+   * @returns Function to cancel the generation
+   */
+  generateQuoteWithProgress(
+    projectId: string,
+    request: GenerateQuoteRequest,
+    onProgress: StreamProgressCallback,
+    onComplete: StreamCompleteCallback,
+    onError: StreamErrorCallback
+  ): () => void {
+    // Create abort controller for cancellation
+    this.abortController = new AbortController();
+
+    const generate = async () => {
+      try {
+        // Set initial progress
+        onProgress({
+          quote_id: '',
+          status: 'generating',
+          progress: {
+            current_step: 'generating_estimate',
+            steps_completed: 1,
+            total_steps: 3,
+            percentage: 33,
+            message: 'Generating quote with AI...',
+          },
+          started_at: new Date().toISOString(),
+        });
+
+        // The backend does synchronous generation and returns the full quote (content = string)
+        const response = await apiClient.post<{
+          success: boolean;
+          data: {
+            quote: ApiQuote;
+            generation_metadata: {
+              model_used: string;
+              tokens_used: number;
+              generation_cost: number;
+              rag_context_used: boolean;
+              generation_time_ms: number;
+            };
+          };
+        }>(
+          `/api/v1/projects/${projectId}/quotes`,
+          request,
+          { signal: this.abortController?.signal }
+        );
+
+        const rawQuote = response.data.data.quote;
+
+        // Update progress to complete
+        onProgress({
+          quote_id: rawQuote.id,
+          status: 'completed',
+          progress: {
+            current_step: 'formatting_output',
+            steps_completed: 3,
+            total_steps: 3,
+            percentage: 100,
+            message: 'Quote generated successfully!',
+          },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+
+        const quote = normalizeQuoteFromApi(rawQuote, { projectName: '' });
+        onComplete(quote);
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          onError('Generation cancelled');
+        } else {
+          onError(getErrorMessage(error));
+        }
+      }
+    };
+
+    generate();
+
+    // Return cancel function
+    return () => {
+      this.abortController?.abort();
+    };
+  }
+
+  /**
+   * Poll for generation progress until complete or failed
+   */
+  private async pollGenerationProgress(
+    projectId: string,
+    quoteId: string,
+    jobId: string,
+    onProgress: StreamProgressCallback,
+    onComplete: StreamCompleteCallback,
+    onError: StreamErrorCallback
+  ): Promise<void> {
+    const pollInterval = 1500; // 1.5 seconds
+    const maxAttempts = 80; // 2 minutes max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      if (this.abortController?.signal.aborted) {
+        return;
+      }
+
+      try {
+        const response = await apiClient.get<{ success: boolean; data: GenerationProgress }>(
+          `/api/v1/projects/${projectId}/quotes/${quoteId}/generation-status`,
+          { signal: this.abortController?.signal }
+        );
+
+        const progress = response.data.data;
+        onProgress(progress);
+
+        if (progress.status === 'completed') {
+          // Fetch the complete quote
+          const quote = await this.getQuote(projectId, quoteId);
+          onComplete(quote);
+          return;
+        }
+
+        if (progress.status === 'failed') {
+          onError(progress.error?.message || 'Quote generation failed');
+          return;
+        }
+
+        // Wait before next poll
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        attempts++;
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          return;
+        }
+        onError(getErrorMessage(error));
+        return;
+      }
+    }
+
+    onError('Quote generation timed out. Please try again.');
+  }
+
+  /**
+   * Generate quote (simple non-streaming version). Returns normalized quote in .quote.
+   */
+  async generateQuote(
+    projectId: string,
+    request: GenerateQuoteRequest
+  ): Promise<{ quote: Quote; generation_metadata?: { model_used?: string; tokens_used?: number; generation_cost?: number; rag_context_used?: boolean; generation_time_ms?: number } }> {
+    type GenMeta = { model_used?: string; tokens_used?: number; generation_cost?: number; rag_context_used?: boolean; generation_time_ms?: number };
+    const response = await apiClient.post<{
+      success: boolean;
+      data: { quote: ApiQuote; generation_metadata?: GenMeta };
+    }>(`/api/v1/projects/${projectId}/quotes`, request);
+    const raw = response.data.data.quote;
+    const quote = normalizeQuoteFromApi(raw, { projectName: '' });
+    return { quote, generation_metadata: response.data.data.generation_metadata };
+  }
+
+  /**
+   * Get a single quote by ID (backend: GET /quotes/{quote_id})
+   */
+  async getQuote(_projectId: string, quoteId: string): Promise<Quote> {
+    const response = await apiClient.get<{ success: boolean; data: ApiQuote }>(
+      `/api/v1/quotes/${quoteId}`
+    );
+    return normalizeQuoteFromApi(response.data.data);
+  }
+
+  /**
+   * List quotes for a project (backend returns data.quotes + data.pagination with has_next)
+   */
+  async listQuotes(
+    projectId: string,
+    options?: {
+      status?: string;
+      page?: number;
+      page_size?: number;
+    }
+  ): Promise<{ quotes: QuoteListItem[]; hasMore: boolean; cursor?: string }> {
+    const params = new URLSearchParams();
+    if (options?.status) params.append('status', options.status);
+    if (options?.page) params.append('page', String(options.page));
+    if (options?.page_size) params.append('page_size', String(options.page_size ?? 20));
+
+    const response = await apiClient.get<{
+      success: boolean;
+      data: {
+        quotes: QuoteListItem[];
+        pagination: { has_next: boolean; page: number; total_pages: number };
+      };
+    }>(`/api/v1/projects/${projectId}/quotes?${params.toString()}`);
+
+    const { quotes, pagination } = response.data.data;
+    return {
+      quotes,
+      hasMore: pagination.has_next,
+    };
+  }
+
+  /**
+   * Update a quote. Status-only updates use PUT /quotes/{id}/status.
+   */
+  async updateQuote(
+    _projectId: string,
+    quoteId: string,
+    updates: UpdateQuoteRequest
+  ): Promise<Quote> {
+    const keys = Object.keys(updates) as (keyof UpdateQuoteRequest)[];
+    const statusOnly =
+      keys.length === 1 && keys[0] === 'status' && updates.status != null;
+
+    if (statusOnly) {
+      const response = await apiClient.put<{ success: boolean; data: ApiQuote }>(
+        `/api/v1/quotes/${quoteId}/status`,
+        { status: updates.status }
+      );
+      return normalizeQuoteFromApi(response.data.data);
+    }
+    const response = await apiClient.put<{ success: boolean; data: ApiQuote }>(
+      `/api/v1/quotes/${quoteId}`,
+      updates
+    );
+    return normalizeQuoteFromApi(response.data.data);
+  }
+
+  /**
+   * Delete a quote (backend: DELETE /quotes/{quote_id})
+   */
+  async deleteQuote(_projectId: string, quoteId: string): Promise<void> {
+    await apiClient.delete(`/api/v1/quotes/${quoteId}`);
+  }
+
+  /**
+   * Create a new version of a quote
+   */
+  async createQuoteVersion(
+    projectId: string,
+    quoteId: string,
+    versionNote?: string
+  ): Promise<Quote> {
+    const response = await apiClient.post<{ success: boolean; data: Quote }>(
+      `/api/v1/projects/${projectId}/quotes/${quoteId}/versions`,
+      { version_note: versionNote }
+    );
+    return response.data.data;
+  }
+
+  /**
+   * Export quote to PDF
+   */
+  async exportToPdf(
+    projectId: string,
+    quoteId: string,
+    options?: Partial<ExportOptions>
+  ): Promise<ExportJob> {
+    const defaultOptions: ExportOptions = {
+      template: 'professional',
+      include_sections: {
+        executive_summary: true,
+        scope: true,
+        deliverables: true,
+        timeline: true,
+        assumptions: true,
+        risks: true,
+        terms_and_conditions: true,
+      },
+    };
+
+    const response = await apiClient.post<{ success: boolean; data: ExportJob }>(
+      `/api/v1/projects/${projectId}/quotes/${quoteId}/export/pdf`,
+      { ...defaultOptions, ...options }
+    );
+
+    return response.data.data;
+  }
+
+  /**
+   * Export quote to DOCX
+   */
+  async exportToDocx(
+    projectId: string,
+    quoteId: string,
+    options?: Partial<ExportOptions>
+  ): Promise<ExportJob> {
+    const defaultOptions: ExportOptions = {
+      template: 'editable',
+      include_sections: {
+        executive_summary: true,
+        scope: true,
+        deliverables: true,
+        timeline: true,
+        assumptions: true,
+        risks: true,
+      },
+    };
+
+    const response = await apiClient.post<{ success: boolean; data: ExportJob }>(
+      `/api/v1/projects/${projectId}/quotes/${quoteId}/export/docx`,
+      { ...defaultOptions, ...options }
+    );
+
+    return response.data.data;
+  }
+
+  /**
+   * Get export job status
+   */
+  async getExportStatus(exportJobId: string): Promise<ExportJob> {
+    const response = await apiClient.get<{ success: boolean; data: ExportJob }>(
+      `/api/v1/exports/${exportJobId}/status`
+    );
+    return response.data.data;
+  }
+
+  /**
+   * Poll export status and return download URL when ready
+   */
+  async waitForExport(
+    exportJobId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<string> {
+    const pollInterval = 1000; // 1 second
+    const maxAttempts = 60; // 1 minute max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      const status = await this.getExportStatus(exportJobId);
+
+      if (onProgress && status.progress_percentage !== undefined) {
+        onProgress(status.progress_percentage);
+      }
+
+      if (status.status === 'completed' && status.download_url) {
+        return status.download_url;
+      }
+
+      if (status.status === 'failed') {
+        throw new Error(status.error?.message || 'Export failed');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      attempts++;
+    }
+
+    throw new Error('Export timed out');
+  }
+
+  /**
+   * Download export file
+   */
+  async downloadExport(exportJobId: string): Promise<Blob> {
+    const response = await apiClient.get(`/api/v1/exports/${exportJobId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  /**
+   * Trigger file download in browser
+   */
+  triggerDownload(blob: Blob, filename: string): void {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Export quote directly to blob (for immediate download)
+   * Handles both DOCX and PDF formats
+   */
+  async exportQuote(
+    projectId: string,
+    quoteId: string,
+    format: 'docx' | 'pdf'
+  ): Promise<Blob> {
+    // Backend uses POST for export endpoints
+    const response = await apiClient.post(
+      `/api/v1/projects/${projectId}/quotes/${quoteId}/export/${format}`,
+      {},
+      {
+        responseType: 'blob',
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * Get supported platforms
+   */
+  getSupportedPlatforms(): Array<{ value: Platform; label: string }> {
+    return [
+      { value: 'wordpress', label: 'WordPress' },
+    ];
+  }
+}
+
+// Export as quoteService for backward compatibility
+export const quoteService = new QuoteGenerationService();
+export default quoteService;

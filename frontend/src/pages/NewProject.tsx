@@ -1,439 +1,427 @@
 /**
  * NewProject Page
- * Form to create a new project with a two-column layout:
- * - Left sidebar: Title, description, and steps
- * - Right panel: Form fields (Name, Description, Platform, Files)
- *
- * After submission, navigates to chat where AI auto-initiates analysis
+ * 
+ * Two-column layout matching Stitch reference design.
+ * Uses centralized CSS classes from styles/pages.css
  */
 
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   AlertCircle,
-  ChevronDown,
-  FileText,
-  Upload,
+  CloudUpload,
   X,
-  File,
-  Loader2,
+  FileIcon,
   Users,
-} from 'lucide-react';
-import { projectsService } from '@/services';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Dropdown } from '@/components/ui/Dropdown';
-import { cn } from '@/lib/utils';
-import type { ProjectCreate } from '@/types';
-import '@/styles/projects.css';
+  Globe,
+  Sparkles,
+} from 'lucide-react'
+import { projectsService } from '@/services'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
+import { EstimationGenerationUI } from '@/components/estimate'
+import type { ProjectCreate, Project, Quote } from '@/types'
 
 // Platform type
-type Platform = 'wordpress';
+type Platform = 'wordpress'
 
-// Platform options - only WordPress is supported
-const PLATFORMS: Array<{ value: Platform; label: string; description: string }> = [
-  { value: 'wordpress', label: 'WordPress', description: 'Content management and blogging platform' },
-];
+// Platform options
+const PLATFORMS = [
+  { value: 'wordpress', label: 'WordPress' },
+]
+
+// Client type options
+const CLIENT_TYPES = [
+  { value: 'new', label: 'New Client' },
+  { value: 'existing', label: 'Existing Client' },
+]
 
 interface FormData {
-  name: string;
-  description: string;
-  platform: Platform;
-  files: File[];
+  name: string
+  description: string
+  platform: Platform
+  clientType: 'new' | 'existing'
+  files: File[]
 }
 
 interface FormErrors {
-  name?: string;
-  description?: string;
-  platform?: string;
+  name?: string
+  description?: string
+  platform?: string
 }
 
-export function NewProjectPage() {
-  const navigate = useNavigate();
+// Steps data
+const STEPS = [
+  {
+    title: 'Project Details',
+    desc: 'Tell us about your project goals and scope.',
+  },
+  {
+    title: 'Supporting Assets',
+    desc: 'Upload any reference files or brand guidelines.',
+  },
+  {
+    title: 'AI Generation',
+    desc: "We'll craft a comprehensive estimate automatically.",
+  },
+]
 
-  // Form state - exactly 4 fields as specified
+export function NewProjectPage() {
+  const navigate = useNavigate()
+
+  // Form state
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
     platform: 'wordpress',
+    clientType: 'new',
     files: [],
-  });
+  })
 
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isPlatformOpen, setIsPlatformOpen] = useState(false);
-  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
-
-  // Client type selection (cosmetic - for reference only)
-  const [selectedClientType, setSelectedClientType] = useState<'new' | 'existing'>('new');
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  
+  // Estimation generation state
+  const [createdProject, setCreatedProject] = useState<Project | null>(null)
+  const [showEstimationUI, setShowEstimationUI] = useState(false)
 
   // Validation
   const validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {};
+    const newErrors: FormErrors = {}
 
     if (!formData.name.trim()) {
-      newErrors.name = 'Project name is required';
+      newErrors.name = 'Project name is required'
     } else if (formData.name.trim().length < 2) {
-      newErrors.name = 'Project name must be at least 2 characters';
+      newErrors.name = 'Project name must be at least 2 characters'
     }
 
     if (!formData.description.trim()) {
-      newErrors.description = 'Project description is required';
+      newErrors.description = 'Project description is required'
     } else if (formData.description.trim().length < 10) {
-      newErrors.description = 'Project description must be at least 10 characters';
+      newErrors.description = 'Description must be at least 10 characters'
     }
 
     if (!formData.platform) {
-      newErrors.platform = 'Target platform is required';
+      newErrors.platform = 'Target platform is required'
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData]);
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }, [formData])
 
   // Handle input changes
   const handleChange = useCallback(
-    (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
-      // Clear error when user starts typing
+    (field: keyof FormData) =>
+      (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData((prev) => ({ ...prev, [field]: e.target.value }))
+        if (errors[field as keyof FormErrors]) {
+          setErrors((prev) => ({ ...prev, [field]: undefined }))
+        }
+      },
+    [errors]
+  )
+
+  // Handle select changes
+  const handleSelectChange = useCallback(
+    (field: keyof FormData) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }))
       if (errors[field as keyof FormErrors]) {
-        setErrors((prev) => ({ ...prev, [field]: undefined }));
+        setErrors((prev) => ({ ...prev, [field]: undefined }))
       }
     },
     [errors]
-  );
-
-  // Handle platform selection
-  const handlePlatformSelect = useCallback((platform: Platform) => {
-    setFormData((prev) => ({ ...prev, platform }));
-    setIsPlatformOpen(false);
-    if (errors.platform) {
-      setErrors((prev) => ({ ...prev, platform: undefined }));
-    }
-  }, [errors.platform]);
+  )
 
   // Handle file selection
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      setFormData((prev) => ({
-        ...prev,
-        files: [...prev.files, ...selectedFiles],
-      }));
-    }
-    // Reset input
-    e.target.value = '';
-  }, []);
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(e.target.files || [])
+      if (selectedFiles.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          files: [...prev.files, ...selectedFiles],
+        }))
+      }
+      e.target.value = ''
+    },
+    []
+  )
 
   // Handle file removal
   const handleRemoveFile = useCallback((index: number) => {
     setFormData((prev) => ({
       ...prev,
       files: prev.files.filter((_, i) => i !== index),
-    }));
-  }, []);
+    }))
+  }, [])
 
   // Handle form submission
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
-      e.preventDefault();
+      e.preventDefault()
 
-      if (!validateForm()) return;
+      if (!validateForm()) return
 
       try {
-        setIsSubmitting(true);
-        setSubmitError(null);
+        setIsSubmitting(true)
+        setSubmitError(null)
 
-        // Create project with all 4 fields
         const projectData: ProjectCreate = {
           name: formData.name.trim(),
           description: formData.description.trim(),
           platform: formData.platform,
-        };
-
-        const project = await projectsService.create(projectData);
-
-        // Upload files if any (optional field)
-        if (formData.files.length > 0) {
-          setIsUploadingFiles(true);
-          // Files will be uploaded separately via the file upload service
-          // For now, store them in localStorage to be processed in the chat
-          localStorage.setItem(
-            `project_${project.id}_pending_files`,
-            JSON.stringify(formData.files.map(f => f.name))
-          );
         }
 
-        // Navigate directly to chat tab - AI will auto-initiate
-        // The project details are automatically passed to chat context
-        navigate(`/projects/${project.id}?tab=chat`, { replace: true });
+        const project = await projectsService.create(projectData)
+
+        // Store file references for later upload
+        if (formData.files.length > 0) {
+          localStorage.setItem(
+            `project_${project.id}_pending_files`,
+            JSON.stringify(formData.files.map((f) => f.name))
+          )
+        }
+
+        // Show estimation generation UI
+        setCreatedProject(project)
+        setShowEstimationUI(true)
       } catch (err) {
-        setSubmitError('Failed to create project. Please try again.');
-        console.error('Failed to create project:', err);
+        setSubmitError('Failed to create project. Please try again.')
+        console.error('Failed to create project:', err)
       } finally {
-        setIsSubmitting(false);
-        setIsUploadingFiles(false);
+        setIsSubmitting(false)
       }
     },
-    [formData, validateForm, navigate]
-  );
+    [formData, validateForm]
+  )
 
-  // Get selected platform
-  const selectedPlatform = PLATFORMS.find((p) => p.value === formData.platform);
+  // Handle estimation complete
+  const handleEstimationComplete = useCallback(
+    (quote: Quote) => {
+      if (createdProject) {
+        navigate(`/projects/${createdProject.id}`, { replace: true })
+      }
+    },
+    [createdProject, navigate]
+  )
+
+  // Handle estimation cancel
+  const handleEstimationCancel = useCallback(() => {
+    if (createdProject) {
+      // Navigate to project without estimate
+      navigate(`/projects/${createdProject.id}`, { replace: true })
+    } else {
+      setShowEstimationUI(false)
+    }
+  }, [createdProject, navigate])
+
+  // Show estimation generation UI when project is created
+  if (showEstimationUI && createdProject) {
+    return (
+      <EstimationGenerationUI
+        project={createdProject}
+        onComplete={handleEstimationComplete}
+        onCancel={handleEstimationCancel}
+      />
+    )
+  }
 
   return (
     <div className="new-project-page">
       {/* Back Button */}
-      <button
-        onClick={() => navigate('/projects')}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-6"
+      <a
+        href="#"
+        onClick={(e) => {
+          e.preventDefault()
+          navigate('/projects')
+        }}
+        className="new-project-back"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft style={{ width: 16, height: 16 }} />
         Back to Projects
-      </button>
+      </a>
 
-      {/* Two-Column Layout */}
+      {/* Two Column Layout */}
       <div className="new-project-layout">
         {/* Left Sidebar */}
         <aside className="new-project-sidebar">
-          <h1 className="text-2xl font-bold text-gray-900">Create New Project</h1>
-          <p className="text-gray-500 mt-3 leading-relaxed">
-            Enter project details to start generating your estimate.
-          </p>
+          {/* Header */}
+          <div className="new-project-header">
+            <h1 className="new-project-title">Create New Project</h1>
+            <p className="new-project-subtitle">
+              Enter project details to start generating your estimate. Our AI will handle the rest.
+            </p>
+          </div>
 
-          <div className="sidebar-divider" />
+          {/* AI Tip */}
+          <div className="new-project-ai-tip">
+            <div className="new-project-ai-tip-icon">
+              <Sparkles style={{ width: 14, height: 14 }} />
+            </div>
+            <p className="new-project-ai-tip-text">
+              <strong>Pro tip:</strong> Detailed descriptions improve estimate accuracy by <span className="new-project-ai-tip-highlight">31%</span>
+            </p>
+          </div>
 
-          <div className="sidebar-steps">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">What happens next:</h3>
-            <ol className="space-y-4">
-              <li className="flex items-start gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">1</span>
-                <span className="text-sm text-gray-600">Fill in your project details</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">2</span>
-                <span className="text-sm text-gray-600">Upload reference files (optional)</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-semibold shrink-0">3</span>
-                <span className="text-sm text-gray-600">AI generates your estimate automatically</span>
-              </li>
-            </ol>
+          {/* Stepper */}
+          <div className="new-project-stepper">
+            <span className="new-project-stepper-label">What happens next</span>
+            {STEPS.map((step, index) => (
+              <div key={index} className="new-project-step">
+                <div className="new-project-step-number">{index + 1}</div>
+                <div className="new-project-step-content">
+                  <p className="new-project-step-title">{step.title}</p>
+                  <p className="new-project-step-desc">{step.desc}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </aside>
 
-        {/* Right Form Panel */}
-        <main className="new-project-form-panel">
+        {/* Right Form Card */}
+        <div className="new-project-form-card">
           {/* Form Header */}
-          <div className="form-header">
-            <h2 className="text-lg font-semibold text-gray-900">Project Details</h2>
-            <p className="text-sm text-gray-500 mt-1">Fill in the required information below</p>
+          <div className="new-project-form-header">
+            <h2 className="new-project-form-title">Project Details</h2>
+            <p className="new-project-form-subtitle">
+              Fill in the required information below to get started.
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="form-fields">
-            {/* Submit Error */}
-            {submitError && (
-              <div className="flex items-center gap-3 p-4 bg-error-50 border border-error-200 rounded-lg text-error-700">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                <span>{submitError}</span>
-              </div>
-            )}
+          {/* Error Alert */}
+          {submitError && (
+            <div className="new-project-error">
+              <AlertCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+              <span>{submitError}</span>
+            </div>
+          )}
 
-            {/* Field 1: Project Name (required) */}
-            <div className="form-field">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="new-project-form">
+            {/* Project Name */}
+            <div className="new-project-form-group">
+              <Label className="new-project-form-label new-project-form-label-required">
+                Project Name
+              </Label>
               <Input
-                label="Project Name *"
                 value={formData.name}
                 onChange={handleChange('name')}
-                placeholder="Enter project name"
+                placeholder="Enter your project name"
                 error={errors.name}
                 disabled={isSubmitting}
               />
             </div>
 
-            {/* Field 2: Project Description (required) */}
-            <div className="form-field">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Project Description *
-              </label>
+            {/* Project Description */}
+            <div className="new-project-form-group">
+              <div className="new-project-form-label-row">
+                <Label className="new-project-form-label new-project-form-label-required">
+                  Project Description
+                </Label>
+                <span className="new-project-char-count">
+                  {formData.description.length}/2000
+                </span>
+              </div>
               <textarea
+                className={`input ${errors.description ? 'input-error' : ''}`}
                 value={formData.description}
                 onChange={handleChange('description')}
                 placeholder="Describe the project requirements, goals, and any important details..."
-                rows={5}
-                className={cn(
-                  'w-full px-4 py-3 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all disabled:bg-gray-50 disabled:opacity-50',
-                  errors.description ? 'border-error-300' : 'border-gray-300'
-                )}
+                rows={3}
+                maxLength={2000}
                 disabled={isSubmitting}
+                style={{ resize: 'vertical', minHeight: '80px' }}
               />
               {errors.description && (
-                <p className="mt-1.5 text-sm text-error-600">{errors.description}</p>
+                <span className="new-project-form-error">{errors.description}</span>
               )}
-              <p className="mt-2 text-xs text-gray-500">
-                This will be used to generate your estimate.
+              <p className="new-project-form-hint">
+                This will be used to generate your AI-powered estimate.
               </p>
             </div>
 
-            {/* Field 3: Client Type (cosmetic) */}
-            <div className="form-field">
-              <Dropdown
-                label="Client Type"
-                value={selectedClientType}
-                options={[
-                  { value: 'new', label: 'New Client' },
-                  { value: 'existing', label: 'Existing Client' },
-                ]}
-                onChange={(value) => setSelectedClientType(value as 'new' | 'existing')}
-                placeholder="Select client type"
-                disabled={isSubmitting}
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                For reference only - does not affect project creation.
-              </p>
-            </div>
-
-            {/* Field 5: Target Platform (required) */}
-            <div className="form-field">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Target Platform *
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsPlatformOpen(!isPlatformOpen)}
-                  className={cn(
-                    'w-full flex items-center justify-between px-4 py-3 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all duration-200',
-                    errors.platform ? 'border-error-300' : 'border-gray-300 hover:border-gray-400',
-                    isSubmitting && 'opacity-50 cursor-not-allowed'
-                  )}
+            {/* Client Type and Platform Row */}
+            <div className="new-project-form-row">
+              <div className="new-project-form-group">
+                <Label className="new-project-form-label">Client Type</Label>
+                <NativeSelect
+                  value={formData.clientType}
+                  onChange={handleSelectChange('clientType')}
+                  options={CLIENT_TYPES}
                   disabled={isSubmitting}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100">
-                      <FileText className="h-4 w-4 text-gray-500" />
-                    </div>
-                    <div className="text-left">
-                      <span className="font-medium text-gray-900">
-                        {selectedPlatform?.label}
-                      </span>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {selectedPlatform?.description}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      'h-5 w-5 text-gray-400 transition-transform duration-200',
-                      isPlatformOpen && 'rotate-180'
-                    )}
-                  />
-                </button>
-
-                {/* Platform Dropdown */}
-                {isPlatformOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setIsPlatformOpen(false)}
-                    />
-                    <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
-                      {PLATFORMS.map((p, index) => (
-                        <button
-                          key={p.value}
-                          type="button"
-                          onClick={() => handlePlatformSelect(p.value)}
-                          className={cn(
-                            'w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3',
-                            p.value === formData.platform && 'bg-primary-50',
-                            index !== PLATFORMS.length - 1 && 'border-b border-gray-100'
-                          )}
-                        >
-                          <div className={cn(
-                            'flex h-9 w-9 items-center justify-center rounded-lg',
-                            p.value === formData.platform ? 'bg-primary-100' : 'bg-gray-100'
-                          )}>
-                            <FileText className={cn(
-                              'h-4 w-4',
-                              p.value === formData.platform ? 'text-primary-600' : 'text-gray-500'
-                            )} />
-                          </div>
-                          <div>
-                            <span className={cn(
-                              'font-medium',
-                              p.value === formData.platform ? 'text-primary-700' : 'text-gray-900'
-                            )}>{p.label}</span>
-                            <p className="text-xs text-gray-500 mt-0.5">{p.description}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
+                  icon={<Users style={{ width: 16, height: 16, color: 'var(--color-gray-400)' }} />}
+                />
               </div>
-              {errors.platform && (
-                <p className="mt-1.5 text-sm text-error-600">{errors.platform}</p>
-              )}
+              <div className="new-project-form-group">
+                <Label className="new-project-form-label new-project-form-label-required">
+                  Target Platform
+                </Label>
+                <NativeSelect
+                  value={formData.platform}
+                  onChange={handleSelectChange('platform')}
+                  options={PLATFORMS}
+                  disabled={isSubmitting}
+                  error={errors.platform}
+                  icon={<Globe style={{ width: 16, height: 16, color: 'var(--color-primary-500)' }} />}
+                />
+              </div>
             </div>
 
-            {/* Field 6: Files (optional) */}
-            <div className="form-field">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Supporting Files <span className="text-gray-400 font-normal">(Optional)</span>
-              </label>
+            {/* Supporting Files */}
+            <div className="new-project-form-group">
+              <Label className="new-project-form-label">
+                Supporting Files{' '}
+                <span className="new-project-form-optional">(Optional)</span>
+              </Label>
 
-              {/* File Drop Zone */}
-              <div className="relative">
+              {/* File Upload Zone */}
+              <div className="new-project-upload-wrapper">
                 <input
                   type="file"
                   multiple
                   onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  className="new-project-upload-input"
                   disabled={isSubmitting}
                   accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
                 />
-                <div className={cn(
-                  'border-2 border-dashed rounded-lg p-6 text-center transition-colors',
-                  isSubmitting ? 'border-gray-200 bg-gray-50' : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50/30'
-                )}>
-                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium text-primary-600">Click to upload</span> or drag and drop
+                <div className="new-project-upload">
+                  <div className="new-project-upload-icon">
+                    <CloudUpload style={{ width: 20, height: 20 }} />
+                  </div>
+                  <p className="new-project-upload-text">
+                    <span>Click to upload</span> or drag and drop
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    PDF, DOC, PNG, JPG, XLSX (Max 10MB each)
+                  <p className="new-project-upload-hint">
+                    PDF, DOC, PNG, JPG (MAX 10MB EACH)
                   </p>
                 </div>
               </div>
 
               {/* File List */}
               {formData.files.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="new-project-file-list">
                   {formData.files.map((file, index) => (
-                    <div
-                      key={`${file.name}-${index}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <File className="h-5 w-5 text-gray-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-700 truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </p>
+                    <div key={`${file.name}-${index}`} className="new-project-file-item">
+                      <div className="new-project-file-info">
+                        <div className="new-project-file-icon">
+                          <FileIcon style={{ width: 16, height: 16, color: 'var(--color-gray-500)' }} />
+                        </div>
+                        <div>
+                          <p className="new-project-file-name">{file.name}</p>
+                          <p className="new-project-file-size">{(file.size / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveFile(index)}
-                        className="p-1 text-gray-400 hover:text-error-600 transition-colors"
+                        className="new-project-file-remove"
                         disabled={isSubmitting}
                       >
-                        <X className="h-4 w-4" />
+                        <X style={{ width: 14, height: 14 }} />
                       </button>
                     </div>
                   ))}
@@ -441,34 +429,25 @@ export function NewProjectPage() {
               )}
             </div>
 
-            {/* Actions */}
-            <div className="form-actions">
+            {/* Form Actions */}
+            <div className="new-project-actions">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 onClick={() => navigate('/projects')}
                 disabled={isSubmitting}
               >
                 Cancel
               </Button>
-              <Button type="submit" isLoading={isSubmitting || isUploadingFiles}>
-                {isUploadingFiles ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Uploading...
-                  </>
-                ) : isSubmitting ? (
-                  'Creating...'
-                ) : (
-                  'Create Project'
-                )}
+              <Button type="submit" isLoading={isSubmitting}>
+                Create Project
               </Button>
             </div>
           </form>
-        </main>
+        </div>
       </div>
     </div>
-  );
+  )
 }
 
-export default NewProjectPage;
+export default NewProjectPage

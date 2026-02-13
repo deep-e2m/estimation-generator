@@ -1,6 +1,6 @@
 /**
  * Advanced Editor Styles
- * CSS for the Lexical-based editor
+ * CSS for the Tiptap-based editor
  */
 
 /* Editor container */
@@ -223,14 +223,6 @@
 /* Selection highlight */
 ::selection {
   background-color: #bfdbfe;
-}
-
-/* Placeholder styling */
-.editor-content-editable[data-lexical-editor="true"]:empty::before {
-  content: attr(data-placeholder);
-  color: #9ca3af;
-  pointer-events: none;
-  position: absolute;
 }
 
 /* Focus styles */

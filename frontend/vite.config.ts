@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 // https://vite.dev/config/
@@ -13,7 +12,7 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_URL || 'http://localhost:8000'
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
@@ -51,36 +50,12 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom', 'react-router-dom'],
-            ui: ['@radix-ui/react-slot', 'lucide-react', 'clsx', 'tailwind-merge'],
+            ui: ['@radix-ui/react-slot', 'lucide-react', 'clsx'],
           },
         },
       },
     },
     // Environment variable prefix
     envPrefix: 'VITE_',
-    // Optimize deps for Lexical
-    optimizeDeps: {
-      include: [
-        'lexical',
-        '@lexical/react/LexicalComposer',
-        '@lexical/react/LexicalRichTextPlugin',
-        '@lexical/react/LexicalContentEditable',
-        '@lexical/react/LexicalHistoryPlugin',
-        '@lexical/react/LexicalAutoFocusPlugin',
-        '@lexical/react/LexicalOnChangePlugin',
-        '@lexical/react/LexicalErrorBoundary',
-        '@lexical/react/LexicalListPlugin',
-        '@lexical/react/LexicalLinkPlugin',
-        '@lexical/react/LexicalMarkdownShortcutPlugin',
-        '@lexical/rich-text',
-        '@lexical/list',
-        '@lexical/code',
-        '@lexical/link',
-        '@lexical/table',
-        '@lexical/markdown',
-        '@lexical/utils',
-        '@lexical/html',
-      ],
-    },
   }
 })

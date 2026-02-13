@@ -2,284 +2,89 @@
  * ProjectDetail Page
  * Display project information with estimate generation
  *
- * STRICT WORKFLOW:
- * - Project details auto-passed to chat context (no re-entry)
- * - AI auto-initiates estimate generation (no greetings)
- * - Single estimate per project (no regeneration)
- * - Hours-only estimates (NO pricing/cost)
- * - Only "Edit in Editor" and "Approve" actions
+ * FIXED LAYOUT:
+ * - Compact header bar with back, project name, badge, search, edit
+ * - 3 stat cards: Total Hours, Project Status, Complexity
+ * - Uses EstimateChat component for actual AI-powered estimation
+ * - Handles ?tab=chat query param for auto-generation flow
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
-  FolderOpen,
-  Calculator,
-  Settings,
   ArrowLeft,
   Loader2,
   AlertCircle,
   Edit2,
-  MoreVertical,
-  Archive,
-  Trash2,
-  CheckCircle,
+  Clock,
+  FileText,
+  Zap,
+  Calendar,
+  DollarSign,
+  ListChecks,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { projectsService, quotesService } from '@/services';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { EstimateChat } from '@/components/estimate';
-import type { Project, QuoteSummary, ProjectStatus } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { EstimateChat } from '@/components/estimate/EstimateChat';
+import type { Project, ProjectStatus } from '@/types';
 import type { Quote } from '@/types/quote.types';
-import '@/styles/projects.css';
-
-// Tab types - Only 2 tabs now: Estimate and Settings
-type TabId = 'estimate' | 'settings';
-
-const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'estimate', label: 'Estimate', icon: Calculator },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
 
 // Status badge variants
-function getStatusBadgeVariant(status: ProjectStatus): 'default' | 'success' | 'secondary' {
-  const variants: Record<ProjectStatus, 'default' | 'success' | 'secondary'> = {
-    active: 'default',
+function getStatusBadgeVariant(status: ProjectStatus): 'active' | 'success' | 'secondary' {
+  const variants: Record<ProjectStatus, 'active' | 'success' | 'secondary'> = {
+    active: 'active',
     completed: 'success',
     archived: 'secondary',
   };
   return variants[status] || 'secondary';
 }
 
-/**
- * Project Header Component
- */
-interface ProjectHeaderProps {
-  project: Project;
-  onEdit: () => void;
+// Get complexity from requirements count
+function getComplexity(count: number): { label: string; level: 'Low' | 'Medium' | 'High' } {
+  if (count <= 5) return { label: 'Low', level: 'Low' };
+  if (count <= 15) return { label: 'Medium', level: 'Medium' };
+  return { label: 'High', level: 'High' };
 }
 
-function ProjectHeader({ project, onEdit }: ProjectHeaderProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+/**
+ * Stat Card Component
+ */
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  icon: React.ReactNode;
+  iconClass: string;
+  onClick?: () => void;
+}
 
+function StatCard({ label, value, subtext, icon, iconClass, onClick }: StatCardProps) {
   return (
-    <div className="project-detail-header">
-      <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-100 shrink-0">
-          <FolderOpen className="h-7 w-7 text-primary-600" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900 truncate">
-              {project.name}
-            </h1>
-            <Badge variant={getStatusBadgeVariant(project.status)} className="capitalize">
-              {project.status}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-            {project.platform && (
-              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
-                {project.platform}
-              </span>
-            )}
-            <span>Created {formatDate(project.created_at)}</span>
-          </div>
-          {project.description && (
-            <p className="text-gray-600 mt-2 line-clamp-2">
-              {project.description}
-            </p>
-          )}
-        </div>
+    <motion.div
+      className={`project-stat-card ${onClick ? 'clickable' : ''}`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      onClick={onClick}
+    >
+      <div className="project-stat-content">
+        <span className="project-stat-label">
+          {label}
+        </span>
+        <span className={`project-stat-value ${typeof value === 'string' && value.length > 5 ? 'status' : ''}`}>
+          {value}
+        </span>
+        {subtext && (
+          <span className="project-stat-subtext">{subtext}</span>
+        )}
       </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onEdit}
-          leftIcon={<Edit2 className="h-4 w-4" />}
-        >
-          Edit
-        </Button>
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-          {menuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setMenuOpen(false)}
-              />
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                  <CheckCircle className="h-4 w-4" />
-                  Mark as Completed
-                </button>
-                <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                  <Archive className="h-4 w-4" />
-                  Archive Project
-                </button>
-                <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-error-600 hover:bg-error-50 transition-colors">
-                  <Trash2 className="h-4 w-4" />
-                  Delete Project
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+      <div className={`project-stat-icon ${iconClass}`}>
+        {icon}
       </div>
-    </div>
-  );
-}
-
-/**
- * Tab Navigation Component
- */
-interface TabNavigationProps {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
-  hasEstimate: boolean;
-}
-
-function TabNavigation({ activeTab, onTabChange, hasEstimate }: TabNavigationProps) {
-  return (
-    <div className="project-tabs">
-      {TABS.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          onClick={() => onTabChange(id)}
-          className={cn(
-            'project-tab',
-            activeTab === id && 'project-tab-active'
-          )}
-        >
-          <Icon className="h-4 w-4" />
-          <span>{label}</span>
-          {id === 'estimate' && hasEstimate && (
-            <span className="ml-2 flex h-2 w-2 rounded-full bg-success-500" />
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Estimate Tab Content - Uses EstimateChat component
- */
-interface EstimateTabProps {
-  project: Project;
-  existingEstimate: Quote | null;
-  onEstimateGenerated: (quote: Quote) => void;
-}
-
-function EstimateTab({ project, existingEstimate, onEstimateGenerated }: EstimateTabProps) {
-  return (
-    <div className="project-estimate-container h-[calc(100vh-280px)] min-h-[500px]">
-      <EstimateChat
-        project={project}
-        existingEstimate={existingEstimate}
-        onEstimateGenerated={onEstimateGenerated}
-      />
-    </div>
-  );
-}
-
-/**
- * Settings Tab Content
- */
-interface SettingsTabProps {
-  project: Project;
-  onUpdate: (data: Partial<Project>) => void;
-}
-
-function SettingsTab({ project, onUpdate }: SettingsTabProps) {
-  return (
-    <div className="project-settings-container">
-      <Card>
-        <CardHeader>
-          <CardTitle>Project Settings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {/* Project Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Project Name</label>
-                <p className="mt-1 text-gray-900">{project.name}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Status</label>
-                <p className="mt-1">
-                  <Badge variant={getStatusBadgeVariant(project.status)} className="capitalize">
-                    {project.status}
-                  </Badge>
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Platform</label>
-                <p className="mt-1 text-gray-900">{project.platform || 'Not specified'}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Created</label>
-                <p className="mt-1 text-gray-900">{formatDate(project.created_at)}</p>
-              </div>
-            </div>
-
-            {/* Description */}
-            {project.description && (
-              <div className="pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Description</h3>
-                <p className="text-gray-600">{project.description}</p>
-              </div>
-            )}
-
-            {/* Owner Info */}
-            <div className="pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Project Owner</h3>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-medium">
-                  {project.owner.full_name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{project.owner.full_name}</p>
-                  <p className="text-sm text-gray-500">{project.owner.email}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/**
- * Loading Skeleton
- */
-function LoadingSkeleton() {
-  return (
-    <div className="animate-pulse">
-      <div className="flex items-start gap-4 mb-6">
-        <div className="h-14 w-14 bg-gray-200 rounded-xl" />
-        <div className="flex-1">
-          <div className="h-8 w-64 bg-gray-200 rounded mb-2" />
-          <div className="h-4 w-48 bg-gray-100 rounded" />
-        </div>
-      </div>
-      <div className="h-12 w-96 bg-gray-100 rounded-lg mb-6" />
-      <div className="h-96 bg-gray-50 rounded-lg" />
-    </div>
+    </motion.div>
   );
 }
 
@@ -289,18 +94,17 @@ function LoadingSkeleton() {
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+
+  // Check if we should auto-start chat/estimation (from NewProject redirect)
+  const shouldAutoStartChat = searchParams.get('tab') === 'chat';
 
   // State
   const [project, setProject] = useState<Project | null>(null);
-  const [existingEstimate, setExistingEstimate] = useState<Quote | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEstimateLoading, setIsEstimateLoading] = useState(true);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Get active tab from URL - default to 'estimate' (previously 'chat')
-  const urlTab = searchParams.get('tab');
-  const activeTab: TabId = (urlTab === 'settings' ? 'settings' : 'estimate');
 
   // Load project data
   useEffect(() => {
@@ -323,59 +127,56 @@ export function ProjectDetailPage() {
     loadProject();
   }, [id]);
 
-  // Load existing estimate for the project (enforces single estimate rule)
+  // Load existing quote for the project
   useEffect(() => {
     if (!id) return;
 
-    const loadExistingEstimate = async () => {
+    const loadQuote = async () => {
       try {
-        setIsEstimateLoading(true);
+        setIsQuoteLoading(true);
         const response = await quotesService.listByProject(id);
         const quotes = response?.data || [];
 
-        // Get the first (and should be only) estimate
         if (quotes.length > 0) {
-          // Fetch full quote details
           const fullQuote = await quotesService.get(quotes[0].id);
-          setExistingEstimate(fullQuote as unknown as Quote);
+          setQuote(fullQuote as unknown as Quote);
         }
       } catch (err) {
-        console.error('Failed to load estimate:', err);
+        console.error('Failed to load quote:', err);
       } finally {
-        setIsEstimateLoading(false);
+        setIsQuoteLoading(false);
       }
     };
 
-    loadExistingEstimate();
+    loadQuote();
   }, [id]);
 
-  // Handlers
-  const handleTabChange = useCallback(
-    (tab: TabId) => {
-      setSearchParams({ tab });
-    },
-    [setSearchParams]
-  );
+  // Handle estimate generated callback
+  const handleEstimateGenerated = useCallback((newQuote: Quote) => {
+    setQuote(newQuote);
+    // Remove the tab=chat param from URL after generation starts
+    if (shouldAutoStartChat) {
+      navigate(`/projects/${id}`, { replace: true });
+    }
+  }, [id, navigate, shouldAutoStartChat]);
 
-  const handleEdit = useCallback(() => {
-    // TODO: Navigate to edit page or open edit modal
-    console.log('Edit project');
-  }, []);
-
-  // Handle estimate generated
-  const handleEstimateGenerated = useCallback((quote: Quote) => {
-    setExistingEstimate(quote);
-  }, []);
-
-  const handleUpdateProject = useCallback((data: Partial<Project>) => {
-    // TODO: Implement project update
-    console.log('Update project:', data);
-  }, []);
+  // Calculate stats
+  const totalHours = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
+  const totalCost = quote?.total_cost ?? quote?.content?.totals?.total_cost ?? 0;
+  const requirementsCount = quote?.content?.deliverables?.length ?? 0;
+  const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
 
   if (!id) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <p className="text-gray-500">Invalid project ID</p>
+      <div className="project-detail-page">
+        <div className="project-detail-error">
+          <div className="project-detail-error-icon">
+            <AlertCircle style={{ width: 32, height: 32 }} />
+          </div>
+          <h3>Invalid Project</h3>
+          <p>No project ID provided.</p>
+          <Button onClick={() => navigate('/projects')}>Back to Projects</Button>
+        </div>
       </div>
     );
   }
@@ -383,14 +184,9 @@ export function ProjectDetailPage() {
   if (isLoading) {
     return (
       <div className="project-detail-page">
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Projects
-        </button>
-        <LoadingSkeleton />
+        <div className="project-detail-loading">
+          <Loader2 style={{ width: 40, height: 40 }} className="animate-spin" />
+        </div>
       </div>
     );
   }
@@ -398,19 +194,12 @@ export function ProjectDetailPage() {
   if (error || !project) {
     return (
       <div className="project-detail-page">
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Projects
-        </button>
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-error-100 mb-4">
-            <AlertCircle className="h-8 w-8 text-error-600" />
+        <div className="project-detail-error">
+          <div className="project-detail-error-icon">
+            <AlertCircle style={{ width: 32, height: 32 }} />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load project</h3>
-          <p className="text-sm text-gray-500 mb-6">{error}</p>
+          <h3>Failed to load project</h3>
+          <p>{error}</p>
           <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
@@ -419,41 +208,109 @@ export function ProjectDetailPage() {
 
   return (
     <div className="project-detail-page">
-      {/* Back Button */}
-      <button
-        onClick={() => navigate('/projects')}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Projects
-      </button>
+      {/* Header Bar */}
+      <header className="project-detail-header">
+        <div className="project-detail-header-left">
+          <button
+            className="project-detail-back"
+            onClick={() => navigate('/projects')}
+            aria-label="Back to projects"
+          >
+            <ArrowLeft style={{ width: 20, height: 20 }} />
+          </button>
+          
+          {/* Breadcrumb Navigation */}
+          <div className="project-detail-breadcrumb">
+            <button 
+              onClick={() => navigate('/projects')}
+              className="project-detail-breadcrumb-link"
+            >
+              Projects
+            </button>
+            <span className="project-detail-breadcrumb-separator">/</span>
+            <span className="project-detail-breadcrumb-current">{project.name}</span>
+          </div>
+        </div>
 
-      {/* Project Header */}
-      <ProjectHeader project={project} onEdit={handleEdit} />
+        <div className="project-detail-header-right">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Edit2 style={{ width: 16, height: 16 }} />}
+            onClick={() => navigate(`/projects/${id}/edit`)}
+          >
+            Edit Project
+          </Button>
+        </div>
+      </header>
 
-      {/* Tab Navigation */}
-      <TabNavigation
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        hasEstimate={!!existingEstimate}
-      />
+      {/* Project Title Section */}
+      <div className="project-detail-title-section">
+        <div className="project-detail-title-row">
+          <h1 className="project-detail-page-title">{project.name}</h1>
+          <Badge variant={getStatusBadgeVariant(project.status)}>
+            {project.status.toUpperCase()}
+          </Badge>
+        </div>
+        <div className="project-detail-meta">
+          {project.platform && (
+            <span className="project-detail-platform">{project.platform}</span>
+          )}
+          <span className="project-detail-meta-item">
+            <Calendar style={{ width: 14, height: 14 }} />
+            Created {formatDate(project.created_at)}
+          </span>
+          {project.description && (
+            <p className="project-detail-description">{project.description}</p>
+          )}
+        </div>
+      </div>
 
-      {/* Tab Content */}
-      <div className="project-tab-content">
-        {activeTab === 'estimate' && !isEstimateLoading && (
-          <EstimateTab
+      {/* Stat Cards */}
+      <div className="project-stat-cards">
+        <StatCard
+          label="Total Hours"
+          value={totalHours > 0 ? `${totalHours}h` : '—'}
+          subtext={totalHours > 0 ? 'Estimated effort' : 'No estimate yet'}
+          icon={<Clock style={{ width: 24, height: 24 }} />}
+          iconClass="hours"
+        />
+        <StatCard
+          label="Total Cost"
+          value={totalCost > 0 ? `$${totalCost.toLocaleString()}` : '—'}
+          subtext={totalCost > 0 ? 'Project budget' : 'No cost calculated'}
+          icon={<DollarSign style={{ width: 24, height: 24 }} />}
+          iconClass="cost"
+        />
+        <StatCard
+          label="Requirements"
+          value={requirementsCount > 0 ? requirementsCount : '—'}
+          subtext={requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements'}
+          icon={<ListChecks style={{ width: 24, height: 24 }} />}
+          iconClass="requirements"
+        />
+        <StatCard
+          label="Last Updated"
+          value={formatRelativeTime(lastUpdated)}
+          subtext={formatDate(lastUpdated)}
+          icon={<FileText style={{ width: 24, height: 24 }} />}
+          iconClass="updated"
+        />
+      </div>
+
+      {/* Main Content - EstimateChat handles the full workflow */}
+      <div className="project-detail-content">
+        {isQuoteLoading ? (
+          <div className="project-detail-loading" style={{ minHeight: '400px' }}>
+            <Loader2 style={{ width: 32, height: 32 }} className="animate-spin" />
+            <p style={{ marginTop: '16px', color: 'var(--color-gray-500)' }}>Loading estimate...</p>
+          </div>
+        ) : (
+          <EstimateChat
             project={project}
-            existingEstimate={existingEstimate}
+            existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
           />
-        )}
-        {activeTab === 'estimate' && isEstimateLoading && (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-          </div>
-        )}
-        {activeTab === 'settings' && (
-          <SettingsTab project={project} onUpdate={handleUpdateProject} />
         )}
       </div>
     </div>

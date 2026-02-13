@@ -8,13 +8,11 @@ import {
   FileText,
   Plus,
   Trash2,
-  MoreVertical,
-  FileEdit,
   Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { documentsService, type Document, type DocumentCreate } from '@/services/documents.service';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 
 interface DocumentListProps {
   projectId: string;

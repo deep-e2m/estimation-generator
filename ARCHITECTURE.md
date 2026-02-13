@@ -155,20 +155,20 @@ export { Dropdown } from './Dropdown';
 import { Button, Input, Dropdown } from '@/components/ui';
 
 // ❌ Instead of
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Dropdown } from '@/components/ui/Dropdown';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dropdown } from '@/components/ui/dropdown';
 ```
 
 ### Services Architecture
 
 The frontend has **two quote services** with distinct purposes:
 
-**`quote.service.ts`** - Class-based quote generation
+**`quote-generation.service.ts`** - Class-based quote generation
 - Real-time progress tracking
 - Quote generation with streaming updates
 - Direct export downloads (PDF, DOCX)
-- Used by: EstimateChat, EstimateEditor, NewQuote
+- Used by: EstimateChat, ExportDialog
 
 **`quotes.service.ts`** - Function-based quote queries
 - React Query integration

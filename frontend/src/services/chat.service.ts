@@ -6,7 +6,6 @@
 import { apiClient } from './api';
 import type {
   ApiResponse,
-  ChatMessage,
   ChatResponse,
   ChatHistoryResponse,
   SendMessageRequest,

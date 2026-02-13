@@ -14,7 +14,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Copy, Check, User, Bot, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils';
-import type { ChatMessage as ChatMessageType, MessageStatus } from '@/types';
+import type { ChatMessage as ChatMessageType } from '@/types';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -98,17 +98,17 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
   // Process inline patterns
   const patterns = [
     // Inline code
-    { regex: /`([^`]+)`/, render: (match: string, _url?: string) => (
-      <code key={`inline-code-${keyCounter++}`} className="chat-inline-code">
+    { regex: /`([^`]+)`/, render: (match: string) => (
+      <code key={`inline-code-${keyCounter++}`} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-mono">
         {match}
       </code>
     )},
     // Bold
-    { regex: /\*\*([^*]+)\*\*/, render: (match: string, _url?: string) => (
+    { regex: /\*\*([^*]+)\*\*/, render: (match: string) => (
       <strong key={`bold-${keyCounter++}`}>{match}</strong>
     )},
     // Italic
-    { regex: /\*([^*]+)\*/, render: (match: string, _url?: string) => (
+    { regex: /\*([^*]+)\*/, render: (match: string) => (
       <em key={`italic-${keyCounter++}`}>{match}</em>
     )},
     // Links
@@ -118,7 +118,7 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
         href={url || '#'}
         target="_blank"
         rel="noopener noreferrer"
-        className="chat-link"
+        className="text-primary-600 hover:text-primary-700 underline underline-offset-2"
       >
         {text}
       </a>
@@ -156,7 +156,7 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
         const listMatch = remaining.match(/^(-|\d+\.) (.*)$/);
         if (listMatch) {
           elements.push(
-            <span key={`list-${keyCounter++}`} className="chat-list-item">
+            <span key={`list-${keyCounter++}`} className="block pl-4">
               {listMatch[1] === '-' ? '\u2022' : listMatch[1]} {listMatch[2]}
             </span>
           );
@@ -188,12 +188,12 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
   }, [code]);
 
   return (
-    <div className="chat-code-block">
-      <div className="chat-code-header">
-        <span className="chat-code-language">{language || 'code'}</span>
+    <div className="my-3 rounded-xl overflow-hidden border border-slate-200">
+      <div className="flex items-center justify-between px-4 py-2 bg-slate-100 border-b border-slate-200">
+        <span className="text-xs font-medium text-slate-500">{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="chat-code-copy-btn"
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
           aria-label={copied ? 'Copied!' : 'Copy code'}
         >
           {copied ? (
@@ -209,8 +209,8 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
           )}
         </button>
       </div>
-      <pre className="chat-code-content">
-        <code>{code}</code>
+      <pre className="p-4 bg-slate-50 overflow-x-auto text-sm leading-relaxed">
+        <code className="font-mono text-slate-800">{code}</code>
       </pre>
     </div>
   );
@@ -221,10 +221,10 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
  */
 function TypingIndicator() {
   return (
-    <span className="chat-typing-indicator">
-      <span className="chat-typing-dot" />
-      <span className="chat-typing-dot" />
-      <span className="chat-typing-dot" />
+    <span className="inline-flex items-center gap-0.5 ml-1">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
     </span>
   );
 }
@@ -246,19 +246,18 @@ export function ChatMessage({ message, isStreaming, onRetry }: ChatMessageProps)
   return (
     <div
       className={cn(
-        'chat-message',
-        isUser && 'chat-message-user',
-        isAssistant && 'chat-message-assistant',
-        isError && 'chat-message-error'
+        'flex items-start gap-3 px-4 py-3',
+        isUser && 'flex-row-reverse',
+        isError && 'opacity-75'
       )}
       role="listitem"
     >
       {/* Avatar */}
       <div
         className={cn(
-          'chat-message-avatar',
-          isUser && 'chat-avatar-user',
-          isAssistant && 'chat-avatar-assistant'
+          'flex h-8 w-8 items-center justify-center rounded-full shrink-0',
+          isUser && 'bg-primary-600 text-white',
+          isAssistant && 'bg-primary-100 text-primary-600'
         )}
       >
         {isUser ? (
@@ -269,23 +268,26 @@ export function ChatMessage({ message, isStreaming, onRetry }: ChatMessageProps)
       </div>
 
       {/* Message content */}
-      <div className="chat-message-content-wrapper">
+      <div className={cn('flex flex-col max-w-[75%]', isUser && 'items-end')}>
         <div
           className={cn(
-            'chat-message-bubble',
-            isUser && 'chat-bubble-user',
-            isAssistant && 'chat-bubble-assistant',
-            isError && 'chat-bubble-error',
-            isSending && 'chat-bubble-sending'
+            'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+            isUser && 'bg-primary-600 text-white rounded-br-md',
+            isAssistant && 'bg-slate-100 text-slate-800 rounded-bl-md',
+            isError && 'bg-error-50 border border-error-200',
+            isSending && 'opacity-70'
           )}
         >
           {/* Error indicator */}
           {isError && (
-            <div className="chat-error-indicator">
+            <div className="flex items-center gap-2 mb-2 text-error-600 text-xs font-medium">
               <AlertCircle className="h-4 w-4" />
               <span>Failed to send</span>
               {onRetry && (
-                <button onClick={onRetry} className="chat-retry-btn">
+                <button
+                  onClick={onRetry}
+                  className="flex items-center gap-1 ml-2 text-error-600 hover:text-error-700 underline"
+                >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Retry
                 </button>
@@ -294,7 +296,7 @@ export function ChatMessage({ message, isStreaming, onRetry }: ChatMessageProps)
           )}
 
           {/* Message text */}
-          <div className="chat-message-text">
+          <div>
             {isAssistant ? renderedContent : message.content}
             {isStreaming && <TypingIndicator />}
           </div>
@@ -303,12 +305,11 @@ export function ChatMessage({ message, isStreaming, onRetry }: ChatMessageProps)
         {/* Timestamp */}
         <div
           className={cn(
-            'chat-message-meta',
-            isUser && 'chat-meta-user',
-            isAssistant && 'chat-meta-assistant'
+            'mt-1 text-xs text-slate-400',
+            isUser && 'text-right'
           )}
         >
-          <span className="chat-timestamp">
+          <span>
             {isSending ? 'Sending...' : formatRelativeTime(message.created_at)}
           </span>
         </div>

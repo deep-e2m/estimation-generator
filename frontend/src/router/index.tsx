@@ -12,7 +12,7 @@ import { lazy, Suspense } from 'react'
 
 import { ProtectedRoute, AuthRoute } from '@/components/auth/ProtectedRoute'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { PageSpinner } from '@/components/ui/Spinner'
+import { PageSpinner } from '@/components/ui/spinner'
 
 // Lazy load pages for code splitting
 const LoginPage = lazy(() => import('@/pages/Login'))

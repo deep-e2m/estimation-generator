@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
 import type {
   ApiResponse,
   PaginatedResponse,
@@ -103,67 +104,78 @@ export const quotesApi = {
     return response.data.data as unknown as PaginatedResponse<QuoteSummary>;
   },
 
-  // Get quotes for a specific project
+  // Get quotes for a specific project (page-based; backend returns { quotes, pagination })
   listByProject: async (
     projectId: string,
-    cursor?: string,
+    pageParam?: number,
     limit: number = 20
   ): Promise<PaginatedResponse<QuoteSummary>> => {
+    const page = pageParam ?? 1;
     const params = new URLSearchParams();
-    if (cursor) params.append('cursor', cursor);
-    params.append('limit', limit.toString());
+    params.append('page', page.toString());
+    params.append('page_size', limit.toString());
 
-    const response = await apiClient.get<ApiResponse<PaginatedResponse<QuoteSummary>>>(
-      `/projects/${projectId}/quotes?${params.toString()}`
-    );
-    return response.data.data as unknown as PaginatedResponse<QuoteSummary>;
+    const response = await apiClient.get<
+      ApiResponse<{ quotes: QuoteSummary[]; pagination: { page: number; page_size: number; total_items: number; total_pages: number; has_next: boolean; has_previous: boolean } }>
+    >(`/projects/${projectId}/quotes?${params.toString()}`);
+
+    const d = response.data.data;
+    return {
+      data: d.quotes,
+      pagination: {
+        has_more: d.pagination.has_next,
+        cursor: null,
+        total_count: d.pagination.total_items,
+        page: d.pagination.page,
+      },
+    };
   },
 
-  // Get single quote by ID
-  get: async (projectId: string, quoteId: string): Promise<Quote> => {
-    const response = await apiClient.get<ApiResponse<Quote>>(
-      `/projects/${projectId}/quotes/${quoteId}`
+  // Get single quote by ID (backend: GET /quotes/{quote_id}; content is string, normalized to Quote)
+  get: async (_projectId: string, quoteId: string): Promise<Quote> => {
+    const response = await apiClient.get<ApiResponse<ApiQuote>>(
+      `/quotes/${quoteId}`
     );
-    return response.data.data;
+    return normalizeQuoteFromApi(response.data.data);
   },
 
-  // Update quote
+  // Update quote (backend: PUT /quotes/{quote_id})
   update: async (
-    projectId: string,
+    _projectId: string,
     quoteId: string,
     data: Partial<Quote>
   ): Promise<Quote> => {
-    const response = await apiClient.patch<ApiResponse<Quote>>(
-      `/projects/${projectId}/quotes/${quoteId}`,
+    const response = await apiClient.put<ApiResponse<ApiQuote>>(
+      `/quotes/${quoteId}`,
       data
     );
-    return response.data.data;
+    return normalizeQuoteFromApi(response.data.data);
   },
 
-  // Delete quote
-  delete: async (projectId: string, quoteId: string): Promise<void> => {
-    await apiClient.delete(`/projects/${projectId}/quotes/${quoteId}`);
+  // Delete quote (backend: DELETE /quotes/{quote_id})
+  delete: async (_projectId: string, quoteId: string): Promise<void> => {
+    await apiClient.delete(`/quotes/${quoteId}`);
   },
 
-  // Get quote versions
+  // Get quote versions (quote-scoped; projectId kept for cache keys/callers)
   getVersions: async (
-    projectId: string,
+    _projectId: string,
     quoteId: string
   ): Promise<QuoteVersion[]> => {
     const response = await apiClient.get<ApiResponse<QuoteVersion[]>>(
-      `/projects/${projectId}/quotes/${quoteId}/versions`
+      `/quotes/${quoteId}/versions`
     );
     return response.data.data;
   },
 
-  // Create new version
+  // Create new version (quote-scoped)
   createVersion: async (
-    projectId: string,
+    _projectId: string,
     quoteId: string,
     versionNote?: string
   ): Promise<QuoteVersion> => {
     const response = await apiClient.post<ApiResponse<QuoteVersion>>(
-      `/projects/${projectId}/quotes/${quoteId}/versions`,
+      `/quotes/${quoteId}/versions`,
       { version_note: versionNote }
     );
     return response.data.data;

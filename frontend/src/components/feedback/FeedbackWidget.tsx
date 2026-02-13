@@ -1,16 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useSubmitFeedback, useQuoteFeedback } from '@/hooks/useQuotes';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import type { FeedbackRating, FeedbackCategory, FeedbackSubmission } from '@/types';
 import {
   ThumbsUp,
   ThumbsDown,
-  MessageSquare,
   Check,
-  X,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 interface FeedbackWidgetProps {

@@ -168,6 +168,35 @@ class QuoteRegenerateRequest(BaseModel):
     )
 
 
+class RefineQuoteRequest(BaseModel):
+    """Schema for conversational quote refinement request."""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="Natural language request to modify the quote",
+        examples=[
+            "Increase the hours for login feature to 20",
+            "Add a new deliverable for password reset",
+            "Update the executive summary to mention mobile responsiveness",
+        ],
+    )
+
+
+class ChangeDescription(BaseModel):
+    """Description of a change applied to the quote."""
+
+    section: str = Field(..., description="Section that was modified (e.g., 'deliverables', 'hours', 'content')")
+    change_type: str = Field(
+        ..., description="Type of change (e.g., 'added', 'updated', 'removed')"
+    )
+    description: str = Field(..., description="Human-readable description of what changed")
+    field_path: Optional[str] = Field(
+        None, description="JSON path to the changed field (if applicable)"
+    )
+
+
 # =============================================================================
 # Quote Response Schemas
 # =============================================================================
@@ -246,6 +275,16 @@ class QuoteDetailResponse(QuoteResponse):
     approver_name: Optional[str] = Field(None, description="Name of the approver (if approved)")
 
 
+class RefineQuoteResponse(BaseModel):
+    """Response schema for conversational quote refinement."""
+
+    updated_quote: QuoteResponse = Field(..., description="The updated quote after applying changes")
+    ai_message: str = Field(..., description="AI explanation of what was changed")
+    changes_applied: list[ChangeDescription] = Field(
+        ..., description="List of changes that were applied"
+    )
+
+
 # =============================================================================
 # Quote Generation Response Schemas
 # =============================================================================
@@ -316,3 +355,9 @@ class QuoteDeleteResponse(APIResponse):
         default={"message": "Quote deleted successfully"},
         description="Deletion confirmation",
     )
+
+
+class RefineQuoteDataResponse(APIResponse):
+    """Response schema for quote refinement."""
+
+    data: RefineQuoteResponse = Field(..., description="Refined quote with changes")

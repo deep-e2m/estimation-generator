@@ -113,6 +113,7 @@ docker/init-db/*.sh
 playwright-report/
 test-results/
 coverage/
+model_evaluation/
 
 # ==========================================
 # AI Tools / Coding Assistants

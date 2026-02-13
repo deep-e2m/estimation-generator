@@ -1,365 +1,294 @@
 /**
- * Registration Page - Beautiful Modern Design
+ * Register Page
+ * 
+ * Uses centralized CSS classes from styles/pages.css
+ * Features animated branding with Framer Motion
  */
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
-import { Mail, Lock, User, Building2, ArrowRight, Check, X, Sparkles, Eye, EyeOff } from 'lucide-react'
-
+import { motion } from 'framer-motion'
+import { Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/store/authStore'
-import { registerSchema, type RegisterFormData } from '@/lib/validations'
-import {
-  calculatePasswordStrength,
-  getStrengthColor,
-  getStrengthLabel,
-} from '@/lib/password'
-import { Button } from '@/components/ui/Button'
-import { Alert, AlertDescription } from '@/components/ui/Alert'
-import { cn } from '@/lib/utils'
-import '@/styles/auth.css'
 
-function PasswordRequirement({ met, text }: { met: boolean; text: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {met ? (
-        <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-      ) : (
-        <X className="h-4 w-4 text-gray-300 flex-shrink-0" />
-      )}
-      <span className={met ? 'text-green-700' : 'text-gray-500'}>{text}</span>
-    </div>
-  )
-}
+// Form validation schema
+const registerSchema = z.object({
+  full_name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Please enter a valid email address'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+  confirmPassword: z.string(),
+  terms: z.boolean().refine((val) => val === true, {
+    message: 'You must accept the terms and conditions',
+  }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ['confirmPassword'],
+})
 
-export default function RegisterPage() {
+type RegisterForm = z.infer<typeof registerSchema>
+
+export default function Register() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const [showError, setShowError] = useState(true)
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-
-  const { register: registerUser, isLoading, error, clearError } = useAuthStore()
+  const registerUser = useAuthStore((state) => state.register)
 
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors },
-  } = useForm<RegisterFormData>({
+  } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      email: '',
       full_name: '',
+      email: '',
       password: '',
-      confirm_password: '',
-      company_name: '',
+      confirmPassword: '',
+      terms: false,
     },
   })
 
-  const password = watch('password', '')
-
-  const passwordStrength = useMemo(
-    () => calculatePasswordStrength(password),
-    [password]
-  )
-
-  const requirements = useMemo(
-    () => ({
-      length: password.length >= 8,
-      lowercase: /[a-z]/.test(password),
-      uppercase: /[A-Z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[^a-zA-Z0-9]/.test(password),
-    }),
-    [password]
-  )
-
-  const onSubmit = async (data: RegisterFormData) => {
-    setShowError(true)
-    clearError()
+  const onSubmit = async (data: RegisterForm) => {
+    setIsLoading(true)
+    setError(null)
 
     try {
       await registerUser({
         email: data.email,
         password: data.password,
         full_name: data.full_name,
-        company_name: data.company_name || undefined,
       })
       navigate('/dashboard', { replace: true })
-    } catch {
-      // Error handled in store
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Registration failed. Please try again.'
+      )
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const dismissError = () => {
-    setShowError(false)
-    clearError()
-  }
-
-  const inputWrapperClass = (hasError: boolean) => `flex rounded-xl border-2 overflow-hidden transition-all duration-200 ${
-    hasError
-      ? 'border-red-300 focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/10'
-      : 'border-gray-200 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'
-  }`
-
   return (
-    <div className="min-h-screen w-full flex">
-      {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
-        {/* Decorative Elements */}
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-white/10 rounded-full" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-white/10 rounded-full" />
+    <div className="auth-page">
+      {/* Left side - Branding */}
+      <div className="auth-branding">
+        {/* Decorative elements */}
+        <div className="auth-branding-decor">
+          <div className="auth-branding-blur-1" />
+          <div className="auth-branding-blur-2" />
+          <div className="auth-branding-circle auth-branding-circle-1" />
+          <div className="auth-branding-circle auth-branding-circle-2" />
+          <div className="auth-branding-circle auth-branding-circle-3" />
         </div>
 
-        {/* Content */}
-        <div className="relative z-10 w-full flex flex-col justify-center px-8 lg:px-12 xl:px-16 text-white">
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <span className="text-4xl font-bold">Estimate AI</span>
-          </div>
+        {/* Centered branding content */}
+        <div className="auth-branding-content">
+          <motion.div 
+            className="auth-branding-logo"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
+            <motion.div 
+              className="auth-branding-icon"
+              animate={{ y: [0, -12, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Sparkles style={{ width: 36, height: 36, color: 'white' }} />
+            </motion.div>
+            <motion.h1 
+              className="auth-branding-title"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              Estimate AI
+            </motion.h1>
+          </motion.div>
+          <motion.p 
+            className="auth-branding-tagline"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+          >
+            Join thousands of professionals creating accurate estimates in minutes.
+          </motion.p>
         </div>
       </div>
 
-      {/* Right Side - Registration Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 bg-gray-50 overflow-y-auto">
-        <div className="auth-form-wrapper auth-form-wrapper-register">
-          {/* Mobile Logo */}
-          <div className="auth-mobile-logo">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl mb-4">
-              <Sparkles className="w-8 h-8 text-white" />
+      {/* Right side - Form */}
+      <div className="auth-form-section">
+        <div className="auth-form-container">
+          {/* Mobile logo */}
+          <div className="auth-form-logo-mobile lg:hidden">
+            <div className="auth-form-logo-icon">
+              <Sparkles style={{ width: 32, height: 32, color: 'white' }} />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Estimate AI</h1>
+            <h1 className="auth-form-title">Estimate AI</h1>
           </div>
 
-          {/* Form Card */}
-          <div className="auth-form-card auth-form-card-register">
-            <div className="auth-form-header auth-form-header-register">
-              <h2 className="auth-form-title">Create account</h2>
-              <p className="auth-form-subtitle">Enter your details to get started</p>
+          {/* Form header */}
+          <div style={{ textAlign: 'center', marginBottom: 'var(--space-8)' }}>
+            <h2 className="auth-form-title">Create your account</h2>
+            <p className="auth-form-subtitle">Start your free trial today</p>
+          </div>
+
+          {/* Error alert */}
+          {error && (
+            <Alert variant="error" dismissible onDismiss={() => setError(null)} style={{ marginBottom: 'var(--space-6)' }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
+            {/* Full name field */}
+            <div className="auth-form-field">
+              <label htmlFor="full_name" className="label">
+                Full Name
+              </label>
+              <div className={`auth-input-wrapper ${errors.full_name ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <User style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                </div>
+                <input
+                  id="full_name"
+                  type="text"
+                  className="auth-input"
+                  placeholder="John Doe"
+                  autoComplete="name"
+                  {...register('full_name')}
+                />
+              </div>
+              {errors.full_name && (
+                <p className="auth-error-text">{errors.full_name.message}</p>
+              )}
             </div>
 
-            {error && showError && (
-              <Alert variant="error" dismissible onDismiss={dismissError} className="auth-form-alert">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <form onSubmit={handleSubmit(onSubmit)} className="auth-form auth-form-register">
-              {/* Full Name Field */}
-              <div className="auth-form-field">
-                <label htmlFor="full_name" className="auth-form-label">
-                  Full Name
-                </label>
-                <div className={inputWrapperClass(!!errors.full_name)}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <User className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="full_name"
-                    type="text"
-                    placeholder="John Doe"
-                    autoComplete="name"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('full_name')}
-                  />
+            {/* Email field */}
+            <div className="auth-form-field">
+              <label htmlFor="email" className="label">
+                Email Address
+              </label>
+              <div className={`auth-input-wrapper ${errors.email ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Mail style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
                 </div>
-                {errors.full_name && (
-                  <p className="auth-form-error">{errors.full_name.message}</p>
-                )}
+                <input
+                  id="email"
+                  type="email"
+                  className="auth-input"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  {...register('email')}
+                />
               </div>
+              {errors.email && (
+                <p className="auth-error-text">{errors.email.message}</p>
+              )}
+            </div>
 
-              {/* Email Field */}
-              <div className="auth-form-field">
-                <label htmlFor="email" className="auth-form-label">
-                  Email Address
-                </label>
-                <div className={inputWrapperClass(!!errors.email)}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Mail className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('email')}
-                  />
+            {/* Password field */}
+            <div className="auth-form-field">
+              <label htmlFor="password" className="label">
+                Password
+              </label>
+              <div className={`auth-input-wrapper ${errors.password ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Lock style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
                 </div>
-                {errors.email && (
-                  <p className="auth-form-error">{errors.email.message}</p>
-                )}
+                <input
+                  id="password"
+                  type="password"
+                  className="auth-input"
+                  placeholder="Min 8 characters"
+                  autoComplete="new-password"
+                  {...register('password')}
+                />
               </div>
+              {errors.password && (
+                <p className="auth-error-text">{errors.password.message}</p>
+              )}
+            </div>
 
-              {/* Company Name Field */}
-              <div className="auth-form-field">
-                <label htmlFor="company_name" className="auth-form-label">
-                  Company Name <span className="text-gray-400 font-normal">(Optional)</span>
-                </label>
-                <div className={inputWrapperClass(!!errors.company_name)}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Building2 className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="company_name"
-                    type="text"
-                    placeholder="Acme Inc."
-                    autoComplete="organization"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('company_name')}
-                  />
+            {/* Confirm password field */}
+            <div className="auth-form-field">
+              <label htmlFor="confirmPassword" className="label">
+                Confirm Password
+              </label>
+              <div className={`auth-input-wrapper ${errors.confirmPassword ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Lock style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
                 </div>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  className="auth-input"
+                  placeholder="Confirm your password"
+                  autoComplete="new-password"
+                  {...register('confirmPassword')}
+                />
               </div>
+              {errors.confirmPassword && (
+                <p className="auth-error-text">{errors.confirmPassword.message}</p>
+              )}
+            </div>
 
-              {/* Password Field */}
-              <div className="auth-form-field">
-                <label htmlFor="password" className="auth-form-label">
-                  Password
-                </label>
-                <div className={inputWrapperClass(!!errors.password)}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Lock className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a strong password"
-                    autoComplete="new-password"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('password')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="w-14 flex-shrink-0 flex items-center justify-center text-gray-400 hover:text-gray-600 bg-white"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="auth-form-error">{errors.password.message}</p>
-                )}
-
-                {/* Password Strength */}
-                {password && (
-                  <div className="auth-password-strength">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500 font-medium">Password strength</span>
-                        <span className={cn(
-                          'font-semibold',
-                          passwordStrength.strength === 'weak' && 'text-red-600',
-                          passwordStrength.strength === 'fair' && 'text-yellow-600',
-                          passwordStrength.strength === 'good' && 'text-blue-600',
-                          passwordStrength.strength === 'strong' && 'text-green-600'
-                        )}>
-                          {getStrengthLabel(passwordStrength.strength)}
-                        </span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {[0, 1, 2, 3].map((index) => (
-                          <div
-                            key={index}
-                            className={cn(
-                              'h-2 flex-1 rounded-full transition-all duration-300',
-                              index < passwordStrength.score
-                                ? getStrengthColor(passwordStrength.strength)
-                                : 'bg-gray-200'
-                            )}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 p-4 rounded-xl bg-gray-50 border border-gray-100">
-                      <PasswordRequirement met={requirements.length} text="8+ characters" />
-                      <PasswordRequirement met={requirements.lowercase} text="Lowercase" />
-                      <PasswordRequirement met={requirements.uppercase} text="Uppercase" />
-                      <PasswordRequirement met={requirements.number} text="Number" />
-                      <PasswordRequirement met={requirements.special} text="Special char" />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Confirm Password Field */}
-              <div className="auth-form-field">
-                <label htmlFor="confirm_password" className="auth-form-label">
-                  Confirm Password
-                </label>
-                <div className={inputWrapperClass(!!errors.confirm_password)}>
-                  <div className="w-14 flex-shrink-0 flex items-center justify-center bg-gray-50 border-r border-gray-200">
-                    <Lock className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <input
-                    id="confirm_password"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
-                    autoComplete="new-password"
-                    className="flex-1 h-14 text-base outline-none bg-white"
-                    {...register('confirm_password')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="w-14 flex-shrink-0 flex items-center justify-center text-gray-400 hover:text-gray-600 bg-white"
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {errors.confirm_password && (
-                  <p className="auth-form-error">{errors.confirm_password.message}</p>
-                )}
-              </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full h-14 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 transition-all duration-200 auth-form-submit"
-                size="lg"
-                isLoading={isLoading}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  Create account
-                  <ArrowRight className="h-5 w-5" />
+            {/* Terms checkbox */}
+            <div className="auth-form-field">
+              <label className="auth-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="auth-checkbox"
+                  {...register('terms')}
+                />
+                <span>
+                  I agree to the{' '}
+                  <a href="#" className="auth-link">Terms of Service</a>
+                  {' '}and{' '}
+                  <a href="#" className="auth-link">Privacy Policy</a>
                 </span>
-              </Button>
-            </form>
-
-            {/* Divider */}
-            <div className="auth-form-divider">
-              <div className="auth-form-divider-line"></div>
-              <div className="auth-form-divider-text">
-                <span>Already have an account?</span>
-              </div>
+              </label>
+              {errors.terms && (
+                <p className="auth-error-text">{errors.terms.message}</p>
+              )}
             </div>
 
-            {/* Login Link */}
-            <Link
-              to="/auth/login"
-              className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all duration-200"
+            {/* Submit button */}
+            <Button
+              type="submit"
+              className="auth-submit-btn"
+              isLoading={isLoading}
+              rightIcon={<ArrowRight style={{ width: 20, height: 20 }} />}
             >
-              Sign in instead
-            </Link>
+              {isLoading ? 'Creating account...' : 'Create account'}
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="auth-divider">
+            <div className="auth-divider-line" />
+            <span className="auth-divider-text">or</span>
           </div>
 
-          {/* Footer */}
-          <p className="auth-form-footer">
-            By creating an account, you agree to our{' '}
-            <a href="#" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
-              Terms
-            </a>{' '}
-            and{' '}
-            <a href="#" className="text-gray-700 hover:text-gray-900 underline underline-offset-2">
-              Privacy Policy
-            </a>
-          </p>
+          {/* Sign in link */}
+          <Link to="/auth/login">
+            <Button variant="outline" className="auth-secondary-btn">
+              Sign in to existing account
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

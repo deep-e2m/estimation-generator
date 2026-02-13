@@ -24,6 +24,7 @@ import {
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
 import type {
   Quote,
+  QuoteStatus,
   Deliverable,
   ResearchReference,
   Risk,
@@ -119,9 +120,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         title="Research References"
         isExpanded={expandedSections.research}
         onToggle={() => toggleSection('research')}
-        badge={`${content.research_references.length} sources`}
+        badge={`${(content.research_references ?? []).length} sources`}
       >
-        <ResearchReferencesList references={content.research_references} />
+        <ResearchReferencesList references={(content.research_references ?? []) as ResearchReference[]} />
       </CollapsibleSection>
 
       {/* Metadata Footer */}
@@ -139,12 +140,14 @@ interface QuoteHeaderProps {
 }
 
 const QuoteHeader: React.FC<QuoteHeaderProps> = ({ quote, onEdit }) => {
-  const statusColors = {
+  const statusColors: Record<QuoteStatus, string> = {
     generating: 'bg-yellow-100 text-yellow-800',
     draft: 'bg-gray-100 text-gray-800',
+    published: 'bg-blue-100 text-blue-800',
     finalized: 'bg-blue-100 text-blue-800',
     sent: 'bg-purple-100 text-purple-800',
     accepted: 'bg-green-100 text-green-800',
+    approved: 'bg-green-100 text-green-800',
     rejected: 'bg-red-100 text-red-800',
     archived: 'bg-gray-100 text-gray-600',
   };

@@ -3,6 +3,9 @@
  * Based on API contracts specification
  */
 
+import type { Quote, QuoteContent } from '@/types';
+export type { Quote, QuoteContent };
+
 // Platform options for quote generation (must match backend Platform enum)
 export type Platform = 'wordpress';
 
@@ -10,9 +13,11 @@ export type Platform = 'wordpress';
 export type QuoteStatus =
   | 'generating'
   | 'draft'
+  | 'published'
   | 'finalized'
   | 'sent'
   | 'accepted'
+  | 'approved'
   | 'rejected'
   | 'archived';
 
@@ -97,18 +102,6 @@ export interface ResearchReference {
   is_valid?: boolean;
 }
 
-// Quote content structure
-export interface QuoteContent {
-  executive_summary: string;
-  scope: QuoteScope;
-  deliverables: Deliverable[];
-  assumptions: string[];
-  risks: Risk[];
-  timeline?: QuoteTimeline;
-  research_references: ResearchReference[];
-  totals: QuoteTotals;
-}
-
 // User reference
 export interface UserRef {
   id: string;
@@ -145,21 +138,6 @@ export interface GenerationMetadata {
   knowledge_docs_used: string[];
   confidence_score: number;
   generation_time_seconds: number;
-}
-
-// Full Quote object
-export interface Quote {
-  id: string;
-  quote_number: string;
-  version: number;
-  status: QuoteStatus;
-  project: ProjectRef;
-  requirements: QuoteRequirements;
-  content: QuoteContent;
-  generation_metadata?: GenerationMetadata;
-  created_by: UserRef;
-  created_at: string;
-  updated_at: string;
 }
 
 // Quote list item (summary view)
@@ -274,4 +252,30 @@ export interface ExportJob {
     code: string;
     message: string;
   };
+}
+
+// Chat and Refinement Types
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  changes?: ChangeDescription[];
+}
+
+export interface ChangeDescription {
+  section: string;
+  change_type: 'added' | 'updated' | 'removed';
+  description: string;
+  field_path?: string;
+}
+
+export interface RefineQuoteRequest {
+  message: string;
+}
+
+export interface RefineQuoteResponse {
+  updated_quote: Quote;
+  ai_message: string;
+  changes_applied: ChangeDescription[];
 }

@@ -25,6 +25,7 @@ export interface PaginatedResponse<T> {
     cursor: string | null;
     has_more: boolean;
     total_count: number;
+    page?: number;
   };
 }
 
@@ -74,7 +75,7 @@ export interface TeamMember {
 }
 
 // Quote Types
-export type QuoteStatus = 'generating' | 'draft' | 'finalized' | 'sent' | 'accepted' | 'rejected' | 'archived';
+export type QuoteStatus = 'generating' | 'draft' | 'published' | 'finalized' | 'sent' | 'accepted' | 'approved' | 'rejected' | 'archived';
 
 export interface QuoteSummary {
   id: string;
@@ -144,6 +145,8 @@ export interface QuoteContent {
     currency: string;
     hourly_rate: number;
   };
+  /** Optional for compatibility with quote.types; normalizer sets [] for API quotes */
+  research_references?: Array<{ summary: string; url: string; relevance_note: string }>;
 }
 
 export interface Attachment {
@@ -166,6 +169,10 @@ export interface Quote extends QuoteSummary {
     attachments: Attachment[];
   };
   content: QuoteContent;
+  // Backend may return these at root level (for simpler quotes)
+  total_hours?: number;
+  total_cost?: number;
+  title?: string;
   generation_metadata?: {
     model_used: string;
     knowledge_docs_used: string[];
@@ -256,8 +263,32 @@ export interface QuoteFilters {
   sort_order?: 'asc' | 'desc';
 }
 
-// Re-export detailed quote types
-export * from './quote.types';
+// Re-export quote types (exclude ChatMessage to avoid clash with chat.ChatMessage)
+export type {
+  GenerationStep,
+  EstimationApproach,
+  DetailLevel,
+  HoursEstimate,
+  QuoteTimeline,
+  QuoteTotals,
+  QuoteScope,
+  ResearchReference,
+  UserRef,
+  ProjectRef,
+  AttachmentRef,
+  QuoteRequirements,
+  GenerationMetadata,
+  QuoteListItem,
+  GenerationOptions,
+  GenerateQuoteRequest,
+  GenerateQuoteResponse,
+  GenerationProgress,
+  UpdateQuoteRequest,
+  ExportOptions,
+  ChangeDescription,
+  RefineQuoteRequest,
+  RefineQuoteResponse,
+} from './quote.types';
 export * from './file.types';
 export * from './project';
 export * from './chat';

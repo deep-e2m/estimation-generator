@@ -1,0 +1,28 @@
+/**
+ * Main CSS Entry Point
+ * 
+ * This file imports all CSS modules in the correct order.
+ * Import only this file in your main.tsx
+ */
+
+/* 1. CSS Variables (Design Tokens) - Must be first */
+@import './variables.css';
+
+/* 2. Base Styles (Reset & Defaults) */
+@import './base.css';
+
+/* 3. Component Styles */
+@import './components.css';
+
+/* 4. Layout Styles */
+@import './layout.css';
+
+/* 5. Page-Specific Styles */
+@import './pages.css';
+
+/* 6. Feature-Specific Styles */
+@import './estimation-split.css';
+@import './estimation-generation.css';
+
+/* 7. Utility Classes - Last so they can override */
+@import './utilities.css';
