@@ -65,18 +65,28 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
 
   const isMarkdownOnly = isMarkdownOnlyContent(content);
 
-  // Format date
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return new Date().toLocaleDateString('en-US', {
+  // Format date with proper validation
+  const formatDate = (dateString?: string | null) => {
+    const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
-    });
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    };
+    
+    // Handle missing or empty date
+    if (!dateString) {
+      return new Date().toLocaleDateString('en-US', options);
+    }
+    
+    // Try to parse the date
+    const date = new Date(dateString);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return new Date().toLocaleDateString('en-US', options);
+    }
+    
+    return date.toLocaleDateString('en-US', options);
   };
 
   return (
@@ -92,15 +102,15 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
             </span>
           </div>
           <div className="doc-metadata-item">
-            <span className="doc-metadata-label">Generated</span>
+            <span className="doc-metadata-label">Date</span>
             <span className="doc-metadata-value">
               {formatDate(quote.created_at)}
             </span>
           </div>
-          {quote.project_name && (
+          {(quote.project?.name || quote.project_name) && (
             <div className="doc-metadata-item">
               <span className="doc-metadata-label">Project</span>
-              <span className="doc-metadata-value">{quote.project_name}</span>
+              <span className="doc-metadata-value">{quote.project?.name || quote.project_name}</span>
             </div>
           )}
         </div>

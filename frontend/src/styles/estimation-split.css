@@ -84,6 +84,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
   background: white;
   overflow: hidden;
 }
@@ -104,7 +105,7 @@
   transition: background var(--transition-fast);
   flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: 50;
 }
 
 .estimation-resize-handle:hover,
@@ -159,6 +160,7 @@
 
 .estimation-chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-4);
   display: flex;
@@ -273,6 +275,7 @@
 }
 
 .estimation-chat-input-container {
+  flex-shrink: 0;
   padding: var(--space-4);
   border-top: 1px solid var(--color-gray-200);
   background: white;
@@ -1537,6 +1540,7 @@
    ============================================================================= */
 
 .chat-input-container {
+  flex-shrink: 0;
   padding: var(--space-4);
   border-top: 1px solid var(--color-gray-200);
   background: white;
@@ -3354,10 +3358,19 @@
 }
 
 /* Panel classes for better specificity */
-.estimation-panel-chat,
+.estimation-panel-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 .estimation-panel-preview {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

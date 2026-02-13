@@ -267,26 +267,31 @@ export function ProjectDetailPage() {
         </div>
       </header>
 
-      {/* Project Title Section */}
+      {/* Project Title Section - Compact Layout */}
       <div className="project-detail-title-section">
         <div className="project-detail-title-row">
-          <h1 className="project-detail-page-title">{project.name}</h1>
-          <Badge variant={getStatusBadgeVariant(project.status)}>
-            {project.status.toUpperCase()}
-          </Badge>
+          <div className="project-detail-title-left">
+            <h1 className="project-detail-page-title">{project.name}</h1>
+            <Badge variant={getStatusBadgeVariant(project.status)}>
+              {project.status.toUpperCase()}
+            </Badge>
+          </div>
+          <div className="project-detail-title-right">
+            {project.platform && (
+              <span className="project-detail-platform">{project.platform}</span>
+            )}
+            <span className="project-detail-meta-item">
+              <Calendar style={{ width: 14, height: 14 }} />
+              {formatDate(project.created_at)}
+            </span>
+          </div>
         </div>
-        <div className="project-detail-meta">
-          {project.platform && (
-            <span className="project-detail-platform">{project.platform}</span>
-          )}
-          <span className="project-detail-meta-item">
-            <Calendar style={{ width: 14, height: 14 }} />
-            Created {formatDate(project.created_at)}
-          </span>
-          {project.description && (
+        {project.description && (
+          <div className="project-detail-description-row">
+            <span className="project-detail-description-label">Description</span>
             <p className="project-detail-description">{project.description}</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content - EstimateChat handles the full workflow */}
