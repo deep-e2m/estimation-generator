@@ -2566,12 +2566,21 @@
   font-weight: var(--font-weight-medium);
 }
 
+.project-detail-meta .project-detail-description {
+  flex-basis: 100%;
+  width: 100%;
+}
+
 .project-detail-description {
   margin-top: var(--space-3);
   font-size: var(--font-size-base);
   color: var(--color-gray-600);
   line-height: 1.6;
-  max-width: 800px;
+  width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 /* Stat Cards Row - 4 cards */
@@ -2686,9 +2695,18 @@
 /* Main Content Split Layout */
 .project-detail-content {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0; /* Critical for flex children to shrink properly */
+  min-height: 420px;
   overflow: hidden;
+}
+
+/* Split view inside project detail: fill content area instead of viewport calc */
+.project-detail-content .estimation-split-container-wrapper {
+  height: 100%;
+  min-height: 0;
+  flex: 1;
 }
 
 /* Left Panel - Estimate Preview */

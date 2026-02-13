@@ -454,9 +454,6 @@ function QuoteTableRow({ quote }: { quote: QuoteSummary }) {
         <p className="font-medium text-gray-900">
           {quote.totals.total_expected_hours} hrs
         </p>
-        <p className="text-sm text-gray-500">
-          {formatCurrency(quote.totals.total_cost, quote.totals.currency)}
-        </p>
       </td>
       <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-500">
         {formatSmartDate(quote.created_at)}
@@ -518,9 +515,6 @@ function QuoteMobileCard({ quote }: { quote: QuoteSummary }) {
         <div>
           <p className="text-lg font-semibold text-gray-900">
             {quote.totals.total_expected_hours} hrs
-          </p>
-          <p className="text-sm text-gray-500">
-            {formatCurrency(quote.totals.total_cost, quote.totals.currency)}
           </p>
         </div>
         <ChevronRight className="h-5 w-5 text-gray-400" />

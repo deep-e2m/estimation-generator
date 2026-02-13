@@ -49,7 +49,6 @@ class ProjectBase(BaseModel):
     )
     description: Optional[str] = Field(
         default=None,
-        max_length=5000,
         description="Detailed project description",
         examples=["Complete redesign of the client's WordPress e-commerce site with new branding"],
     )
@@ -99,7 +98,6 @@ class ProjectUpdate(BaseModel):
     )
     description: Optional[str] = Field(
         default=None,
-        max_length=5000,
         description="Detailed project description",
     )
     additional_instructions: Optional[str] = Field(

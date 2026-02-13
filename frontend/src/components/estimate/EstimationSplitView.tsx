@@ -19,10 +19,7 @@ import {
   MessageSquare, 
   History, 
   Download,
-  AlertTriangle,
   GripVertical,
-  CheckCircle,
-  XCircle,
   Sparkles,
   Eye,
 } from 'lucide-react';
@@ -35,29 +32,33 @@ import { EstimationPreviewPanel } from './EstimationPreviewPanel';
 type TabType = 'estimate' | 'chat' | 'history' | 'export';
 type MobileViewType = 'chat' | 'preview';
 
+interface StatCardData {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  icon: React.ReactNode;
+  iconClass: string;
+}
+
 interface EstimationSplitViewProps {
   project: Project;
   initialQuote: Quote;
   onQuoteUpdated?: (quote: Quote) => void;
-}
-
-interface ValidationIssue {
-  type: 'warning' | 'error';
-  message: string;
-  section?: string;
+  statCards?: StatCardData[];
 }
 
 export function EstimationSplitView({
   project,
   initialQuote,
   onQuoteUpdated,
+  statCards,
 }: EstimationSplitViewProps) {
   const navigate = useNavigate();
   const [currentQuote, setCurrentQuote] = useState<Quote>(initialQuote);
   const [recentChanges, setRecentChanges] = useState<ChangeDescription[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('estimate');
   const [mobileView, setMobileView] = useState<MobileViewType>('chat');
-  const [splitRatio, setSplitRatio] = useState(40); // Chat panel width percentage
+  const [splitRatio, setSplitRatio] = useState(35); // Chat 35%, rest to preview
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,59 +73,6 @@ export function EstimationSplitView({
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  // Validation logic
-  const validationIssues = useCallback((): ValidationIssue[] => {
-    const issues: ValidationIssue[] = [];
-    const totalHours = currentQuote.total_hours ?? currentQuote.content?.totals?.total_expected_hours ?? 0;
-    const requirementsCount = currentQuote.requirements?.text?.length ? 1 : 0;
-
-    // Check for zero hours
-    if (totalHours === 0) {
-      issues.push({
-        type: 'error',
-        message: 'Total hours is 0. Please add time estimates.',
-        section: 'totals',
-      });
-    }
-
-    // Check for unrealistically low hours
-    if (totalHours > 0 && requirementsCount > 0 && totalHours / requirementsCount < 2) {
-      issues.push({
-        type: 'warning',
-        message: `Average ${(totalHours / requirementsCount).toFixed(1)}h per requirement seems low. Consider reviewing estimates.`,
-        section: 'requirements',
-      });
-    }
-
-    // Check for missing testing phase
-    const hasTestingPhase = currentQuote.content?.deliverables?.some(
-      (d) => d.name.toLowerCase().includes('test') || d.name.toLowerCase().includes('qa')
-    );
-    if (!hasTestingPhase) {
-      issues.push({
-        type: 'warning',
-        message: 'No testing or QA phase found. Consider adding testing time.',
-        section: 'deliverables',
-      });
-    }
-
-    // Check for missing buffer/contingency
-    const hasBuffer = currentQuote.content?.deliverables?.some(
-      (d) => d.name.toLowerCase().includes('buffer') || d.name.toLowerCase().includes('contingency')
-    );
-    if (!hasBuffer && totalHours > 40) {
-      issues.push({
-        type: 'warning',
-        message: 'No buffer/contingency time allocated. Consider adding 10-20% buffer.',
-        section: 'deliverables',
-      });
-    }
-
-    return issues;
-  }, [currentQuote]);
-
-  const issues = validationIssues();
 
   const handleQuoteUpdate = useCallback(
     (updatedQuote: Quote, changes: ChangeDescription[]) => {
@@ -218,14 +166,6 @@ export function EstimationSplitView({
               <span>Export</span>
             </button>
           </div>
-
-          {/* Validation Warnings Badge */}
-          {issues.length > 0 && (
-            <div className="estimation-validation-badge">
-              <AlertTriangle className="h-4 w-4" />
-              <span>{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>
-            </div>
-          )}
         </div>
       )}
 
@@ -248,36 +188,6 @@ export function EstimationSplitView({
             <Eye className="h-4 w-4" />
             <span>Preview</span>
           </motion.button>
-          
-          {/* Validation badge on mobile */}
-          {issues.length > 0 && (
-            <div className="estimation-mobile-validation">
-              <AlertTriangle className="h-4 w-4" />
-              <span>{issues.length}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Validation Issues Banner */}
-      {issues.length > 0 && activeTab === 'estimate' && (
-        <div className="estimation-validation-banner">
-          <div className="estimation-validation-header">
-            <AlertTriangle className="h-5 w-5" />
-            <h4>Validation Issues</h4>
-          </div>
-          <ul className="estimation-validation-list">
-            {issues.map((issue, index) => (
-              <li key={index} className={cn('estimation-validation-item', issue.type)}>
-                {issue.type === 'error' ? (
-                  <XCircle className="h-4 w-4" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4" />
-                )}
-                <span>{issue.message}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 
@@ -312,10 +222,34 @@ export function EstimationSplitView({
               style={{ width: `${100 - splitRatio}%` }}
             >
           {activeTab === 'estimate' && (
-            <EstimationPreviewPanel
-              quote={currentQuote}
-              recentChanges={recentChanges}
-            />
+            <div className="estimation-panel-preview-wrap">
+              {/* Stat Cards above preview */}
+              {statCards && statCards.length > 0 && (
+                <div className="estimation-stat-cards">
+                  {statCards.map((card, index) => (
+                    <div key={index} className={`estimation-stat-card ${card.iconClass}`}>
+                      <div className="estimation-stat-content">
+                        <span className="estimation-stat-label">{card.label}</span>
+                        <span className="estimation-stat-value">{card.value}</span>
+                        {card.subtext && (
+                          <span className="estimation-stat-subtext">{card.subtext}</span>
+                        )}
+                      </div>
+                      <div className={`estimation-stat-icon ${card.iconClass}`}>
+                        {card.icon}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="estimation-panel-preview-inner">
+                <EstimationPreviewPanel
+                  quote={currentQuote}
+                  recentChanges={recentChanges}
+                />
+              </div>
+            </div>
           )}
 
           {activeTab === 'chat' && (

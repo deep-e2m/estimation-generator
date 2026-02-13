@@ -1,38 +1,42 @@
 /**
- * Renders markdown-like content (headings, bold, lists) for quote/estimate body.
- * Used when backend returns content as a single markdown string.
+ * MarkdownBody Component
+ * Renders AI-generated quote content as a professional document.
+ * 
+ * Handles ACTUAL AI output format which includes:
+ * - Markdown headers: ### 1. Title, #### 2.1 Subtitle
+ * - Markdown bold: **text** for labels and emphasis
+ * - Bullet lists: - item
+ * - Separators: ---
+ * - Intro text that should be hidden
  */
 
 import React from 'react';
 
-function parseLine(line: string, key: string): React.ReactNode {
-  const trimmed = line.trim();
-  if (!trimmed) return <br key={key} />;
+/**
+ * Strip markdown bold markers from text
+ */
+function stripBold(text: string): string {
+  return text.replace(/\*\*([^*]+)\*\*/g, '$1');
+}
 
-  if (/^####\s/.test(trimmed)) {
-    return <h4 key={key} className="text-sm font-semibold mt-3 mb-1">{trimmed.slice(5)}</h4>;
-  }
-  if (/^###\s/.test(trimmed)) {
-    return <h3 key={key} className="text-base font-semibold mt-3 mb-1">{trimmed.slice(4)}</h3>;
-  }
-  if (/^##\s/.test(trimmed)) {
-    return <h2 key={key} className="text-lg font-semibold mt-4 mb-2">{trimmed.slice(3)}</h2>;
-  }
-  if (/^#\s/.test(trimmed)) {
-    return <h1 key={key} className="text-xl font-bold mt-4 mb-2">{trimmed.slice(2)}</h1>;
-  }
-
-  // Inline **bold**
+/**
+ * Parse inline formatting (bold) and return React nodes
+ */
+function parseInlineFormatting(text: string, keyPrefix: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
-  let rest = trimmed;
+  let rest = text;
   let i = 0;
+
   while (rest.length > 0) {
+    // Bold: **text**
     const bold = /^\*\*([^*]+)\*\*/.exec(rest);
     if (bold) {
-      parts.push(<strong key={`${key}-b-${i++}`}>{bold[1]}</strong>);
+      parts.push(<strong key={`${keyPrefix}-b-${i++}`}>{bold[1]}</strong>);
       rest = rest.slice(bold[0].length);
       continue;
     }
+    
+    // Find next bold marker
     const nextBold = rest.indexOf('**');
     if (nextBold === -1) {
       parts.push(rest);
@@ -42,33 +46,294 @@ function parseLine(line: string, key: string): React.ReactNode {
     rest = rest.slice(nextBold);
   }
 
-  if (/^[-*]\s/.test(trimmed)) {
-    return (
-      <li key={key} className="ml-4 list-disc">
-        {parts}
-      </li>
-    );
-  }
-  if (/^\d+\.\s/.test(trimmed)) {
-    return (
-      <li key={key} className="ml-4 list-decimal">
-        {parts}
-      </li>
-    );
-  }
-
-  return (
-    <p key={key} className="mb-2 leading-relaxed text-gray-700">
-      {parts}
-    </p>
-  );
+  return parts.length > 0 ? parts : [text];
 }
 
+/**
+ * Detect line type from AI-generated content
+ */
+function getLineType(line: string, trimmed: string): {
+  type: 'empty' | 'separator' | 'intro' | 'doc-title' | 'section-header' | 'subsection-header' | 'metadata' | 'bullet' | 'page-name' | 'paragraph';
+  content: string;
+  sectionNumber?: string;
+} {
+  // Empty line
+  if (!trimmed) {
+    return { type: 'empty', content: '' };
+  }
+
+  // Horizontal separator: --- or more
+  if (/^-{3,}$/.test(trimmed)) {
+    return { type: 'separator', content: '' };
+  }
+
+  // Skip intro lines (AI often adds these)
+  if (
+    trimmed.toLowerCase().startsWith("here's your") ||
+    trimmed.toLowerCase().startsWith("here is your") ||
+    trimmed.toLowerCase().includes('following the e2m standard') ||
+    trimmed.toLowerCase().includes('professional project quote') ||
+    trimmed.toLowerCase().startsWith('let me know if')
+  ) {
+    return { type: 'intro', content: '' };
+  }
+
+  // Document title: **Website Development Scope & Commercial Estimate**
+  if (
+    trimmed.includes('Scope & Commercial Estimate') ||
+    trimmed.includes('Scope and Commercial Estimate') ||
+    trimmed.includes('Commercial Estimate')
+  ) {
+    return { type: 'doc-title', content: stripBold(trimmed) };
+  }
+
+  // Markdown section header: ### 1. Title or ### N. Title
+  const markdownSectionMatch = trimmed.match(/^#{1,4}\s*(\d+)\.\s+(.+)$/);
+  if (markdownSectionMatch) {
+    return {
+      type: 'section-header',
+      content: stripBold(markdownSectionMatch[2]),
+      sectionNumber: markdownSectionMatch[1],
+    };
+  }
+
+  // Markdown subsection header: #### 2.1 Title or ### 2.1 Title
+  const markdownSubsectionMatch = trimmed.match(/^#{1,4}\s*(\d+\.\d+)\s+(.+)$/);
+  if (markdownSubsectionMatch) {
+    return {
+      type: 'subsection-header',
+      content: stripBold(markdownSubsectionMatch[2]),
+      sectionNumber: markdownSubsectionMatch[1],
+    };
+  }
+
+  // Plain section header: 1. Project Overview (number at start, capital letter follows)
+  const plainSectionMatch = trimmed.match(/^(\d+)\.\s+([A-Z][A-Za-z&\s,]+.*)$/);
+  if (plainSectionMatch && !trimmed.match(/^\d+\.\d/)) {
+    return {
+      type: 'section-header',
+      content: stripBold(plainSectionMatch[2]),
+      sectionNumber: plainSectionMatch[1],
+    };
+  }
+
+  // Plain subsection header: 2.1 English Website
+  const plainSubsectionMatch = trimmed.match(/^(\d+\.\d+)\s+(.+)$/);
+  if (plainSubsectionMatch) {
+    return {
+      type: 'subsection-header',
+      content: stripBold(plainSubsectionMatch[2]),
+      sectionNumber: plainSubsectionMatch[1],
+    };
+  }
+
+  // Metadata lines: **Prepared for:** value or Prepared for: value
+  // Also handles: **Platform:** value, **Date:** value, etc.
+  const metadataPatterns = [
+    /^\*\*(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline|Client will provide|Plugins|Note)[:\s]*\*\*:?\s*(.*)$/i,
+    /^\*\*(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline)[:\s]*\*\*\s*(.*)$/i,
+    /^(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline|Client will provide|Plugins|Note):\s*(.*)$/i,
+  ];
+  
+  for (const pattern of metadataPatterns) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const label = match[1];
+      const value = match[2] ? stripBold(match[2]) : '';
+      return { type: 'metadata', content: `${label}:|${value}` };
+    }
+  }
+
+  // Bullet points: - item or * item
+  if (/^[-*]\s/.test(trimmed)) {
+    return { type: 'bullet', content: trimmed.slice(2) };
+  }
+
+  // Bold page/feature name: **Homepage** or **Dashboard**
+  const boldOnlyMatch = trimmed.match(/^\*\*([^*]+)\*\*$/);
+  if (boldOnlyMatch) {
+    return { type: 'page-name', content: boldOnlyMatch[1] };
+  }
+
+  // Regular paragraph
+  return { type: 'paragraph', content: trimmed };
+}
+
+/**
+ * Parse a single line and return appropriate React element
+ */
+function parseLine(line: string, key: string): { node: React.ReactNode; type: string } | null {
+  const trimmed = line.trim();
+  const { type, content, sectionNumber } = getLineType(line, trimmed);
+
+  switch (type) {
+    case 'empty':
+      return { node: <div key={key} className="md-spacer" />, type };
+
+    case 'separator':
+      return { node: <hr key={key} className="md-separator" />, type };
+
+    case 'intro':
+      // Skip intro lines entirely
+      return null;
+
+    case 'doc-title':
+      return {
+        node: (
+          <h1 key={key} className="md-doc-title">
+            {content}
+          </h1>
+        ),
+        type,
+      };
+
+    case 'section-header':
+      return {
+        node: (
+          <h2 key={key} className="md-section-header">
+            <span className="md-section-number">{sectionNumber}.</span>
+            <span className="md-section-text">{parseInlineFormatting(content, key)}</span>
+          </h2>
+        ),
+        type,
+      };
+
+    case 'subsection-header':
+      return {
+        node: (
+          <h3 key={key} className="md-subsection-header">
+            <span className="md-subsection-number">{sectionNumber}</span>
+            <span className="md-subsection-text">{parseInlineFormatting(content, key)}</span>
+          </h3>
+        ),
+        type,
+      };
+
+    case 'metadata':
+      const [label, value] = content.split('|');
+      return {
+        node: (
+          <div key={key} className="md-metadata-row">
+            <span className="md-metadata-label">{label}</span>
+            <span className="md-metadata-value">{value || ''}</span>
+          </div>
+        ),
+        type,
+      };
+
+    case 'bullet':
+      return {
+        node: (
+          <li key={key} className="md-bullet-item">
+            {parseInlineFormatting(content, key)}
+          </li>
+        ),
+        type,
+      };
+
+    case 'page-name':
+      return {
+        node: (
+          <h4 key={key} className="md-page-name">
+            {content}
+          </h4>
+        ),
+        type,
+      };
+
+    case 'paragraph':
+    default:
+      return {
+        node: (
+          <p key={key} className="md-paragraph">
+            {parseInlineFormatting(content, key)}
+          </p>
+        ),
+        type,
+      };
+  }
+}
+
+/**
+ * Group consecutive elements (bullet lists, metadata blocks)
+ */
+function groupElements(elements: Array<{ node: React.ReactNode; type: string; key: string }>): React.ReactNode[] {
+  const result: React.ReactNode[] = [];
+  let currentBullets: React.ReactNode[] = [];
+  let currentMetadata: React.ReactNode[] = [];
+  let bulletKey = 0;
+  let metadataKey = 0;
+
+  const flushBullets = () => {
+    if (currentBullets.length > 0) {
+      result.push(
+        <ul key={`bullet-list-${bulletKey++}`} className="md-bullet-list">
+          {currentBullets}
+        </ul>
+      );
+      currentBullets = [];
+    }
+  };
+
+  const flushMetadata = () => {
+    if (currentMetadata.length > 0) {
+      result.push(
+        <div key={`metadata-block-${metadataKey++}`} className="md-metadata-block">
+          {currentMetadata}
+        </div>
+      );
+      currentMetadata = [];
+    }
+  };
+
+  elements.forEach((el) => {
+    if (el.type === 'bullet') {
+      flushMetadata();
+      currentBullets.push(el.node);
+    } else if (el.type === 'metadata') {
+      flushBullets();
+      currentMetadata.push(el.node);
+    } else {
+      flushBullets();
+      flushMetadata();
+      result.push(el.node);
+    }
+  });
+
+  // Flush remaining
+  flushBullets();
+  flushMetadata();
+
+  return result;
+}
+
+/**
+ * Main component - renders markdown content as professional document
+ */
 export function MarkdownBody({ content }: { content: string }) {
   const lines = content.split('\n');
+  
+  // Parse all lines, filtering out null (skipped) lines
+  const parsedElements = lines
+    .map((line, index) => {
+      const result = parseLine(line, `md-${index}`);
+      if (result === null) return null;
+      return {
+        node: result.node,
+        type: result.type,
+        key: `md-${index}`,
+      };
+    })
+    .filter((el): el is { node: React.ReactNode; type: string; key: string } => el !== null);
+
+  // Group consecutive elements (bullets, metadata)
+  const groupedElements = groupElements(parsedElements);
+
   return (
-    <div className="markdown-body prose prose-sm max-w-none">
-      {lines.map((line, index) => parseLine(line, `md-${index}`))}
+    <div className="markdown-body md-document">
+      {groupedElements}
     </div>
   );
 }
+
+export default MarkdownBody;

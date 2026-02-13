@@ -71,6 +71,13 @@ class QuoteGenerationService {
               generation_cost: number;
               rag_context_used: boolean;
               generation_time_ms: number;
+              analysis?: {
+                requirements_count: number;
+                tasks_count: number;
+                sections_count: number;
+                pages_count: number;
+                complexity_factors: string[];
+              };
             };
           };
         }>(
@@ -177,8 +184,38 @@ class QuoteGenerationService {
   async generateQuote(
     projectId: string,
     request: GenerateQuoteRequest
-  ): Promise<{ quote: Quote; generation_metadata?: { model_used?: string; tokens_used?: number; generation_cost?: number; rag_context_used?: boolean; generation_time_ms?: number } }> {
-    type GenMeta = { model_used?: string; tokens_used?: number; generation_cost?: number; rag_context_used?: boolean; generation_time_ms?: number };
+  ): Promise<{ 
+    quote: Quote; 
+    generation_metadata?: { 
+      model_used?: string; 
+      tokens_used?: number; 
+      generation_cost?: number; 
+      rag_context_used?: boolean; 
+      generation_time_ms?: number;
+      analysis?: {
+        requirements_count: number;
+        tasks_count: number;
+        sections_count: number;
+        pages_count: number;
+        complexity_factors: string[];
+      };
+    } 
+  }> {
+    type AnalysisMeta = {
+      requirements_count: number;
+      tasks_count: number;
+      sections_count: number;
+      pages_count: number;
+      complexity_factors: string[];
+    };
+    type GenMeta = { 
+      model_used?: string; 
+      tokens_used?: number; 
+      generation_cost?: number; 
+      rag_context_used?: boolean; 
+      generation_time_ms?: number;
+      analysis?: AnalysisMeta;
+    };
     const response = await apiClient.post<{
       success: boolean;
       data: { quote: ApiQuote; generation_metadata?: GenMeta };

@@ -1,6 +1,6 @@
 /**
  * Estimation Generation UI Styles
- * Modern Gen-Z design with glass-morphism, animations, and vibrant gradients
+ * Light theme matching the rest of the application
  */
 
 /* ============================================
@@ -10,7 +10,7 @@
 .estimation-gen-container {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+  background: linear-gradient(135deg, var(--color-gray-50) 0%, var(--color-gray-100) 50%, var(--color-gray-50) 100%);
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
@@ -32,9 +32,9 @@
   width: 200%;
   height: 200%;
   background: 
-    radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 80% 60%, rgba(168, 85, 247, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 40% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 30%);
+    radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 60%, rgba(168, 85, 247, 0.06) 0%, transparent 40%),
+    radial-gradient(circle at 40% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 30%);
   animation: bgRotate 30s linear infinite;
 }
 
@@ -43,17 +43,17 @@
   to { transform: rotate(360deg); }
 }
 
-/* Floating particles */
+/* Subtle floating particles */
 .estimation-gen-bg-decoration::after {
   content: '';
   position: absolute;
   inset: 0;
   background-image: 
-    radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 2%),
-    radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 1.5%),
-    radial-gradient(circle at 20% 70%, rgba(255, 255, 255, 0.025) 0%, transparent 2%),
-    radial-gradient(circle at 70% 80%, rgba(255, 255, 255, 0.02) 0%, transparent 1.5%),
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.015) 0%, transparent 3%);
+    radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.03) 0%, transparent 2%),
+    radial-gradient(circle at 80% 30%, rgba(168, 85, 247, 0.02) 0%, transparent 1.5%),
+    radial-gradient(circle at 20% 70%, rgba(59, 130, 246, 0.025) 0%, transparent 2%),
+    radial-gradient(circle at 70% 80%, rgba(168, 85, 247, 0.02) 0%, transparent 1.5%),
+    radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.015) 0%, transparent 3%);
   animation: particleFloat 8s ease-in-out infinite;
 }
 
@@ -72,8 +72,8 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid var(--color-gray-200);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
 }
 
@@ -88,17 +88,17 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1-5) var(--space-3);
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.2));
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: linear-gradient(135deg, var(--color-primary-50), var(--color-purple-50));
+  border: 1px solid var(--color-primary-200);
   border-radius: var(--radius-full);
-  color: #c4b5fd;
+  color: var(--color-primary-700);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.025em;
 }
 
 .estimation-gen-ai-badge svg {
-  color: #a855f7;
+  color: var(--color-primary-500);
   animation: sparkle 2s ease-in-out infinite;
 }
 
@@ -108,7 +108,7 @@
 }
 
 .estimation-gen-title {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   margin: 0;
@@ -119,10 +119,10 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: white;
+  border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-lg);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-gray-600);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
@@ -130,9 +130,9 @@
 }
 
 .estimation-gen-cancel-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--color-error-50);
+  border-color: var(--color-error-200);
+  color: var(--color-error-600);
 }
 
 .estimation-gen-cancel-btn:disabled {
@@ -161,29 +161,29 @@
 .estimation-gen-timeline {
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: white;
+  border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-2xl);
   padding: var(--space-5);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .estimation-gen-timeline-header {
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-gray-100);
 }
 
 .estimation-gen-timeline-header h2 {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   margin: 0 0 var(--space-1) 0;
 }
 
 .estimation-gen-timeline-header p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-gray-500);
   font-size: var(--font-size-sm);
   margin: 0;
 }
@@ -207,8 +207,8 @@
 }
 
 .estimation-gen-step-card.active {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: var(--color-primary-50);
+  border: 1px solid var(--color-primary-200);
 }
 
 .estimation-gen-step-card.complete {
@@ -237,7 +237,7 @@
 
 .estimation-gen-step-line {
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-gray-200);
   border-radius: var(--radius-full);
   transition: all var(--transition-slow);
 }
@@ -247,7 +247,7 @@
 }
 
 .estimation-gen-step-line.active {
-  background: linear-gradient(180deg, var(--color-primary-500), rgba(255, 255, 255, 0.1));
+  background: linear-gradient(180deg, var(--color-primary-500), var(--color-gray-200));
 }
 
 /* Step Icon */
@@ -260,29 +260,29 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  background: var(--color-gray-100);
+  border: 1px solid var(--color-gray-200);
+  color: var(--color-gray-400);
   transition: all var(--transition-normal);
 }
 
-.estimation-gen-step-icon.color-primary { color: var(--color-primary-400); }
-.estimation-gen-step-icon.color-purple { color: var(--color-purple-400); }
+.estimation-gen-step-icon.color-primary { color: var(--color-primary-500); }
+.estimation-gen-step-icon.color-purple { color: var(--color-purple-500); }
 .estimation-gen-step-icon.color-info { color: var(--color-info-500); }
 .estimation-gen-step-icon.color-warning { color: var(--color-warning-500); }
 .estimation-gen-step-icon.color-success { color: var(--color-success-500); }
 
 .estimation-gen-step-icon.active {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(168, 85, 247, 0.2));
-  border-color: rgba(59, 130, 246, 0.4);
-  color: var(--color-primary-400);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  background: linear-gradient(135deg, var(--color-primary-100), var(--color-purple-100));
+  border-color: var(--color-primary-300);
+  color: var(--color-primary-600);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
 .estimation-gen-step-icon.complete {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2));
-  border-color: rgba(34, 197, 94, 0.4);
-  color: var(--color-success-400);
+  background: linear-gradient(135deg, var(--color-success-100), var(--color-success-50));
+  border-color: var(--color-success-300);
+  color: var(--color-success-600);
 }
 
 /* Spinner animation for active step */
@@ -305,18 +305,18 @@
 }
 
 .estimation-gen-step-label {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   margin: 0 0 var(--space-0-5) 0;
 }
 
 .estimation-gen-step-card.pending .estimation-gen-step-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-gray-500);
 }
 
 .estimation-gen-step-desc {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-gray-500);
   font-size: var(--font-size-xs);
   margin: 0;
   line-height: var(--line-height-relaxed);
@@ -327,7 +327,7 @@
   align-items: center;
   gap: var(--space-1);
   margin-top: var(--space-1);
-  color: var(--color-success-400);
+  color: var(--color-success-600);
   font-size: 11px;
   font-weight: var(--font-weight-medium);
 }
@@ -360,7 +360,7 @@
 
 .estimation-gen-progress-svg {
   transform: rotate(0deg);
-  filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.3));
+  filter: drop-shadow(0 0 30px rgba(59, 130, 246, 0.2));
 }
 
 .estimation-gen-progress-circle {
@@ -377,18 +377,18 @@
 }
 
 .estimation-gen-progress-value {
-  color: white;
+  color: var(--color-gray-900);
   font-size: 48px;
   font-weight: var(--font-weight-bold);
   line-height: 1;
-  background: linear-gradient(135deg, white, rgba(255, 255, 255, 0.8));
+  background: linear-gradient(135deg, var(--color-primary-600), var(--color-purple-600));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .estimation-gen-progress-label {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-gray-500);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   margin-top: var(--space-1);
@@ -404,10 +404,10 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2));
-  border: 1px solid rgba(34, 197, 94, 0.4);
+  background: linear-gradient(135deg, var(--color-success-100), var(--color-success-50));
+  border: 1px solid var(--color-success-300);
   border-radius: var(--radius-full);
-  color: var(--color-success-400);
+  color: var(--color-success-700);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   animation: bounceIn 0.5s ease-out;
@@ -425,14 +425,14 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: white;
+  border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-full);
-  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
 }
 
 .estimation-gen-current-step-text {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-gray-700);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
 }
@@ -470,15 +470,15 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-4);
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--color-error-50);
+  border: 1px solid var(--color-error-200);
   border-radius: var(--radius-xl);
   max-width: 300px;
   text-align: center;
 }
 
 .estimation-gen-error p {
-  color: #fca5a5;
+  color: var(--color-error-700);
   font-size: var(--font-size-sm);
   margin: 0;
 }
@@ -518,14 +518,14 @@
 }
 
 .estimation-gen-stats-header h2 {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   margin: 0 0 var(--space-1) 0;
 }
 
 .estimation-gen-stats-header p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-gray-500);
   font-size: var(--font-size-sm);
   margin: 0;
 }
@@ -542,16 +542,16 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-4);
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: white;
+  border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-xl);
   transition: all var(--transition-normal);
+  box-shadow: var(--shadow-sm);
 }
 
 .estimation-gen-stat:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--color-gray-50);
+  border-color: var(--color-gray-300);
 }
 
 .estimation-gen-stat-icon {
@@ -564,18 +564,18 @@
 }
 
 .estimation-gen-stat.color-primary .estimation-gen-stat-icon {
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--color-primary-400);
+  background: var(--color-primary-100);
+  color: var(--color-primary-600);
 }
 
 .estimation-gen-stat.color-purple .estimation-gen-stat-icon {
-  background: rgba(168, 85, 247, 0.15);
-  color: var(--color-purple-400);
+  background: var(--color-purple-100);
+  color: var(--color-purple-600);
 }
 
 .estimation-gen-stat.color-success .estimation-gen-stat-icon {
-  background: rgba(34, 197, 94, 0.15);
-  color: var(--color-success-400);
+  background: var(--color-success-100);
+  color: var(--color-success-600);
 }
 
 .estimation-gen-stat-content {
@@ -585,7 +585,7 @@
 }
 
 .estimation-gen-stat-value {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   line-height: 1;
@@ -593,7 +593,7 @@
 }
 
 .estimation-gen-stat-label {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-gray-500);
   font-size: var(--font-size-xs);
 }
 
@@ -601,14 +601,14 @@
 .estimation-gen-project-card {
   margin-top: auto;
   padding: var(--space-4);
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: white;
+  border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
 }
 
 .estimation-gen-project-card h3 {
-  color: white;
+  color: var(--color-gray-900);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   margin: 0 0 var(--space-3) 0;
@@ -627,12 +627,12 @@
 }
 
 .estimation-gen-project-row .label {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-gray-500);
   font-size: var(--font-size-xs);
 }
 
 .estimation-gen-project-row .value {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-gray-700);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
 }

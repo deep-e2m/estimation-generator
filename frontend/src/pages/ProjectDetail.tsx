@@ -21,7 +21,6 @@ import {
   FileText,
   Zap,
   Calendar,
-  DollarSign,
   ListChecks,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -162,9 +161,33 @@ export function ProjectDetailPage() {
 
   // Calculate stats
   const totalHours = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
-  const totalCost = quote?.total_cost ?? quote?.content?.totals?.total_cost ?? 0;
   const requirementsCount = quote?.content?.deliverables?.length ?? 0;
   const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
+
+  // Prepare stat cards data for EstimateChat
+  const statCardsData = [
+    {
+      label: 'Total Hours',
+      value: totalHours > 0 ? `${totalHours}h` : '—',
+      subtext: totalHours > 0 ? 'Estimated effort' : 'No estimate yet',
+      icon: <Clock style={{ width: 24, height: 24 }} />,
+      iconClass: 'hours',
+    },
+    {
+      label: 'Requirements',
+      value: requirementsCount > 0 ? requirementsCount : '—',
+      subtext: requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements',
+      icon: <ListChecks style={{ width: 24, height: 24 }} />,
+      iconClass: 'requirements',
+    },
+    {
+      label: 'Last Updated',
+      value: formatRelativeTime(lastUpdated),
+      subtext: formatDate(lastUpdated),
+      icon: <FileText style={{ width: 24, height: 24 }} />,
+      iconClass: 'updated',
+    },
+  ];
 
   if (!id) {
     return (
@@ -266,38 +289,6 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="project-stat-cards">
-        <StatCard
-          label="Total Hours"
-          value={totalHours > 0 ? `${totalHours}h` : '—'}
-          subtext={totalHours > 0 ? 'Estimated effort' : 'No estimate yet'}
-          icon={<Clock style={{ width: 24, height: 24 }} />}
-          iconClass="hours"
-        />
-        <StatCard
-          label="Total Cost"
-          value={totalCost > 0 ? `$${totalCost.toLocaleString()}` : '—'}
-          subtext={totalCost > 0 ? 'Project budget' : 'No cost calculated'}
-          icon={<DollarSign style={{ width: 24, height: 24 }} />}
-          iconClass="cost"
-        />
-        <StatCard
-          label="Requirements"
-          value={requirementsCount > 0 ? requirementsCount : '—'}
-          subtext={requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements'}
-          icon={<ListChecks style={{ width: 24, height: 24 }} />}
-          iconClass="requirements"
-        />
-        <StatCard
-          label="Last Updated"
-          value={formatRelativeTime(lastUpdated)}
-          subtext={formatDate(lastUpdated)}
-          icon={<FileText style={{ width: 24, height: 24 }} />}
-          iconClass="updated"
-        />
-      </div>
-
       {/* Main Content - EstimateChat handles the full workflow */}
       <div className="project-detail-content">
         {isQuoteLoading ? (
@@ -310,6 +301,7 @@ export function ProjectDetailPage() {
             project={project}
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
+            statCards={statCardsData}
           />
         )}
       </div>

@@ -11,7 +11,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Clock, DollarSign, ChevronRight, Plus } from 'lucide-react';
+import { FileText, Clock, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatRelativeTime } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -106,12 +106,6 @@ function QuoteCard({ quote, onClick }: QuoteCardProps) {
                 <Clock className="h-4 w-4 text-gray-400" />
                 <span className="font-medium">{quote.totals.total_expected_hours}</span>
                 <span className="text-gray-400">hrs</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-sm text-gray-600">
-                <DollarSign className="h-4 w-4 text-gray-400" />
-                <span className="font-medium">
-                  {formatCurrency(quote.totals.total_cost, quote.totals.currency)}
-                </span>
               </div>
             </div>
 

@@ -306,7 +306,7 @@ function RecentQuotesList({ quotes, isLoading }: RecentQuotesProps) {
           </div>
           <div className="dashboard-list-item-meta">
             <span className="dashboard-quote-amount">
-              {formatCurrency(quote.totals.total_cost)}
+              {quote.totals.total_expected_hours}h
             </span>
             <Badge variant={getStatusBadgeVariant(quote.status)}>
               {quote.status}

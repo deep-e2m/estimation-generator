@@ -54,11 +54,6 @@ class QuoteCreate(QuoteBase):
         ge=0,
         description="Estimated total hours",
     )
-    total_cost: Decimal = Field(
-        default=Decimal("0.00"),
-        ge=0,
-        description="Estimated total cost",
-    )
     platform: str = Field(
         ...,
         min_length=1,
@@ -100,6 +95,10 @@ class QuoteGenerateRequest(BaseModel):
         default=None,
         description="Additional project context (client name, industry, etc.)",
     )
+    regenerate: bool = Field(
+        default=False,
+        description="If true, delete existing estimate and create new one. Otherwise fail if estimate exists.",
+    )
 
 
 class QuoteUpdate(BaseModel):
@@ -126,11 +125,6 @@ class QuoteUpdate(BaseModel):
         default=None,
         ge=0,
         description="Estimated total hours",
-    )
-    total_cost: Optional[Decimal] = Field(
-        default=None,
-        ge=0,
-        description="Estimated total cost",
     )
     complexity: Optional[Complexity] = Field(
         default=None,
@@ -214,7 +208,6 @@ class QuoteResponse(BaseModel):
     content: str = Field(..., description="Quote content/document")
     requirements: str = Field(..., description="Client requirements")
     total_hours: Decimal = Field(..., description="Estimated total hours")
-    total_cost: Decimal = Field(..., description="Estimated total cost")
     platform: str = Field(..., description="Target platform")
     complexity: Complexity = Field(..., description="Project complexity")
     status: QuoteStatus = Field(..., description="Current quote status")
@@ -248,7 +241,6 @@ class QuoteSummaryResponse(BaseModel):
     project_id: UUID = Field(..., description="ID of the parent project")
     title: str = Field(..., description="Quote title")
     total_hours: Decimal = Field(..., description="Estimated total hours")
-    total_cost: Decimal = Field(..., description="Estimated total cost")
     platform: str = Field(..., description="Target platform")
     complexity: Complexity = Field(..., description="Project complexity")
     status: QuoteStatus = Field(..., description="Current quote status")
@@ -290,6 +282,16 @@ class RefineQuoteResponse(BaseModel):
 # =============================================================================
 
 
+class AnalysisMetadata(BaseModel):
+    """Metadata about the analysis performed during quote generation."""
+
+    requirements_count: int = Field(default=0, description="Number of requirements identified")
+    tasks_count: int = Field(default=0, description="Number of tasks/deliverables identified")
+    sections_count: int = Field(default=0, description="Number of sections in the quote")
+    pages_count: int = Field(default=0, description="Number of pages identified")
+    complexity_factors: list[str] = Field(default_factory=list, description="Factors affecting complexity")
+
+
 class QuoteGenerationMetadata(BaseModel):
     """Metadata about the quote generation process."""
 
@@ -298,6 +300,7 @@ class QuoteGenerationMetadata(BaseModel):
     generation_cost: float = Field(..., description="Cost of the LLM API call")
     rag_context_used: bool = Field(..., description="Whether RAG context was used")
     generation_time_ms: Optional[int] = Field(None, description="Generation time in milliseconds")
+    analysis: Optional[AnalysisMetadata] = Field(None, description="Analysis metadata from quote generation")
 
 
 class QuoteGenerationResponse(BaseModel):

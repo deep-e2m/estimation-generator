@@ -27,60 +27,105 @@ When generating quotes, you should:
 
 Your estimates should be thorough but concise, focusing on deliverables the client cares about.""",
 
-    "chat_assistant": """You are an expert project estimator and quote generator for E2M Solutions, a digital agency specializing in web development.
+    "chat_assistant": """You are an expert project estimator and quote generator for E2M Solutions, a digital agency specializing in WordPress web development.
 
-**CRITICAL RULE: When the user pastes project requirements (descriptions of pages, features, functionality, design needs), you MUST immediately generate a complete professional quote WITHOUT asking any clarifying questions.**
+**CRITICAL RULE: When the user pastes project requirements (descriptions of pages, features, functionality, design needs), you MUST immediately generate a complete professional quote using the ESTIMATION FORMAT below WITHOUT asking any clarifying questions.**
 
-## Quote Generation Format
+## ESTIMATION FORMAT (E2M Standard)
 
-When generating a quote, ALWAYS use this exact format:
-
----
-
-**Prepared for:** [Client Name if provided, otherwise "Client"]
-**Prepared by:** E2M Solutions
-**Date:** [Current Date]
+When generating a quote, ALWAYS use this exact professional format:
 
 ---
 
-## 1. Project Overview
-[2-3 sentence summary of the project scope and objectives]
+Prepared for: [Client Name if provided, otherwise "Client"]
+Prepared by: E2M Solutions 
+Date: [Current Date]
+Website Development Scope & Commercial Estimate
+Platform: [WordPress + Page Builder]
+Languages: [English only, or English & Japanese, etc.]
 
-## 2. Estimated Hours & Timeline
-- **Total Estimated Hours:** X - Y hours
-- **Estimated Timeline:** X - Y weeks
-- **Hourly Rate:** As per agreed terms
+1. Project Overview
+[2-4 sentence summary covering: what the project involves, key features (industry pages, case studies, blog, multilingual, etc.), and the goal (scalable, easy-to-manage, performance-optimized website).]
 
-## 3. Scope of Work
+2. Website Structure & Page Scope
+2.1 [Primary Language] Website – Core Pages ([X] Pages)
+Homepage
+[Feature 1]
+[Feature 2]
+[Feature 3]
+[Page Name]
+[Feature/section description]
+[Feature/section description]
+[Continue listing all pages with their key features/sections]
+Case Studies ([X] Pages)
+[Key elements included]
+Blog Listing Page
+[Key features]
 
-### Phase 1: [Phase Name] (X-Y hours)
-| Task | Hours |
-|------|-------|
-| [Task description] | X-Y |
-| [Task description] | X-Y |
+2.2 Blog Infrastructure
+Blog post template (single post design)
+Category and search-ready structure
+SEO-friendly markup
 
-### Phase 2: [Phase Name] (X-Y hours)
-| Task | Hours |
-|------|-------|
-| [Task description] | X-Y |
-| [Task description] | X-Y |
+2.3 [Secondary Language] Website – Approx. [X] Pages (if applicable)
+[List translated pages]
 
-[Continue for all phases]
+3. Multi-language Setup (if applicable)
+Implementation of WPML or Polylang (client to confirm preference)
+Language switcher setup
+Language-specific URLs
+[Any special font support]
 
-## 4. Assumptions & Client Responsibilities
-- [Assumption 1]
-- [Assumption 2]
-- Client will provide [specific items]
+4. Interactive Tools (Embed Only) (if applicable)
+Note: Tools will be designed externally and provided for embedding. Only embed support is included.
+[Tool Name 1]
+Embedded on [Page Name]
+[Tool Name 2]
+Embedded on [Page Name]
 
-## 5. Exclusions / Out of Scope
-- [Exclusion 1]
-- [Exclusion 2]
-- [Any items not included]
+5. Content Migration & SEO Safety (if applicable)
+Migration of [X]–[Y] existing blog posts
+Migration of images and media
+Image optimization for the web
+Setup of 301 redirects to preserve SEO rankings
+URL structure validation
 
-## 6. Next Steps
-1. Review and approve this estimate
-2. [Next step]
-3. [Next step]
+6. Development Approach
+[Page builder]-based page development
+Reusable global components
+Responsive design for desktop, tablet, and mobile
+Clean and scalable structure for future expansion
+Performance and speed optimization
+Cross-browser compatibility testing
+
+7. Estimated Effort & Timeline
+Estimated Total Effort
+[X] – [Y] hours
+Estimated Timeline
+[X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+
+8. Assumptions & Client Responsibilities
+Client will provide:
+Final content for all pages ([list languages])
+Final designs in layered Figma, XD or PSD files
+[Translations for secondary language pages if applicable]
+Branding assets (logos, brand guidelines)
+Access to the current website for content migration
+[Any specific assumptions about the project scope]
+Plugins:
+Paid plugins ([list relevant plugins]) to be purchased by the client
+Interactive tools (if applicable):
+Only embed support is included
+No internal logic or backend development included
+
+10. Exclusions
+Copywriting and translation services
+Custom animations beyond [page builder] standard capabilities
+CRM, marketing automation, or backend system integrations
+Ongoing maintenance or support (can be quoted separately)
+[Any project-specific exclusions]
+
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
 
 ---
 
@@ -90,12 +135,14 @@ When generating a quote, ALWAYS use this exact format:
 - Simple brochure site (5 pages): 40-50 hours
 - Medium business site (10 pages): 80-100 hours
 - Large site (15-20 pages): 150-180 hours
+- Large multilingual site (20+ English, 10+ secondary language): 180-220 hours
 - E-commerce with WooCommerce (20 products): 120-150 hours
 - Custom theme development: 60-80 hours
 - Page builder (Elementor/Bricks) per page: 4-8 hours
 - Complex page with animations: 8-12 hours
 - Plugin customization: 10-20 hours
-- Multi-language setup (WPML): 15-25 hours
+- Multi-language setup (WPML/Polylang): 15-25 hours
+- Japanese font integration: 5-10 hours
 - WooCommerce product setup: 1-2 hours per product
 - WooCommerce custom functionality: 20-40 hours
 
@@ -107,20 +154,28 @@ When generating a quote, ALWAYS use this exact format:
 
 **Content & Migration:**
 - Content migration per page: 1-2 hours
+- Blog post migration (per post): 0.5-1 hour
 - SEO setup: 10-20 hours
+- 301 redirects setup: 5-10 hours
 - Analytics setup: 4-8 hours
+
+**Interactive Tools (Embed Only):**
+- Tool embed per tool: 3-5 hours
 
 **Testing & QA:**
 - Add 10-15% of development hours for QA
 - Cross-browser testing: 8-16 hours
+- Multi-language QA: 8-12 hours
 
 ## Behavior Rules
-1. If requirements are pasted, GENERATE THE QUOTE IMMEDIATELY
+1. If requirements are pasted, GENERATE THE QUOTE IMMEDIATELY using ESTIMATION FORMAT
 2. Do NOT ask "Can you provide more details?" - just make reasonable assumptions
 3. Do NOT say "I need clarification" - include assumptions in your quote
-4. Be specific with hours - avoid vague ranges like "20-100 hours"
-5. Break down work into clear phases with task-level estimates
-6. Include everything a professional quote needs
+4. Be specific with hours - use tight ranges like "180-200 hours" not "100-300 hours"
+5. Structure the quote EXACTLY as shown in ESTIMATION FORMAT above
+6. Use plain text formatting, NO markdown tables, NO emojis
+7. Number sections as shown (1, 2, 2.1, 2.2, 3, etc.)
+8. Always end with the ballpark estimate note
 
 For general questions not related to requirements, respond helpfully and conversationally.""",
 
@@ -225,39 +280,100 @@ Please format the quote according to this template:
 """
     else:
         user_content += """
-## Output Format
-Please structure your quote with the following sections:
+## Output Format: ESTIMATION FORMAT (E2M Standard)
+Please structure your quote EXACTLY as follows using plain text (no markdown tables, no emojis):
 
-1. **Project Overview**
-   - Brief summary of the project scope
-   - Key objectives
+---
 
-2. **Scope of Work**
-   - Detailed breakdown of deliverables
-   - Organized by phase or feature area
+Prepared for: [Client Name or "Client"]
+Prepared by: E2M Solutions 
+Date: [Current Date]
+Website Development Scope & Commercial Estimate
+Platform: [Platform + Page Builder]
+Languages: [List languages]
 
-3. **Estimated Hours**
-   - Total hours: X to Y hours
-   - Breakdown by phase/area (if applicable)
+1. Project Overview
+[2-4 sentence summary of what the project covers, key features, and the goal.]
 
-4. **Timeline**
-   - Estimated duration: X to Y weeks
-   - Key milestones (if applicable)
+2. Website Structure & Page Scope
+2.1 [Primary Language] Website – Core Pages ([X] Pages)
+[List each page with its key features/sections as sub-items]
+Homepage
+[Feature 1]
+[Feature 2]
+[Page Name]
+[Feature description]
+[Continue for all pages...]
+Case Studies ([X] Pages) (if applicable)
+[Key elements]
+Blog Listing Page (if applicable)
+[Key features]
 
-5. **Assumptions**
-   - What is included in the estimate
-   - Client responsibilities
-   - Technical assumptions
+2.2 Blog Infrastructure (if applicable)
+Blog post template (single post design)
+Category and search-ready structure
+SEO-friendly markup
 
-6. **Out of Scope / Exclusions**
-   - What is NOT included
-   - Items that would require additional estimation
+2.3 [Secondary Language] Website – Approx. [X] Pages (if applicable)
+[List translated pages]
 
-7. **Risks and Dependencies** (if applicable)
-   - Potential blockers
-   - External dependencies
+3. Multi-language Setup (if applicable)
+Implementation of WPML or Polylang (client to confirm preference)
+Language switcher setup
+Language-specific URLs
 
-Be specific with hours and avoid vague ranges. Base estimates on typical complexity for the platform.
+4. Interactive Tools (Embed Only) (if applicable)
+Note: Tools will be designed externally and provided for embedding. Only embed support is included.
+[Tool Name]
+Embedded on [Page Name]
+
+5. Content Migration & SEO Safety (if applicable)
+Migration of [X]–[Y] existing blog posts
+Migration of images and media
+Image optimization for the web
+Setup of 301 redirects to preserve SEO rankings
+URL structure validation
+
+6. Development Approach
+[Page builder]-based page development
+Reusable global components
+Responsive design for desktop, tablet, and mobile
+Clean and scalable structure for future expansion
+Performance and speed optimization
+Cross-browser compatibility testing
+
+7. Estimated Effort & Timeline
+Estimated Total Effort
+[X] – [Y] hours
+Estimated Timeline
+[X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+
+8. Assumptions & Client Responsibilities
+Client will provide:
+[List all client responsibilities]
+Final content for all pages
+Final designs in layered Figma, XD or PSD files
+Branding assets (logos, brand guidelines)
+Access to the current website for content migration
+[Project-specific assumptions]
+Plugins:
+Paid plugins ([list]) to be purchased by the client
+Interactive tools (if applicable):
+Only embed support is included
+No internal logic or backend development included
+
+10. Exclusions
+[List all exclusions]
+Copywriting and translation services
+Custom animations beyond [page builder] standard capabilities
+CRM, marketing automation, or backend system integrations
+Ongoing maintenance or support (can be quoted separately)
+
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
+
+---
+
+Be specific with hours (use tight ranges like 180-200, not 100-300). Base estimates on platform complexity.
 """
 
     messages.append({"role": "user", "content": user_content})
@@ -602,75 +718,256 @@ def format_rag_context(
     return "\n---\n".join(context_parts)
 
 
+# E2M Standard Estimation Format Template
+ESTIMATION_FORMAT = """
+## ESTIMATION FORMAT (E2M Standard)
+
+This is the professional quote format used by E2M Solutions for all project estimates.
+
+### Structure:
+
+---
+
+Prepared for: [Client Name]
+Prepared by: E2M Solutions 
+Date: [Date]
+Website Development Scope & Commercial Estimate
+Platform: [Platform + Page Builder]
+Languages: [Languages]
+
+1. Project Overview
+[2-4 sentence summary covering what the project involves, key features, and goals]
+
+2. Website Structure & Page Scope
+2.1 [Primary Language] Website – Core Pages ([X] Pages)
+[List each page with key features as sub-items]
+
+2.2 Blog Infrastructure (if applicable)
+[Blog-related deliverables]
+
+2.3 [Secondary Language] Website – Approx. [X] Pages (if applicable)
+[List translated pages]
+
+3. Multi-language Setup (if applicable)
+[WPML/Polylang implementation details]
+
+4. Interactive Tools (Embed Only) (if applicable)
+[List tools and where they will be embedded]
+
+5. Content Migration & SEO Safety (if applicable)
+[Migration scope and SEO preservation details]
+
+6. Development Approach
+[Technical approach and best practices]
+
+7. Estimated Effort & Timeline
+Estimated Total Effort: [X] – [Y] hours
+Estimated Timeline: [X] – [Y] weeks
+
+8. Assumptions & Client Responsibilities
+[Client deliverables, plugin responsibilities, technical assumptions]
+
+10. Exclusions
+[What is NOT included in the estimate]
+
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
+
+---
+
+### Key Rules:
+- Use plain text formatting (no markdown tables, no emojis)
+- Number sections as shown (1, 2, 2.1, 2.2, 3, etc.)
+- Use sub-items without bullet points for page features
+- Keep hour ranges tight (e.g., 180-200 hours, not 100-300 hours)
+- Always end with the ballpark estimate note
+"""
+
+
 # Prompt templates for specific use cases
 QUOTE_TEMPLATES = {
+    "estimation_format": """
+Prepared for: [Client Name]
+Prepared by: E2M Solutions 
+Date: [Date]
+Website Development Scope & Commercial Estimate
+Platform: WordPress + [Page Builder]
+Languages: [Languages]
+
+1. Project Overview
+This project covers the design support, development, and deployment of a [single/multi]-language WordPress website using [Page Builder].
+The website will include [key features summary].
+The goal is to deliver a scalable, easy-to-manage, and performance-optimized website suitable for long-term growth.
+
+2. Website Structure & Page Scope
+2.1 [Primary Language] Website – Core Pages ([X] Pages)
+Homepage
+[List features]
+[Continue for all pages with their features as sub-items]
+
+2.2 Blog Infrastructure
+Blog post template (single post design)
+Category and search-ready structure
+SEO-friendly markup
+
+2.3 [Secondary Language] Website – Approx. [X] Pages (if applicable)
+[List translated pages]
+
+3. Multi-language Setup (if applicable)
+Implementation of WPML or Polylang (client to confirm preference)
+Language switcher setup
+Language-specific URLs
+
+4. Interactive Tools (Embed Only) (if applicable)
+Note: Tools will be designed externally and provided for embedding. Only embed support is included.
+[Tool Name]
+Embedded on [Page Name]
+
+5. Content Migration & SEO Safety (if applicable)
+Migration of [X]–[Y] existing blog posts
+Migration of images and media
+Image optimization for the web
+Setup of 301 redirects to preserve SEO rankings
+URL structure validation
+
+6. Development Approach
+[Page builder]-based page development
+Reusable global components
+Responsive design for desktop, tablet, and mobile
+Clean and scalable structure for future expansion
+Performance and speed optimization
+Cross-browser compatibility testing
+
+7. Estimated Effort & Timeline
+Estimated Total Effort
+[X] – [Y] hours
+Estimated Timeline
+[X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+
+8. Assumptions & Client Responsibilities
+Client will provide:
+Final content for all pages
+Final designs in layered Figma, XD or PSD files
+Branding assets (logos, brand guidelines)
+Access to the current website for content migration
+Plugins:
+Paid plugins to be purchased by the client
+Interactive tools (if applicable):
+Only embed support is included
+No internal logic or backend development included
+
+10. Exclusions
+Copywriting and translation services
+Custom animations beyond [page builder] standard capabilities
+CRM, marketing automation, or backend system integrations
+Ongoing maintenance or support (can be quoted separately)
+
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
+""",
+
     "wordpress_branding_refresh": """
-## Quote Structure for WordPress Branding Refresh
+Prepared for: [Client Name]
+Prepared by: E2M Solutions 
+Date: [Date]
+Website Branding Refresh Scope & Commercial Estimate
+Platform: WordPress + [Page Builder]
 
-### Project Overview
-Brief description of the branding refresh scope.
+1. Project Overview
+This project covers a visual branding refresh of the existing WordPress website without changes to site structure, navigation, or content.
+The goal is to modernize the front-end appearance while maintaining all existing functionality.
 
-### Scope of Work
-A. Global Styling & Visual Consistency
-B. Header & Footer Optimization
-C. Homepage Enhancements
-D. Internal Page Element Optimization
-E. Imagery & Iconography Refresh
+2. Scope of Work
+2.1 Global Styling & Visual Consistency
+Updated typography and color scheme
+Refined spacing and visual hierarchy
+2.2 Header & Footer Optimization
+Visual updates to global components
+2.3 Homepage Enhancements
+Refreshed hero section
+Updated content sections styling
+2.4 Internal Page Element Optimization
+Consistent styling across all page templates
+2.5 Imagery & Iconography Refresh
+Updated icons and imagery styling
 
-### Deliverables
-- Updated front-end visual styles
-- Refined global components
-- QA and responsive testing
+6. Development Approach
+HTML/CSS-level visual adjustments only
+Responsive design preservation
+Cross-browser compatibility testing
 
-### Estimated Hours
-X to Y hours
+7. Estimated Effort & Timeline
+Estimated Total Effort
+[X] – [Y] hours
+Estimated Timeline
+[X] – [Y] business days from project kickoff.
 
-### Timeline
-X to Y business days
+8. Assumptions & Client Responsibilities
+Client will provide:
+Final brand fonts and imagery
+Access to the current website
+No changes to site structure, navigation, or content
+Updates limited to HTML/CSS-level adjustments
 
-### Assumptions
-- No changes to site structure, navigation, or content
-- Updates limited to HTML/CSS-level adjustments
-- Client will provide final brand fonts and imagery
+10. Exclusions
+Page rebuilds or layout restructuring
+Content writing or copy updates
+SEO, performance, or accessibility audits
+Ongoing maintenance or support
 
-### Out of Scope
-- Page rebuilds or layout restructuring
-- Content writing or copy updates
-- SEO, performance, or accessibility audits
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
 """,
 
     "wordpress_full_build": """
-## Quote Structure for WordPress Full Build
+Prepared for: [Client Name]
+Prepared by: E2M Solutions 
+Date: [Date]
+Website Development Scope & Commercial Estimate
+Platform: WordPress + [Page Builder]
+Languages: [Languages]
 
-### Project Overview
-Summary of the website build including platform and key features.
+1. Project Overview
+This project covers the design support, development, and deployment of a WordPress website using [Page Builder].
+The website will include [summary of pages and features].
+The goal is to deliver a scalable, easy-to-manage, and performance-optimized website suitable for long-term growth.
 
-### Website Structure
-- List of pages with brief descriptions
+2. Website Structure & Page Scope
+2.1 Core Pages ([X] Pages)
+Homepage
+[Key features]
+[List all other pages with their features]
 
-### Design Phase (if applicable)
-- Design hours breakdown
+2.2 Blog Infrastructure (if applicable)
+Blog post template (single post design)
+Category and search-ready structure
 
-### Development Phase
-- Setup and configuration
-- Page development
-- Plugin integration
-- Content migration (if applicable)
+6. Development Approach
+WordPress installation and configuration
+Theme setup ([Theme Name] or custom child theme)
+[Page builder] integration
+[Page builder]-based page development
+Reusable global components
+Responsive design for desktop, tablet, and mobile
+Performance and speed optimization
+Cross-browser compatibility testing
 
-### Estimated Total Hours
-X to Y hours
+7. Estimated Effort & Timeline
+Estimated Total Effort
+[X] – [Y] hours
+Estimated Timeline
+[X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
 
-### Estimated Timeline
-X to Y weeks
+8. Assumptions & Client Responsibilities
+Client will provide:
+Final content for all pages
+Final designs in layered Figma, XD or PSD files
+Branding assets (logos, brand guidelines)
+Plugins:
+Paid plugins ([list]) to be purchased by the client
 
-### Assumptions
-- Client provides final content
-- Client provides final designs (if design not included)
-- Listed plugins to be purchased by client
+10. Exclusions
+Copywriting services
+Custom animations beyond [page builder] standard capabilities
+Ongoing maintenance or support (can be quoted separately)
 
-### Exclusions
-- Copywriting services
-- Custom animations beyond standard capabilities
-- Ongoing maintenance
+Note: This is a ballpark estimate based on the details we have. Once we receive the final designs, we will re-evaluate and provide a final estimate.
 """,
 }

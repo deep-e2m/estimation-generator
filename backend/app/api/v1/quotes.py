@@ -22,6 +22,7 @@ from app.models.project import Project
 from app.models.quote import Complexity, Quote, QuoteStatus
 from app.schemas.project import PaginationMeta
 from app.schemas.quote import (
+    AnalysisMetadata,
     ChangeDescription,
     QuoteCreate,
     QuoteDataResponse,
@@ -78,6 +79,109 @@ async def get_quote_with_access_check(
         raise api_error(status.HTTP_403_FORBIDDEN, "ACCESS_DENIED", "You don't have access to this quote")
 
     return quote
+
+
+def extract_analysis_metadata(content: str, requirements: str, breakdown: list | None = None) -> AnalysisMetadata:
+    """
+    Extract analysis metadata from generated quote content.
+    
+    Parses the content to count requirements, tasks, sections, and pages.
+    """
+    import re
+    
+    # Count requirements from the original requirements text
+    # Look for numbered items, bullet points, or lines with key requirement indicators
+    req_patterns = [
+        r'^\s*[-•*]\s+',  # Bullet points
+        r'^\s*\d+[.)]\s+',  # Numbered items
+        r'(?:need|require|want|must|should)\s+',  # Requirement keywords
+    ]
+    requirements_lines = requirements.split('\n')
+    requirements_count = 0
+    for line in requirements_lines:
+        line = line.strip()
+        if not line:
+            continue
+        for pattern in req_patterns:
+            if re.search(pattern, line, re.IGNORECASE):
+                requirements_count += 1
+                break
+        else:
+            # Count non-empty lines that look like requirements
+            if len(line) > 20 and not line.startswith('#'):
+                requirements_count += 1
+    
+    # Ensure minimum count
+    requirements_count = max(requirements_count, 3)
+    
+    # Count tasks from the breakdown if available, or from content
+    tasks_count = 0
+    if breakdown and isinstance(breakdown, list):
+        tasks_count = len(breakdown)
+    else:
+        # Count from content - look for task-like patterns
+        task_patterns = [
+            r'^\s*[-•]\s+[A-Z]',  # Bullet items starting with capital
+            r'^\d+\.\d+\s+',  # Subsection numbers like 2.1, 2.2
+            r'(?:page|template|section|component|feature)\s*[:\-]',  # Task keywords
+        ]
+        content_lines = content.split('\n')
+        for line in content_lines:
+            for pattern in task_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    tasks_count += 1
+                    break
+    
+    # Ensure minimum tasks
+    tasks_count = max(tasks_count, 5)
+    
+    # Count sections (numbered headers like "1.", "2.", etc.)
+    section_pattern = r'^\s*\d+\.\s+[A-Z]'
+    sections_count = len(re.findall(section_pattern, content, re.MULTILINE))
+    sections_count = max(sections_count, 1)
+    
+    # Count pages mentioned
+    page_patterns = [
+        r'(?:homepage|home\s+page)',
+        r'(?:about|contact|services?|portfolio|blog|faq)\s+page',
+        r'(?:landing\s+page)',
+        r'\(\d+\s+pages?\)',
+        r'(?:core\s+pages?|inner\s+pages?)',
+    ]
+    pages_count = 0
+    for pattern in page_patterns:
+        matches = re.findall(pattern, content, re.IGNORECASE)
+        pages_count += len(matches)
+    
+    # Try to extract explicit page count
+    explicit_page_match = re.search(r'(\d+)\s+(?:core\s+)?pages?', content, re.IGNORECASE)
+    if explicit_page_match:
+        pages_count = max(pages_count, int(explicit_page_match.group(1)))
+    
+    pages_count = max(pages_count, 1)
+    
+    # Identify complexity factors
+    complexity_factors = []
+    if re.search(r'multi[- ]?language|bilingual|multilingual|wpml|polylang', content, re.IGNORECASE):
+        complexity_factors.append('Multi-language support')
+    if re.search(r'e[- ]?commerce|woocommerce|shop|cart|checkout', content, re.IGNORECASE):
+        complexity_factors.append('E-commerce functionality')
+    if re.search(r'custom\s+(?:plugin|theme|development)', content, re.IGNORECASE):
+        complexity_factors.append('Custom development')
+    if re.search(r'migration|migrate|transfer', content, re.IGNORECASE):
+        complexity_factors.append('Content migration')
+    if re.search(r'api|integration|third[- ]?party', content, re.IGNORECASE):
+        complexity_factors.append('API/Integration work')
+    if re.search(r'interactive|calculator|tool|embed', content, re.IGNORECASE):
+        complexity_factors.append('Interactive tools')
+    
+    return AnalysisMetadata(
+        requirements_count=requirements_count,
+        tasks_count=tasks_count,
+        sections_count=sections_count,
+        pages_count=pages_count,
+        complexity_factors=complexity_factors,
+    )
 
 
 # =============================================================================
@@ -142,8 +246,8 @@ async def list_all_quotes(
         sort_column = Quote.updated_at
     elif sort_by == "title":
         sort_column = Quote.title
-    elif sort_by == "total_cost":
-        sort_column = Quote.total_cost
+    elif sort_by == "total_hours":
+        sort_column = Quote.total_hours
     elif sort_by == "status":
         sort_column = Quote.status
 
@@ -171,7 +275,6 @@ async def list_all_quotes(
             project_id=quote.project_id,
             title=quote.title,
             total_hours=quote.total_hours,
-            total_cost=quote.total_cost,
             platform=quote.platform,
             complexity=quote.complexity,
             status=quote.status,
@@ -261,23 +364,33 @@ async def generate_quote(
     # Verify project access
     project = await get_project_with_access(project_id, current_user, db)
 
-    # ENFORCE SINGLE ESTIMATE PER PROJECT
+    # ENFORCE SINGLE ESTIMATE PER PROJECT (unless regenerate=True)
     # Check if project already has an estimate
     existing_quote_query = select(Quote).where(Quote.project_id == project_id)
     existing_result = await db.execute(existing_quote_query)
     existing_quote = existing_result.scalar_one_or_none()
 
     if existing_quote is not None:
-        logger.warning(
-            "Attempted to create second estimate for project: project_id=%s, existing_quote=%s",
-            project_id,
-            existing_quote.id,
-        )
-        raise api_error(
-            status.HTTP_400_BAD_REQUEST,
-            "ESTIMATE_ALREADY_EXISTS",
-            "This project already has an estimate. Only ONE estimate per project is allowed. To create a different estimate, please create a new project.",
-        )
+        if request.regenerate:
+            # Delete existing quote to allow regeneration
+            logger.info(
+                "Regenerating estimate: deleting existing quote_id=%s for project_id=%s",
+                existing_quote.id,
+                project_id,
+            )
+            await db.delete(existing_quote)
+            await db.commit()
+        else:
+            logger.warning(
+                "Attempted to create second estimate for project: project_id=%s, existing_quote=%s",
+                project_id,
+                existing_quote.id,
+            )
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "ESTIMATE_ALREADY_EXISTS",
+                "This project already has an estimate. Only ONE estimate per project is allowed. Set regenerate=true to replace the existing estimate.",
+            )
 
     # Get RAG context if enabled
     rag_context = None
@@ -386,7 +499,6 @@ async def generate_quote(
                 content=new_quote.content,
                 requirements=new_quote.requirements,
                 total_hours=new_quote.total_hours,
-                total_cost=new_quote.total_cost,
                 platform=new_quote.platform,
                 complexity=new_quote.complexity,
                 status=new_quote.status,
@@ -403,6 +515,11 @@ async def generate_quote(
                 generation_cost=result.generation_cost,
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
+                analysis=extract_analysis_metadata(
+                    content=result.content,
+                    requirements=request.requirements,
+                    breakdown=result.breakdown,
+                ),
             ),
         ),
     )
@@ -485,7 +602,6 @@ async def list_project_quotes(
             project_id=quote.project_id,
             title=quote.title,
             total_hours=quote.total_hours,
-            total_cost=quote.total_cost,
             platform=quote.platform,
             complexity=quote.complexity,
             status=quote.status,
@@ -582,7 +698,6 @@ async def get_quote(
             content=quote.content,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
-            total_cost=quote.total_cost,
             platform=quote.platform,
             complexity=quote.complexity,
             status=quote.status,
@@ -667,7 +782,6 @@ async def update_quote(
             content=quote.content,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
-            total_cost=quote.total_cost,
             platform=quote.platform,
             complexity=quote.complexity,
             status=quote.status,
@@ -769,7 +883,6 @@ async def update_quote_status(
             content=quote.content,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
-            total_cost=quote.total_cost,
             platform=quote.platform,
             complexity=quote.complexity,
             status=quote.status,
@@ -942,7 +1055,7 @@ async def regenerate_quote(
     # Update quote
     quote.content = result.content
     quote.total_hours = Decimal(str(result.total_hours or quote.total_hours))
-    quote.total_cost = Decimal(str(result.total_cost or quote.total_cost))
+    quote.total_cost = Decimal("0")  # Cost not used
 
     # Update extra_data
     existing_metadata = quote.extra_data or {}
@@ -982,7 +1095,6 @@ async def regenerate_quote(
                 content=quote.content,
                 requirements=quote.requirements,
                 total_hours=quote.total_hours,
-                total_cost=quote.total_cost,
                 platform=quote.platform,
                 complexity=quote.complexity,
                 status=quote.status,
@@ -999,6 +1111,11 @@ async def regenerate_quote(
                 generation_cost=result.generation_cost,
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
+                analysis=extract_analysis_metadata(
+                    content=result.content,
+                    requirements=quote.requirements,
+                    breakdown=result.breakdown,
+                ),
             ),
         ),
     )
@@ -1138,7 +1255,6 @@ async def refine_quote(
                 content=quote.content,
                 requirements=quote.requirements,
                 total_hours=quote.total_hours,
-                total_cost=quote.total_cost,
                 platform=quote.platform,
                 complexity=quote.complexity,
                 status=quote.status,
@@ -1275,7 +1391,6 @@ async def export_quote_docx(
         requirements=quote.requirements,
         content=quote.content,
         total_hours=quote.total_hours,
-        total_cost=quote.total_cost,
         platform=quote.platform,
         complexity=quote.complexity.value,
         created_at=quote.created_at,

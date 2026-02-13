@@ -71,7 +71,6 @@ export const QuoteEditor: React.FC<QuoteEditorProps> = ({
       total_expected_hours: deliverables.reduce((sum, d) => sum + d.estimate.expected_hours, 0),
       total_cost: 0,
     };
-    totals.total_cost = totals.total_expected_hours * totals.hourly_rate;
 
     return {
       executive_summary: executiveSummary,

@@ -152,7 +152,7 @@ function CircularProgress({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--color-gray-100)"
+          stroke="var(--color-gray-200)"
           strokeWidth={strokeWidth}
         />
         {/* Gradient definition */}
@@ -303,12 +303,15 @@ export function EstimationGenerationUI({
     tasksIdentified: 0,
     hoursCalculated: 0,
   });
+  const [retryCount, setRetryCount] = useState(0); // Used to trigger retry
+  const [analysisReceived, setAnalysisReceived] = useState(false); // Track if real data received
 
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const stepStartTimeRef = useRef<number>(Date.now());
+  const hasStartedRef = useRef<boolean>(false); // Prevent duplicate API calls in StrictMode
 
-  // Simulate step progression
+  // Simulate step progression (visual feedback while waiting for API)
   useEffect(() => {
     if (!isGenerating || error) return;
 
@@ -320,13 +323,16 @@ export function EstimationGenerationUI({
         const nextProgress = prev + 1.5;
         const currentStepThreshold = (currentStep + 1) * progressPerStep;
 
-        // Update live stats based on progress
-        if (nextProgress < 20) {
-          setLiveStats(s => ({ ...s, requirementsFound: Math.min(Math.floor(nextProgress * 0.6), 12) }));
-        } else if (nextProgress < 40) {
-          setLiveStats(s => ({ ...s, requirementsFound: 12, tasksIdentified: Math.min(Math.floor((nextProgress - 20) * 0.4), 8) }));
-        } else if (nextProgress < 80) {
-          setLiveStats(s => ({ ...s, tasksIdentified: 8, hoursCalculated: Math.min(Math.floor((nextProgress - 40) * 3.5), 142) }));
+        // Update live stats based on progress ONLY if real data hasn't been received
+        // These are placeholder animations while waiting for the actual API response
+        if (!analysisReceived) {
+          if (nextProgress < 20) {
+            setLiveStats(s => ({ ...s, requirementsFound: Math.min(Math.floor(nextProgress * 0.3), 5) }));
+          } else if (nextProgress < 40) {
+            setLiveStats(s => ({ ...s, requirementsFound: Math.min(Math.floor(nextProgress * 0.4), 8), tasksIdentified: Math.min(Math.floor((nextProgress - 20) * 0.2), 4) }));
+          } else if (nextProgress < 80) {
+            setLiveStats(s => ({ ...s, tasksIdentified: Math.min(Math.floor((nextProgress - 20) * 0.3), 6), hoursCalculated: Math.min(Math.floor((nextProgress - 40) * 2), 80) }));
+          }
         }
 
         // Check if we should advance to next step
@@ -343,10 +349,17 @@ export function EstimationGenerationUI({
     }, stepDuration / (progressPerStep / 1.5));
 
     return () => clearInterval(timer);
-  }, [isGenerating, currentStep, error]);
+  }, [isGenerating, currentStep, error, analysisReceived]);
 
-  // Start generation
+  // Start generation - with guard against React StrictMode double-mounting
   useEffect(() => {
+    // Prevent duplicate API calls in React StrictMode (development)
+    // hasStartedRef is reset when retryCount changes
+    if (hasStartedRef.current && retryCount === 0) {
+      return;
+    }
+    hasStartedRef.current = true;
+
     const startGeneration = async () => {
       abortControllerRef.current = new AbortController();
       stepStartTimeRef.current = Date.now();
@@ -354,6 +367,7 @@ export function EstimationGenerationUI({
       const request: GenerateQuoteRequest = {
         requirements: project.description || '',
         use_rag: true,
+        regenerate: true, // Allow regeneration if estimate already exists
         project_context: {
           platform: project.platform,
           project_name: project.name,
@@ -363,17 +377,19 @@ export function EstimationGenerationUI({
       try {
         const response = await quoteService.generateQuote(project.id, request);
         const quote = response.quote;
+        const analysis = response.generation_metadata?.analysis;
 
         // Complete final step
         const timeTaken = (Date.now() - stepStartTimeRef.current) / 1000;
         setStepTimes(prev => ({ ...prev, [currentStep]: timeTaken }));
         setCompletedSteps(prev => [...prev, ANALYSIS_STEPS.length - 1]);
         
-        // Set final stats
+        // Set REAL stats from API response
+        setAnalysisReceived(true);
         setLiveStats({
-          requirementsFound: 12,
-          tasksIdentified: 8,
-          hoursCalculated: quote.total_hours || 142,
+          requirementsFound: analysis?.requirements_count || Math.max(5, Math.floor((project.description?.length || 100) / 50)),
+          tasksIdentified: analysis?.tasks_count || Math.max(5, Math.floor((quote.total_hours || 100) / 20)),
+          hoursCalculated: quote.total_hours || 0,
         });
         
         setProgress(100);
@@ -385,8 +401,11 @@ export function EstimationGenerationUI({
         }, 1500);
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-          setError(err instanceof Error ? err.message : 'Failed to generate estimate');
+          const errorMessage = err instanceof Error ? err.message : 'Failed to generate estimate';
+          setError(errorMessage);
           setIsGenerating(false);
+          // Reset progress to show error state clearly
+          setProgress(0);
         }
       }
     };
@@ -396,7 +415,7 @@ export function EstimationGenerationUI({
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [project]);
+  }, [project, retryCount]);
 
   const handleCancel = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -405,12 +424,17 @@ export function EstimationGenerationUI({
   }, [onCancel]);
 
   const handleRetry = useCallback(() => {
+    // Reset state and trigger new generation via retryCount
+    hasStartedRef.current = false;
     setError(null);
     setIsGenerating(true);
     setCurrentStep(0);
     setCompletedSteps([]);
     setProgress(0);
+    setStepTimes({});
     setLiveStats({ requirementsFound: 0, tasksIdentified: 0, hoursCalculated: 0 });
+    setAnalysisReceived(false);
+    setRetryCount(prev => prev + 1); // Trigger useEffect to run again
   }, []);
 
   return (
