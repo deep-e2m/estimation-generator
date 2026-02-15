@@ -46,6 +46,7 @@ from app.schemas.quote import (
 )
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
+from app.services.export.html_utils import is_html_content, sanitize_html
 from app.services.quote_refinement_service import get_refinement_service
 
 logger = logging.getLogger(__name__)
@@ -497,6 +498,7 @@ async def generate_quote(
                 project_id=new_quote.project_id,
                 title=new_quote.title,
                 content=new_quote.content,
+                content_format=new_quote.content_format,
                 requirements=new_quote.requirements,
                 total_hours=new_quote.total_hours,
                 platform=new_quote.platform,
@@ -696,6 +698,7 @@ async def get_quote(
             project_id=quote.project_id,
             title=quote.title,
             content=quote.content,
+            content_format=quote.content_format,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
             platform=quote.platform,
@@ -764,6 +767,30 @@ async def update_quote(
 
     # Update fields
     update_data = quote_data.model_dump(exclude_unset=True)
+
+    # Sanitize HTML content to prevent XSS.
+    # The Tiptap editor sends HTML; we strip disallowed tags/attributes
+    # before persisting.
+    if "content" in update_data and update_data["content"]:
+        raw_content = update_data["content"]
+        if is_html_content(raw_content):
+            update_data["content"] = sanitize_html(raw_content)
+            # Auto-detect content_format if not explicitly provided.
+            if "content_format" not in update_data or update_data["content_format"] is None:
+                from app.models.quote import ContentFormat
+                update_data["content_format"] = ContentFormat.HTML
+            logger.debug(
+                "Sanitized HTML content for quote %s (original length=%d, sanitized length=%d)",
+                quote_id,
+                len(raw_content),
+                len(update_data["content"]),
+            )
+        else:
+            # Plain markdown content -- set format explicitly if not provided.
+            if "content_format" not in update_data or update_data["content_format"] is None:
+                from app.models.quote import ContentFormat
+                update_data["content_format"] = ContentFormat.MARKDOWN
+
     for field, value in update_data.items():
         setattr(quote, field, value)
 
@@ -780,6 +807,7 @@ async def update_quote(
             project_id=quote.project_id,
             title=quote.title,
             content=quote.content,
+            content_format=quote.content_format,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
             platform=quote.platform,
@@ -881,6 +909,7 @@ async def update_quote_status(
             project_id=quote.project_id,
             title=quote.title,
             content=quote.content,
+            content_format=quote.content_format,
             requirements=quote.requirements,
             total_hours=quote.total_hours,
             platform=quote.platform,
@@ -1093,6 +1122,7 @@ async def regenerate_quote(
                 project_id=quote.project_id,
                 title=quote.title,
                 content=quote.content,
+                content_format=quote.content_format,
                 requirements=quote.requirements,
                 total_hours=quote.total_hours,
                 platform=quote.platform,
@@ -1253,6 +1283,7 @@ async def refine_quote(
                 project_id=quote.project_id,
                 title=quote.title,
                 content=quote.content,
+                content_format=quote.content_format,
                 requirements=quote.requirements,
                 total_hours=quote.total_hours,
                 platform=quote.platform,

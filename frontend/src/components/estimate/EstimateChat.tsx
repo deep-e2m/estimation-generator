@@ -79,22 +79,12 @@ const ANALYSIS_STEPS: StepConfig[] = [
   },
 ];
 
-interface StatCardData {
-  label: string;
-  value: string | number;
-  subtext?: string;
-  icon: React.ReactNode;
-  iconClass: string;
-}
-
 interface EstimateChatProps {
   project: Project;
   existingEstimate?: Quote | null;
   onEstimateGenerated?: (quote: Quote) => void;
   /** Use the new full-screen generation UI instead of inline progress */
   useFullscreenUI?: boolean;
-  /** Stat cards to display above the preview panel */
-  statCards?: StatCardData[];
 }
 
 export function EstimateChat({
@@ -102,7 +92,6 @@ export function EstimateChat({
   existingEstimate,
   onEstimateGenerated,
   useFullscreenUI = true, // Default to new fullscreen UI
-  statCards,
 }: EstimateChatProps) {
   const navigate = useNavigate();
 
@@ -300,7 +289,6 @@ export function EstimateChat({
         project={project}
         initialQuote={generatedEstimate}
         onQuoteUpdated={onEstimateGenerated}
-        statCards={statCards}
       />
     );
   }

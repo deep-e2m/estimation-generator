@@ -7,6 +7,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
 import { isMarkdownOnlyContent } from '@/lib/quote-normalizer';
+import { isHtmlContent } from '@/lib/quote-to-html';
 import type { Quote } from '@/types';
 import type { Risk } from '@/types/quote.types';
 
@@ -65,6 +66,9 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
 
   const isMarkdownOnly = isMarkdownOnlyContent(content);
 
+  // Check if executive_summary contains HTML (from a previous editor save)
+  const summaryIsHtml = !!(content.executive_summary?.trim() && isHtmlContent(content.executive_summary.trim()));
+
   // Format date with proper validation
   const formatDate = (dateString?: string | null) => {
     const options: Intl.DateTimeFormatOptions = {
@@ -116,15 +120,22 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
         </div>
       </div>
 
-      {/* For markdown-only content, render directly without extra wrapper */}
-      {isMarkdownOnly && content.executive_summary && (
+      {/* For markdown-only OR HTML content, render directly */}
+      {(isMarkdownOnly || summaryIsHtml) && content.executive_summary && (
         <div className="doc-content-body">
-          <MarkdownBody content={content.executive_summary} />
+          {summaryIsHtml ? (
+            <div
+              className="markdown-body md-document"
+              dangerouslySetInnerHTML={{ __html: content.executive_summary }}
+            />
+          ) : (
+            <MarkdownBody content={content.executive_summary} />
+          )}
         </div>
       )}
 
-      {/* Section 1: Executive Summary (only for structured content) */}
-      {!isMarkdownOnly && content.executive_summary && (
+      {/* Section 1: Executive Summary (only for structured content without HTML) */}
+      {!isMarkdownOnly && !summaryIsHtml && content.executive_summary && (
         <div className="doc-section">
           <div className="doc-section-number">1</div>
           <h2 className="doc-section-title">Executive Summary</h2>
@@ -132,8 +143,8 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
         </div>
       )}
 
-      {/* Section 2: Deliverables & Scope (skip when markdown-only) */}
-      {!isMarkdownOnly && content.deliverables && content.deliverables.length > 0 && (
+      {/* Section 2: Deliverables & Scope (skip when markdown-only or HTML) */}
+      {!isMarkdownOnly && !summaryIsHtml && content.deliverables && content.deliverables.length > 0 && (
         <div className="doc-section">
           <div className="doc-section-number">2</div>
           <h2 className="doc-section-title">Deliverables & Scope</h2>
@@ -185,7 +196,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
       )}
 
       {/* Section 3: Scope (Included/Excluded) */}
-      {!isMarkdownOnly && content.scope && (
+      {!isMarkdownOnly && !summaryIsHtml && content.scope && (
         <div className="doc-section">
           <div className="doc-section-number">3</div>
           <h2 className="doc-section-title">Scope Definition</h2>
@@ -215,7 +226,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
       )}
 
       {/* Section 4: Assumptions */}
-      {!isMarkdownOnly && content.assumptions && content.assumptions.length > 0 && (
+      {!isMarkdownOnly && !summaryIsHtml && content.assumptions && content.assumptions.length > 0 && (
         <div className="doc-section">
           <div className="doc-section-number">4</div>
           <h2 className="doc-section-title">Assumptions</h2>
@@ -228,7 +239,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
       )}
 
       {/* Section 5: Risks */}
-      {!isMarkdownOnly && content.risks && content.risks.length > 0 && (
+      {!isMarkdownOnly && !summaryIsHtml && content.risks && content.risks.length > 0 && (
         <div className="doc-section">
           <div className="doc-section-number">5</div>
           <h2 className="doc-section-title">Risks & Mitigation</h2>
@@ -241,7 +252,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
       )}
 
       {/* Section 6: Timeline */}
-      {!isMarkdownOnly && content.timeline && (
+      {!isMarkdownOnly && !summaryIsHtml && content.timeline && (
         <div className="doc-section">
           <div className="doc-section-number">6</div>
           <h2 className="doc-section-title">Project Timeline</h2>

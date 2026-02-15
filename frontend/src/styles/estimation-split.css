@@ -357,9 +357,9 @@
 .estimation-preview-panel {
   width: 100%;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   background: white;
-  padding: var(--space-6) var(--space-4);
+  padding: 0;
 }
 
 .estimation-preview-header {
@@ -404,7 +404,9 @@
 .estimation-preview-content {
   background: white;
   padding: 0;
-  min-height: 400px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
 }
 
 /* Highlight animation for updated sections */
@@ -764,23 +766,27 @@
    ============================================================================= */
 
 .estimation-chat-messages::-webkit-scrollbar,
-.estimation-preview-panel::-webkit-scrollbar {
+.estimation-preview-panel::-webkit-scrollbar,
+.estimation-preview-content::-webkit-scrollbar {
   width: 8px;
 }
 
 .estimation-chat-messages::-webkit-scrollbar-track,
-.estimation-preview-panel::-webkit-scrollbar-track {
+.estimation-preview-panel::-webkit-scrollbar-track,
+.estimation-preview-content::-webkit-scrollbar-track {
   background: var(--color-gray-100);
 }
 
 .estimation-chat-messages::-webkit-scrollbar-thumb,
-.estimation-preview-panel::-webkit-scrollbar-thumb {
+.estimation-preview-panel::-webkit-scrollbar-thumb,
+.estimation-preview-content::-webkit-scrollbar-thumb {
   background: var(--color-gray-400);
   border-radius: 4px;
 }
 
 .estimation-chat-messages::-webkit-scrollbar-thumb:hover,
-.estimation-preview-panel::-webkit-scrollbar-thumb:hover {
+.estimation-preview-panel::-webkit-scrollbar-thumb:hover,
+.estimation-preview-content::-webkit-scrollbar-thumb:hover {
   background: var(--color-gray-500);
 }
 
@@ -3384,81 +3390,6 @@
   width: 100%;
 }
 
-/* Stat cards above preview */
-.estimation-stat-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background-color: var(--color-gray-50);
-  border-bottom: 1px solid var(--color-gray-200);
-  flex-shrink: 0;
-}
-
-.estimation-stat-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3);
-  background-color: white;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-gray-200);
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
-}
-
-.estimation-stat-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.estimation-stat-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-gray-500);
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-.estimation-stat-value {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-gray-900);
-  line-height: 1;
-}
-
-.estimation-stat-subtext {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-500);
-  margin-top: 2px;
-}
-
-.estimation-stat-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  flex-shrink: 0;
-}
-
-.estimation-stat-icon.hours {
-  background: linear-gradient(135deg, var(--color-primary-100), var(--color-primary-50));
-  color: var(--color-primary-600);
-}
-
-.estimation-stat-icon.requirements {
-  background: linear-gradient(135deg, var(--color-success-100), var(--color-success-50));
-  color: var(--color-success-600);
-}
-
-.estimation-stat-icon.updated {
-  background: linear-gradient(135deg, var(--color-gray-200), var(--color-gray-100));
-  color: var(--color-gray-600);
-}
-
 .estimation-panel-preview-inner {
   flex: 1;
   min-width: 0;
@@ -3530,10 +3461,6 @@
     display: flex;
     flex: 1;
   }
-
-  .estimation-stat-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* Mobile (<768px) - Full mobile experience */
@@ -3557,20 +3484,6 @@
     margin-bottom: var(--space-3);
   }
 
-  .estimation-stat-cards {
-    grid-template-columns: 1fr;
-    padding: var(--space-3);
-    gap: var(--space-2);
-  }
-
-  .estimation-stat-card {
-    padding: var(--space-2-5);
-  }
-
-  .estimation-stat-value {
-    font-size: var(--font-size-xl);
-  }
-  
   .preview-metrics-grid {
     grid-template-columns: 1fr 1fr;
     gap: var(--space-2);

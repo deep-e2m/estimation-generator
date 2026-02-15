@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.quote import Complexity, QuoteStatus
+from app.models.quote import Complexity, ContentFormat, QuoteStatus
 from app.schemas.auth import APIResponse
 from app.schemas.project import PaginationMeta
 
@@ -113,7 +113,12 @@ class QuoteUpdate(BaseModel):
     content: Optional[str] = Field(
         default=None,
         min_length=1,
-        description="Quote content/document",
+        description="Quote content/document (markdown or HTML from Tiptap editor)",
+    )
+    content_format: Optional[ContentFormat] = Field(
+        default=None,
+        description="Format of the content field: 'markdown' or 'html'. "
+        "If not provided, auto-detected from the content.",
     )
     requirements: Optional[str] = Field(
         default=None,
@@ -206,6 +211,10 @@ class QuoteResponse(BaseModel):
     project_id: UUID = Field(..., description="ID of the parent project")
     title: str = Field(..., description="Quote title")
     content: str = Field(..., description="Quote content/document")
+    content_format: ContentFormat = Field(
+        default=ContentFormat.MARKDOWN,
+        description="Format of the content: 'markdown' or 'html'",
+    )
     requirements: str = Field(..., description="Client requirements")
     total_hours: Decimal = Field(..., description="Estimated total hours")
     platform: str = Field(..., description="Target platform")

@@ -9,9 +9,8 @@
  * - Handles ?tab=chat query param for auto-generation flow
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   Loader2,
@@ -19,7 +18,6 @@ import {
   Edit2,
   Clock,
   FileText,
-  Zap,
   Calendar,
   ListChecks,
 } from 'lucide-react';
@@ -49,45 +47,6 @@ function getComplexity(count: number): { label: string; level: 'Low' | 'Medium' 
 }
 
 /**
- * Stat Card Component
- */
-interface StatCardProps {
-  label: string;
-  value: string | number;
-  subtext?: string;
-  icon: React.ReactNode;
-  iconClass: string;
-  onClick?: () => void;
-}
-
-function StatCard({ label, value, subtext, icon, iconClass, onClick }: StatCardProps) {
-  return (
-    <motion.div
-      className={`project-stat-card ${onClick ? 'clickable' : ''}`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      onClick={onClick}
-    >
-      <div className="project-stat-content">
-        <span className="project-stat-label">
-          {label}
-        </span>
-        <span className={`project-stat-value ${typeof value === 'string' && value.length > 5 ? 'status' : ''}`}>
-          {value}
-        </span>
-        {subtext && (
-          <span className="project-stat-subtext">{subtext}</span>
-        )}
-      </div>
-      <div className={`project-stat-icon ${iconClass}`}>
-        {icon}
-      </div>
-    </motion.div>
-  );
-}
-
-/**
  * Main ProjectDetail Page Component
  */
 export function ProjectDetailPage() {
@@ -104,6 +63,11 @@ export function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isQuoteLoading, setIsQuoteLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Description expand/collapse state
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
 
   // Load project data
   useEffect(() => {
@@ -150,6 +114,14 @@ export function ProjectDetailPage() {
     loadQuote();
   }, [id]);
 
+  // Detect if description text overflows 2 lines
+  useEffect(() => {
+    const el = descriptionRef.current;
+    if (!el) return;
+    // scrollHeight > clientHeight means the content exceeds the clamped height
+    setIsDescriptionOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [project?.description]);
+
   // Handle estimate generated callback
   const handleEstimateGenerated = useCallback((newQuote: Quote) => {
     setQuote(newQuote);
@@ -164,27 +136,24 @@ export function ProjectDetailPage() {
   const requirementsCount = quote?.content?.deliverables?.length ?? 0;
   const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
 
-  // Prepare stat cards data for EstimateChat
+  // Prepare stat pill data for the title section
   const statCardsData = [
     {
       label: 'Total Hours',
       value: totalHours > 0 ? `${totalHours}h` : '—',
-      subtext: totalHours > 0 ? 'Estimated effort' : 'No estimate yet',
-      icon: <Clock style={{ width: 24, height: 24 }} />,
+      icon: <Clock style={{ width: 14, height: 14 }} />,
       iconClass: 'hours',
     },
     {
       label: 'Requirements',
       value: requirementsCount > 0 ? requirementsCount : '—',
-      subtext: requirementsCount > 0 ? `${requirementsCount} items` : 'No requirements',
-      icon: <ListChecks style={{ width: 24, height: 24 }} />,
+      icon: <ListChecks style={{ width: 14, height: 14 }} />,
       iconClass: 'requirements',
     },
     {
       label: 'Last Updated',
       value: formatRelativeTime(lastUpdated),
-      subtext: formatDate(lastUpdated),
-      icon: <FileText style={{ width: 24, height: 24 }} />,
+      icon: <FileText style={{ width: 14, height: 14 }} />,
       iconClass: 'updated',
     },
   ];
@@ -289,7 +258,66 @@ export function ProjectDetailPage() {
         {project.description && (
           <div className="project-detail-description-row">
             <span className="project-detail-description-label">Description</span>
-            <p className="project-detail-description">{project.description}</p>
+            <div className="project-detail-description-wrapper">
+              <p
+                ref={descriptionRef}
+                className={`project-detail-description ${
+                  !isDescriptionExpanded ? 'project-detail-description-clamped' : ''
+                }`}
+              >
+                {project.description}
+                {isDescriptionExpanded && (
+                  <span
+                    className="project-detail-see-more-link"
+                    onClick={() => setIsDescriptionExpanded(false)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsDescriptionExpanded(false);
+                      }
+                    }}
+                  >
+                    {' '}See less
+                  </span>
+                )}
+              </p>
+              {!isDescriptionExpanded && isDescriptionOverflowing && (
+                <span
+                  className="project-detail-see-more-float"
+                  onClick={() => setIsDescriptionExpanded(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsDescriptionExpanded(true);
+                    }
+                  }}
+                >
+                  ...See more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Inline Stat Pills - shown when a quote exists */}
+        {quote && (
+          <div className="project-detail-stat-pills">
+            {statCardsData.map((card, index) => (
+              <React.Fragment key={card.label}>
+                {index > 0 && <span className="project-detail-stat-pill-separator" />}
+                <div className="project-detail-stat-pill">
+                  <span className={`project-detail-stat-pill-icon ${card.iconClass}`}>
+                    {card.icon}
+                  </span>
+                  <span className="project-detail-stat-pill-label">{card.label}:</span>
+                  <span className="project-detail-stat-pill-value">{card.value}</span>
+                </div>
+              </React.Fragment>
+            ))}
           </div>
         )}
       </div>
@@ -306,7 +334,6 @@ export function ProjectDetailPage() {
             project={project}
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
-            statCards={statCardsData}
           />
         )}
       </div>

@@ -35,6 +35,7 @@ import {
   Wifi,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ToolbarButton, ToolbarDivider } from '@/components/editor/shared';
 import { CommentPlugin, type Comment } from './CommentPlugin';
 import './editor.css';
 
@@ -56,42 +57,6 @@ interface AdvancedEditorProps {
     avatar?: string;
   };
   className?: string;
-}
-
-// Toolbar button
-function ToolbarButton({
-  icon: Icon,
-  onClick,
-  isActive,
-  disabled,
-  title,
-}: {
-  icon: React.ElementType;
-  onClick: () => void;
-  isActive?: boolean;
-  disabled?: boolean;
-  title: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'p-2 rounded transition-colors',
-        isActive ? 'bg-primary-100 text-primary-700' : 'hover:bg-gray-100 text-gray-600',
-        disabled && 'opacity-50 cursor-not-allowed'
-      )}
-      title={title}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
-// Toolbar divider
-function ToolbarDivider() {
-  return <div className="w-px h-6 bg-gray-300 mx-2" />;
 }
 
 // Main editor component

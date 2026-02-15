@@ -5,7 +5,7 @@
  * colorful project cards, and proper pagination.
  */
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -61,18 +61,23 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status.toUpperCase()}</Badge>
 }
 
+// Description truncation threshold (characters)
+const DESCRIPTION_TRUNCATE_LENGTH = 120
+
 // Project card component - Stitch Design
-function ProjectCard({ 
-  project, 
+function ProjectCard({
+  project,
   index,
   onClick,
   onAction,
-}: { 
+}: {
   project: ProjectSummary
   index: number
   onClick: () => void
   onAction: (action: string, project: ProjectSummary) => void
 }) {
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
+
   const dropdownOptions = [
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
     { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
@@ -82,6 +87,14 @@ function ProjectCard({
 
   // Cycle through colors
   const colors = FOLDER_COLORS[index % FOLDER_COLORS.length]
+
+  const description = project.description || ''
+  const isTruncatable = description.length > DESCRIPTION_TRUNCATE_LENGTH
+
+  const handleToggleDescription = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsDescriptionExpanded((prev) => !prev)
+  }, [])
 
   return (
     <div className="projects-card" onClick={onClick}>
@@ -96,8 +109,36 @@ function ProjectCard({
           <h3 className="projects-card-title">{project.name}</h3>
           <StatusBadge status={project.status} />
         </div>
-        {project.description && (
-          <p className="projects-card-description">{project.description}</p>
+        {description && (
+          <p className={`projects-card-description ${isDescriptionExpanded ? 'projects-card-description-expanded' : ''}`}>
+            {isTruncatable && !isDescriptionExpanded
+              ? <>
+                  {description.slice(0, DESCRIPTION_TRUNCATE_LENGTH).trimEnd()}...{' '}
+                  <button
+                    type="button"
+                    className="projects-card-description-toggle"
+                    onClick={handleToggleDescription}
+                  >
+                    See more
+                  </button>
+                </>
+              : <>
+                  {description}
+                  {isTruncatable && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="projects-card-description-toggle"
+                        onClick={handleToggleDescription}
+                      >
+                        See less
+                      </button>
+                    </>
+                  )}
+                </>
+            }
+          </p>
         )}
       </div>
 
