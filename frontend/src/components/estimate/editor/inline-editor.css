@@ -492,7 +492,7 @@
 }
 
 .editor-toolbar__mode-btn--active {
-  background: var(--color-gray-900, #0f172a);
+  background: var(--color-gray-900, #2a67e6);
   color: white;
 }
 
