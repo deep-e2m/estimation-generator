@@ -1544,3 +1544,243 @@ async def export_quote_docx(
             "Content-Length": str(len(docx_bytes)),
         },
     )
+
+
+@router.post(
+    "/projects/{project_id}/quotes/{quote_id}/export/pdf",
+    summary="Export quote as PDF",
+    description="Generates and downloads a professionally formatted PDF document for the quote.",
+    responses={
+        200: {
+            "description": "PDF document generated successfully",
+            "content": {
+                "application/pdf": {}
+            },
+        },
+        401: {"description": "Not authenticated"},
+        403: {"description": "Access denied"},
+        404: {"description": "Project or quote not found"},
+        500: {"description": "PDF generation failed"},
+    },
+)
+async def export_quote_pdf(
+    project_id: UUID,
+    quote_id: UUID,
+    current_user: ActiveUser,
+    db: DbSession,
+):
+    """
+    Export a quote as a branded PDF document.
+
+    This endpoint renders a lightweight HTML representation of the quote
+    (header, executive summary/body, and key metadata) and converts it
+    to PDF using WeasyPrint.
+    """
+    from fastapi.responses import StreamingResponse
+    import html as html_lib
+    import io
+
+    from weasyprint import HTML, CSS
+
+    logger.info(
+        "Exporting quote as PDF: project_id=%s, quote_id=%s, user=%s",
+        project_id,
+        quote_id,
+        current_user.email,
+    )
+
+    # Verify project access
+    project = await get_project_with_access(project_id, current_user, db)
+
+    # Fetch quote with relationships
+    query = (
+        select(Quote)
+        .options(
+            selectinload(Quote.project),
+            selectinload(Quote.creator),
+        )
+        .where(Quote.id == quote_id, Quote.project_id == project_id)
+    )
+    result = await db.execute(query)
+    quote = result.scalar_one_or_none()
+
+    if quote is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "QUOTE_NOT_FOUND",
+                "message": "Quote not found in this project",
+            },
+        )
+
+    # Check access
+    if quote.created_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ACCESS_DENIED",
+                "message": "You don't have access to this quote",
+            },
+        )
+
+    metadata = quote.extra_data or {}
+
+    client_name = project.name
+    if metadata.get("client_name"):
+        client_name = metadata["client_name"]
+
+    # Determine body HTML
+    raw_content = quote.content or ""
+    if is_html_content(raw_content):
+        body_html = raw_content
+    else:
+        # Simple markdown/plain-text to HTML: paragraphs split by blank lines
+        paragraphs = [
+            f"<p>{html_lib.escape(p.strip())}</p>"
+            for p in raw_content.split("\n\n")
+            if p.strip()
+        ]
+        body_html = "\n".join(paragraphs) or "<p>No content available.</p>"
+
+    created_str = quote.created_at.strftime("%B %d, %Y")
+    prepared_by = ""
+    if quote.creator and getattr(quote.creator, "full_name", None):
+        prepared_by = quote.creator.full_name
+
+    title_text = quote.title or "Project Estimate"
+
+    html_string = f"""
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Proposal - {title_text}</title>
+    <style>
+      @page {{
+        margin: 1in;
+      }}
+      body {{
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        color: #333333;
+        font-size: 12px;
+        line-height: 1.5;
+      }}
+      .header {{
+        border-bottom: 2px solid #005293;
+        padding-bottom: 8px;
+        margin-bottom: 18px;
+      }}
+      .company-name {{
+        font-size: 20px;
+        font-weight: 700;
+        color: #005293;
+        margin: 0;
+      }}
+      .company-tagline {{
+        font-size: 11px;
+        color: #2980b9;
+        margin: 2px 0 0 0;
+      }}
+      .meta {{
+        margin-top: 8px;
+        font-size: 11px;
+        color: #555;
+      }}
+      .title {{
+        font-size: 20px;
+        font-weight: 600;
+        margin: 12px 0 4px 0;
+      }}
+      .subtitle {{
+        font-size: 14px;
+        color: #555;
+        margin: 0 0 12px 0;
+      }}
+      h1, h2, h3 {{
+        color: #005293;
+        margin-top: 18px;
+        margin-bottom: 8px;
+      }}
+      h1 {{
+        font-size: 18px;
+      }}
+      h2 {{
+        font-size: 15px;
+      }}
+      h3 {{
+        font-size: 13px;
+      }}
+      p {{
+        margin: 4px 0 8px 0;
+      }}
+      ul, ol {{
+        margin: 4px 0 8px 1.2em;
+      }}
+      table {{
+        border-collapse: collapse;
+        width: 100%;
+        margin: 8px 0 12px 0;
+        font-size: 11px;
+      }}
+      th, td {{
+        border: 1px solid #ddd;
+        padding: 4px 6px;
+      }}
+      th {{
+        background-color: #005293;
+        color: #ffffff;
+        font-weight: 600;
+        text-align: left;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <p class="company-name">E2M Solutions</p>
+      <p class="company-tagline">Digital Excellence Delivered</p>
+      <p class="meta">
+        <strong>Date:</strong> {created_str}
+        {"&nbsp; &nbsp; <strong>Prepared for:</strong> " + client_name if client_name else ""}
+        {"&nbsp; &nbsp; <strong>Prepared by:</strong> " + prepared_by if prepared_by else ""}
+      </p>
+    </div>
+
+    <div>
+      <p class="title">Project Proposal</p>
+      <p class="subtitle">{title_text}</p>
+    </div>
+
+    <h1>Executive Summary & Scope</h1>
+    {body_html}
+  </body>
+</html>
+    """.strip()
+
+    try:
+        pdf_bytes = HTML(string=html_string).write_pdf(stylesheets=[CSS(string="")])
+    except Exception as e:
+        logger.error("Failed to generate PDF document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "PDF_GENERATION_FAILED",
+                "message": f"Failed to generate PDF document: {str(e)}",
+            },
+        )
+
+    safe_title = "".join(
+        c if c.isalnum() or c in (" ", "-", "_") else "_"
+        for c in quote.title[:50]
+    ).strip()
+    filename = f"Proposal_{safe_title}_{quote.created_at.strftime('%Y%m%d')}.pdf"
+
+    logger.info("PDF export completed: quote_id=%s, filename=%s", quote_id, filename)
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )

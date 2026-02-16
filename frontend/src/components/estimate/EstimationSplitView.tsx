@@ -28,6 +28,7 @@ import type { Project, Quote } from '@/types';
 import type { ChangeDescription } from '@/types/quote.types';
 import { EstimationChatPanel } from './EstimationChatPanel';
 import { EstimationPreviewPanel } from './EstimationPreviewPanel';
+import { QuoteDocument } from './preview/QuoteDocument';
 
 type TabType = 'estimate' | 'chat' | 'history' | 'export';
 type MobileViewType = 'chat' | 'preview';
@@ -281,23 +282,9 @@ export function EstimationSplitView({
             <div className="estimation-tab-content">
               <div className="estimation-export-header">
                 <h3>Export Options</h3>
-                <p className="text-sm text-gray-500">Download your estimate in various formats</p>
+                <p className="text-sm text-gray-500">Download your estimate in supported formats</p>
               </div>
               <div className="estimation-export-options">
-                <button
-                  className="estimation-export-option"
-                  onClick={() => navigate(`/projects/${project.id}/quotes/${currentQuote.id}/export?format=pdf`)}
-                >
-                  <div className="estimation-export-icon pdf">
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <div className="estimation-export-info">
-                    <h4>Export as PDF</h4>
-                    <p>Professional PDF document with branding</p>
-                  </div>
-                  <Download className="h-5 w-5 text-gray-400" />
-                </button>
-
                 <button
                   className="estimation-export-option"
                   onClick={() => navigate(`/projects/${project.id}/quotes/${currentQuote.id}/export?format=docx`)}
@@ -338,24 +325,7 @@ export function EstimationSplitView({
               <div className="estimation-export-preview">
                 <h4>Preview</h4>
                 <div className="estimation-export-preview-content">
-                  <div className="estimation-export-preview-document">
-                    <div className="estimation-export-preview-header">
-                      <h1>{project.name}</h1>
-                      <p>Project Estimate</p>
-                    </div>
-                    <div className="estimation-export-preview-body">
-                      <div className="estimation-export-preview-section">
-                        <h3>Executive Summary</h3>
-                        <p>{currentQuote.content?.executive_summary || 'No summary available'}</p>
-                      </div>
-                      <div className="estimation-export-preview-section">
-                        <h3>Total Estimate</h3>
-                        <p className="text-2xl font-bold text-primary-600">
-                          {currentQuote.total_hours ?? 0} hours
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  <QuoteDocument quote={currentQuote} />
                 </div>
               </div>
             </div>

@@ -16,7 +16,6 @@ import {
 import { cn } from '@/lib/utils';
 import { quoteService } from '@/services/quote-generation.service';
 
-// Export format type
 type ExportFormat = 'docx' | 'pdf';
 
 interface ExportDialogProps {
@@ -134,7 +133,7 @@ export function ExportDialog({
           {!exportSuccess && (
             <>
               <p className="text-sm text-gray-600 mb-6">
-                Choose your preferred format for <strong>{quoteNumber}</strong>
+                Choose your preferred format for <strong>{quoteNumber}</strong>.
               </p>
 
               <div className="space-y-3 mb-6">
@@ -188,57 +187,57 @@ export function ExportDialog({
                     )}
                   </div>
                 </button>
-
-                {/* PDF Option */}
-                <button
-                  type="button"
-                  onClick={() => setSelectedFormat('pdf')}
-                  disabled={isExporting}
+              
+              {/* PDF Option */}
+              <button
+                type="button"
+                onClick={() => setSelectedFormat('pdf')}
+                disabled={isExporting}
+                className={cn(
+                  'w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-200',
+                  selectedFormat === 'pdf'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300 bg-white',
+                  isExporting && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                <div
                   className={cn(
-                    'w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-200',
-                    selectedFormat === 'pdf'
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300 bg-white',
-                    isExporting && 'opacity-50 cursor-not-allowed'
+                    'flex h-12 w-12 items-center justify-center rounded-lg',
+                    selectedFormat === 'pdf' ? 'bg-primary-100' : 'bg-gray-100'
                   )}
                 >
-                  <div
+                  <FileDown
                     className={cn(
-                      'flex h-12 w-12 items-center justify-center rounded-lg',
-                      selectedFormat === 'pdf' ? 'bg-primary-100' : 'bg-gray-100'
+                      'h-6 w-6',
+                      selectedFormat === 'pdf' ? 'text-primary-600' : 'text-gray-500'
+                    )}
+                  />
+                </div>
+                <div className="flex-1 text-left">
+                  <p
+                    className={cn(
+                      'font-semibold',
+                      selectedFormat === 'pdf' ? 'text-primary-900' : 'text-gray-900'
                     )}
                   >
-                    <FileDown
-                      className={cn(
-                        'h-6 w-6',
-                        selectedFormat === 'pdf' ? 'text-primary-600' : 'text-gray-500'
-                      )}
-                    />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p
-                      className={cn(
-                        'font-semibold',
-                        selectedFormat === 'pdf' ? 'text-primary-900' : 'text-gray-900'
-                      )}
-                    >
-                      PDF Document (.pdf)
-                    </p>
-                    <p className="text-sm text-gray-500">Print-ready format</p>
-                  </div>
-                  <div
-                    className={cn(
-                      'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                      selectedFormat === 'pdf'
-                        ? 'border-primary-500 bg-primary-500'
-                        : 'border-gray-300'
-                    )}
-                  >
-                    {selectedFormat === 'pdf' && (
-                      <CheckCircle className="h-3 w-3 text-white" />
-                    )}
-                  </div>
-                </button>
+                    PDF Document (.pdf)
+                  </p>
+                  <p className="text-sm text-gray-500">Print-ready format</p>
+                </div>
+                <div
+                  className={cn(
+                    'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                    selectedFormat === 'pdf'
+                      ? 'border-primary-500 bg-primary-500'
+                      : 'border-gray-300'
+                  )}
+                >
+                  {selectedFormat === 'pdf' && (
+                    <CheckCircle className="h-3 w-3 text-white" />
+                  )}
+                </div>
+              </button>
               </div>
             </>
           )}

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuote, useQuoteVersions, useDeleteQuote, useExportQuote, useExportStatus } from '@/hooks/useQuotes';
+import { useQuote, useQuoteVersions, useDeleteQuote } from '@/hooks/useQuotes';
 import { cn, formatCurrency, getStatusColor, downloadUrl } from '@/lib/utils';
 import { formatDate, formatSmartDate } from '@/lib/date';
 import { Skeleton, SkeletonCard } from '@/components/common/Skeleton';
@@ -32,6 +32,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { quoteService } from '@/services/quote-generation.service';
 
 /**
  * Quote Detail page showing full quote information with edit, export, and version history
@@ -41,7 +42,7 @@ export function QuoteDetail() {
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
-  const [activeExportId, setActiveExportId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch quote data
   const {
@@ -60,36 +61,29 @@ export function QuoteDetail() {
 
   // Mutations
   const deleteQuote = useDeleteQuote();
-  const exportQuote = useExportQuote();
-
-  // Export status polling
-  const { data: exportStatus } = useExportStatus(activeExportId);
-
-  // Handle export completion
-  if (exportStatus?.status === 'completed' && activeExportId) {
-    if (exportStatus.download_url) {
-      downloadUrl(exportStatus.download_url, `${quote?.quote_number}.${exportStatus.format}`);
-      toast.success('Export ready', { description: 'Your download should start automatically' });
-    }
-    setActiveExportId(null);
-  }
 
   const handleExport = useCallback(
     async (format: ExportFormat) => {
-      if (!projectId || !quoteId) return;
+      if (!projectId || !quoteId || !quote) return;
 
       try {
-        const result = await exportQuote.mutateAsync({
-          projectId,
-          quoteId,
-          format,
+        setIsExporting(true);
+        const blob = await quoteService.exportQuote(projectId, quoteId, format);
+
+        const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
+        const filename = `${quote.quote_number}-${clientName}.${format}`;
+
+        quoteService.triggerDownload(blob, filename);
+        toast.success(`${format.toUpperCase()} export downloaded`);
+      } catch (error) {
+        toast.error('Failed to export quote', {
+          description: error instanceof Error ? error.message : 'Please try again',
         });
-        setActiveExportId(result.export_job_id);
-      } catch {
-        // Error handled by mutation
+      } finally {
+        setIsExporting(false);
       }
     },
-    [projectId, quoteId, exportQuote]
+    [projectId, quoteId, quote]
   );
 
   const handleDelete = useCallback(async () => {
@@ -203,20 +197,20 @@ export function QuoteDetail() {
             <Button
               variant="outline"
               leftIcon={
-                activeExportId ? (
+                isExporting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Download className="h-4 w-4" />
                 )
               }
-              disabled={!!activeExportId}
+              disabled={isExporting}
             >
               Export
             </Button>
             <div className="absolute right-0 top-full z-10 mt-1 hidden w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg group-hover:block">
               <button
                 onClick={() => handleExport('pdf')}
-                disabled={!!activeExportId}
+                disabled={isExporting}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
               >
                 <FileDown className="h-4 w-4" />
@@ -224,7 +218,7 @@ export function QuoteDetail() {
               </button>
               <button
                 onClick={() => handleExport('docx')}
-                disabled={!!activeExportId}
+                disabled={isExporting}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
               >
                 <FileText className="h-4 w-4" />

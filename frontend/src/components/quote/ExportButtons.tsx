@@ -63,54 +63,11 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       });
 
       try {
-        // Start export job
-        const exportOptions: Partial<ExportOptions> = {
-          template: format === 'pdf' ? 'professional' : 'editable',
-          include_sections: {
-            executive_summary: true,
-            scope: true,
-            deliverables: true,
-            timeline: true,
-            assumptions: true,
-            risks: true,
-            terms_and_conditions: format === 'pdf',
-          },
-          metadata: {
-            prepared_by: quote.created_by.full_name,
-            valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split('T')[0],
-          },
-        };
+        const blob = await quoteService.exportQuote(projectId, quote.id, format);
 
-        const exportJob =
-          format === 'pdf'
-            ? await quoteService.exportToPdf(projectId, quote.id, exportOptions)
-            : await quoteService.exportToDocx(projectId, quote.id, exportOptions);
-
-        // Poll for completion
-        const _downloadUrl = await quoteService.waitForExport(
-          exportJob.export_job_id,
-          (progress) => {
-            setExportState((prev) => ({ ...prev, progress }));
-          }
-        );
-
-        // Update state to downloading
-        setExportState((prev) => ({
-          ...prev,
-          status: 'downloading',
-          progress: 100,
-        }));
-
-        // Download the file
-        const blob = await quoteService.downloadExport(exportJob.export_job_id);
-
-        // Generate filename
         const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
         const filename = `${quote.quote_number}-${clientName}.${format}`;
 
-        // Trigger download
         quoteService.triggerDownload(blob, filename);
 
         // Success state
@@ -417,22 +374,10 @@ export const InlineExportButton: React.FC<InlineExportButtonProps> = ({
   const handleExport = useCallback(async () => {
     setState({ status: 'exporting', progress: 0, error: null });
 
-    try {
-      const exportJob =
-        format === 'pdf'
-          ? await quoteService.exportToPdf(projectId, quote.id)
-          : await quoteService.exportToDocx(projectId, quote.id);
-
-      const _downloadUrl = await quoteService.waitForExport(
-        exportJob.export_job_id,
-        (progress) => setState((prev) => ({ ...prev, progress }))
-      );
-
-      const blob = await quoteService.downloadExport(exportJob.export_job_id);
+      try {
+      const blob = await quoteService.exportQuote(projectId, quote.id, format);
       const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
       const filename = `${quote.quote_number}-${clientName}.${format}`;
-
-      quoteService.triggerDownload(blob, filename);
 
       setState({ status: 'success', progress: 100, error: null });
 

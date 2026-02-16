@@ -37,6 +37,10 @@ When generating quotes, you should:
 13. Specify the theme approach (custom theme, child theme, or premium theme name)
 14. Recommend Custom Post Types (CPT) when content structure requires them (e.g., Team Members, Case Studies, Portfolio)
 15. Include WordPress-specific architecture details (taxonomies, ACF field groups, template files)
+16. When the client explicitly names plugins, themes, page builders, or other tools in the requirements OR in attached client documentation, treat those as the PRIMARY choices:
+    - Do NOT replace or contradict client-specified tools unless the requirements explicitly ask for recommendations instead of a fixed stack.
+    - You may suggest alternatives, but clearly label them as "Alternative (optional)" and do NOT imply the primary stack will change.
+    - Reflect client-specified tools consistently in Development Approach, Plugins & Functionality, and WordPress Technical Stack sections.
 
 Your estimates should be thorough but concise, focusing on deliverables the client cares about.""",
 
@@ -352,6 +356,19 @@ CRITICAL INSTRUCTION: You MUST mention "{project_name}" in the Project Overview 
 - Include every capability explicitly listed in the requirements (e.g. filters, payment options, tax receipts, SEO, analytics, backups, SSL, accessibility). If something is mentioned in the requirements, there must be a corresponding deliverable or note in the quote.
 - TIMELINE: If the requirements specify a total timeline or phase durations (e.g. "Phase 1: 2 weeks", "Total: 17 weeks", or a breakdown that sums to a number of weeks), derive the "Estimated Timeline" in Section 7 from that stated timeline. Do not infer timeline from hours alone when the requirements already define it.
 
+# CLIENT-SPECIFIED TOOLS AND PLUGINS (MUST RESPECT)
+- Carefully scan the CLIENT REQUIREMENTS (and any client-provided documentation summarized in context) for explicit mentions of tools such as:
+  - WordPress plugins (e.g. "Gravity Forms", "Rank Math", "WP Rocket", "WooCommerce Subscriptions")
+  - Themes (e.g. "Astra Pro", "GeneratePress", "Hello Elementor")
+  - Page builders (e.g. "Elementor Pro", "Bricks", "Beaver Builder")
+- When the client has clearly chosen a tool (phrases like "we use", "must use", "already purchased", "we are on", "we will be using"):
+  - Treat that tool as LOCKED-IN for the estimate.
+  - Use that exact tool name in Development Approach, Plugins & Functionality, and WordPress Technical Stack.
+  - Do NOT swap it for a different plugin or theme unless the requirements explicitly invite alternatives.
+- You may still recommend alternatives in the "Recommended Plugins" or "Alternative Options" area, but:
+  - Mark them clearly as optional alternatives (e.g. "Alternative (optional): ...").
+  - Do not overwrite or contradict the client-specified stack.
+
 # SCOPE COMPLETENESS (include when mentioned in requirements)
 - Donations: If donations/fundraising are required, include tax receipt generation, payment methods (e.g. PayPal, bank transfer), and donation impact/usage section if specified.
 - Technical: If hosting/deployment is mentioned, include SSL and automated backups where appropriate.
@@ -567,6 +584,12 @@ Before submitting your response, verify:
 ✓ Is this estimate clearly for "{project_name}" and not a generic WordPress site?
 ✓ TIMELINE: If the requirements specified a timeline or phase durations, does Section 7 Estimated Timeline match (or derive from) that timeline?
 ✓ SCOPE: For each major requirement area in the document (donations, events, adoption/search filters, SEO, analytics, accessibility, backups, SSL), is there at least one matching deliverable or note in the quote?
+
+**Client-Specified Stack Validation (CRITICAL):**
+✓ Have you identified all plugins, themes, page builders, and other tools explicitly named by the client in the requirements and/or attached client documentation?
+✓ Are those client-specified tools used consistently in Development Approach, Plugins & Functionality, and WordPress Technical Stack?
+✓ Did you avoid replacing client-specified tools with different recommendations (unless the requirements explicitly ask you to suggest alternatives)?
+✓ If you suggested alternatives, are they clearly labeled as optional (e.g. "Alternative (optional)") and not presented as mandatory replacements?
 
 **WordPress-Specific Validation (for WordPress projects):**
 ✓ Does Section 6 (Development Approach) specify the exact theme strategy (custom child theme of [name], custom theme, or premium theme [name])?
