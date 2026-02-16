@@ -277,6 +277,13 @@ export function EstimationPreviewPanel({
         onModeChange={handleModeChange}
         isQuoteEditable={isQuoteEditable}
         editor={editorInstance}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isSaving={isSaving}
+        onSave={
+          editorInstance
+            ? () => handleEditorSave(editorInstance.getHTML())
+            : undefined
+        }
       />
 
       {/* Content area */}

@@ -73,7 +73,10 @@ function getLineType(line: string, trimmed: string): {
     trimmed.toLowerCase().startsWith("here is your") ||
     trimmed.toLowerCase().includes('following the e2m standard') ||
     trimmed.toLowerCase().includes('professional project quote') ||
-    trimmed.toLowerCase().startsWith('let me know if')
+    trimmed.toLowerCase().startsWith('let me know if') ||
+    // Hide boilerplate "not applicable" lines so empty sections don't show noise
+    trimmed.toLowerCase().startsWith('not applicable for this project') ||
+    trimmed.toLowerCase() === 'not applicable'
   ) {
     return { type: 'intro', content: '' };
   }
@@ -175,7 +178,8 @@ function getLineType(line: string, trimmed: string): {
  */
 function parseLine(line: string, key: string): { node: React.ReactNode; type: string } | null {
   const trimmed = line.trim();
-  const { type, content, sectionNumber } = getLineType(line, trimmed);
+  const parsed = getLineType(line, trimmed);
+  const { type, content } = parsed;
 
   switch (type) {
     case 'empty':
@@ -202,7 +206,8 @@ function parseLine(line: string, key: string): { node: React.ReactNode; type: st
       return {
         node: (
           <h2 key={key} className="md-section-header">
-            <span className="md-section-number">{sectionNumber}.</span>
+            {/* Number is rendered via CSS counter; content here is just the label */}
+            <span className="md-section-number" />
             <span className="md-section-text">{parseInlineFormatting(content, key)}</span>
           </h2>
         ),
@@ -213,7 +218,8 @@ function parseLine(line: string, key: string): { node: React.ReactNode; type: st
       return {
         node: (
           <h3 key={key} className="md-subsection-header">
-            <span className="md-subsection-number">{sectionNumber}</span>
+            {/* Nested number (e.g. 2.1) via CSS counters */}
+            <span className="md-subsection-number" />
             <span className="md-subsection-text">{parseInlineFormatting(content, key)}</span>
           </h3>
         ),

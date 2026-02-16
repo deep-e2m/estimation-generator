@@ -1,69 +1,69 @@
 /**
  * QuoteDocument Component
- * Main document container with all sections following the reference format
+ *
+ * Single-source-of-truth document preview. Renders a professional header
+ * plus a single body region derived from the canonical content string:
+ * - If the body is HTML (from the Tiptap editor), render it as HTML.
+ * - Otherwise, render it as markdown via MarkdownBody.
+ *
+ * This keeps the preview layout stable before and after edits, since both
+ * the editor and the preview work from the same underlying document body.
  */
 
 import React from 'react';
-import { motion } from 'framer-motion';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
-import { isMarkdownOnlyContent } from '@/lib/quote-normalizer';
 import { isHtmlContent } from '@/lib/quote-to-html';
-import type { Deliverable, Quote } from '@/types';
-import type { Risk } from '@/types/quote.types';
+import type { Quote } from '@/types';
 
 interface QuoteDocumentProps {
   quote: Quote;
-}
-
-function RiskItem({ risk, index }: { risk: Risk; index: number }) {
-  const impactColors = {
-    high: 'risk-high',
-    medium: 'risk-medium',
-    low: 'risk-low',
-  };
-
-  return (
-    <motion.div
-      className={`risk-item ${impactColors[risk.impact]}`}
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.05 }}
-      style={{ marginBottom: '16px' }}
-    >
-      <div className="risk-item-header">
-        <span className={`risk-badge ${impactColors[risk.impact]}`}>
-          {risk.impact.toUpperCase()} IMPACT
-        </span>
-      </div>
-      <p className="risk-description" style={{ fontWeight: 600, fontSize: '15px', lineHeight: '1.7', marginTop: '8px' }}>
-        {risk.description}
-      </p>
-      {risk.mitigation && (
-        <p className="risk-mitigation" style={{ fontSize: '14px', lineHeight: '1.7', marginTop: '8px' }}>
-          <strong style={{ color: 'var(--color-gray-900)' }}>Mitigation Strategy:</strong>{' '}
-          {risk.mitigation}
-        </p>
-      )}
-    </motion.div>
-  );
 }
 
 export function QuoteDocument({ quote }: QuoteDocumentProps) {
   const content = quote.content;
 
   // Derive key header fields
-  const projectName = quote.project?.name || '';
-  const preparedFor = (quote as Quote & { client_name?: string }).client_name || projectName || 'Client';
+  // Prefer the project name for both the title and "Prepared for" line.
+  const projectNameFromRef = quote.project?.name || (quote as Quote & { project_name?: string }).project_name || '';
+  const clientName = (quote as Quote & { client_name?: string }).client_name || '';
+  const fallbackName = projectNameFromRef || clientName || quote.title || '';
+  const headerProjectName = projectNameFromRef || fallbackName;
+  const preparedFor = headerProjectName || 'Client';
   const preparedBy = quote.created_by?.full_name || 'Estimate AI';
 
-  if (!content) {
+  // Format date with proper validation
+  const formatDate = (dateString?: string | null) => {
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    };
+
+    if (!dateString) {
+      return new Date().toLocaleDateString('en-US', options);
+    }
+
+    const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+      return new Date().toLocaleDateString('en-US', options);
+    }
+
+    return date.toLocaleDateString('en-US', options);
+  };
+
+  // No content yet
+  if (!content || !content.executive_summary?.trim()) {
     return (
       <div className="doc-container">
         <div className="doc-header">
           <h1 className="doc-title">
-            {projectName ? `Proposal for ${projectName}` : 'Project Proposal'}
+            {headerProjectName ? `Proposal for ${headerProjectName}` : 'Project Proposal'}
           </h1>
-          <p className="doc-body-text" style={{ textAlign: 'center', color: 'var(--color-gray-500)' }}>
+          <p
+            className="doc-body-text"
+            style={{ textAlign: 'center', color: 'var(--color-gray-500)' }}
+          >
             The estimate content is still being generated. Please wait...
           </p>
         </div>
@@ -71,41 +71,15 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     );
   }
 
-  const isMarkdownOnly = isMarkdownOnlyContent(content);
-
-  // Check if executive_summary contains HTML (from a previous editor save)
-  const summaryIsHtml = !!(content.executive_summary?.trim() && isHtmlContent(content.executive_summary.trim()));
-
-  // Format date with proper validation
-  const formatDate = (dateString?: string | null) => {
-    const options: Intl.DateTimeFormatOptions = {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    };
-    
-    // Handle missing or empty date
-    if (!dateString) {
-      return new Date().toLocaleDateString('en-US', options);
-    }
-    
-    // Try to parse the date
-    const date = new Date(dateString);
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return new Date().toLocaleDateString('en-US', options);
-    }
-    
-    return date.toLocaleDateString('en-US', options);
-  };
+  const body = content.executive_summary.trim();
+  const bodyIsHtml = isHtmlContent(body);
 
   return (
     <div className="doc-container">
       {/* Professional Document Header */}
       <div className="doc-header">
         <h1 className="doc-title">
-          {projectName ? `Proposal for ${projectName}` : 'Project Proposal'}
+          {headerProjectName ? `Proposal for ${headerProjectName}` : 'Project Proposal'}
         </h1>
         <div className="doc-metadata">
           <div className="doc-metadata-item">
@@ -129,186 +103,20 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
         </div>
       </div>
 
-      {/* For markdown-only OR HTML content, render directly */}
-      {(isMarkdownOnly || summaryIsHtml) && content.executive_summary && (
-        <div className="doc-content-body">
-          {summaryIsHtml ? (
-            <div
-              className="markdown-body md-document"
-              dangerouslySetInnerHTML={{ __html: content.executive_summary }}
-            />
-          ) : (
-            <MarkdownBody content={content.executive_summary} />
-          )}
-        </div>
-      )}
-
-      {/* Section 1: Executive Summary (only for structured content without HTML) */}
-      {!isMarkdownOnly && !summaryIsHtml && content.executive_summary && (
-        <div className="doc-section">
-          <div className="doc-section-number">1</div>
-          <h2 className="doc-section-title">Executive Summary</h2>
-          <p className="doc-body-text">{content.executive_summary}</p>
-        </div>
-      )}
-
-      {/* Section 2: Deliverables & Scope (skip when markdown-only or HTML) */}
-      {!isMarkdownOnly && !summaryIsHtml && content.deliverables && content.deliverables.length > 0 && (
-        <div className="doc-section">
-          <div className="doc-section-number">2</div>
-          <h2 className="doc-section-title">Deliverables & Scope</h2>
-          {(() => {
-            // Group deliverables by category (optional; Deliverable type uses estimate)
-            const grouped = content.deliverables.reduce((acc, d) => {
-              const cat = (d as Deliverable & { category?: string }).category ?? 'General';
-              if (!acc[cat]) acc[cat] = [];
-              acc[cat].push(d);
-              return acc;
-            }, {} as Record<string, typeof content.deliverables>);
-
-            return Object.entries(grouped).map(([category, items]) => {
-              const categoryTotal = items.reduce((sum, item) =>
-                sum + (item.estimate?.expected_hours ?? 0), 0
-              );
-
-              return (
-                <div key={category} style={{ marginBottom: '32px' }}>
-                  <div className="doc-category-header">
-                    <h3 className="doc-category-title">{category}</h3>
-                    <span className="doc-category-hours">{categoryTotal}h</span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <div key={idx} className="doc-deliverable-item">
-                      <div className="doc-deliverable-header">
-                        <span className="doc-deliverable-name">{item.name}</span>
-                        <span className="doc-deliverable-hours">
-                          {item.estimate?.expected_hours ?? 0}h
-                        </span>
-                      </div>
-                      {item.description && (
-                        <p className="doc-deliverable-desc">{item.description}</p>
-                      )}
-                      {item.estimate && (
-                        <div className="doc-deliverable-estimates">
-                          <span>Min: {item.estimate.optimistic_hours}h</span>
-                          <span>Expected: {item.estimate.expected_hours}h</span>
-                          <span>Max: {item.estimate.pessimistic_hours}h</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              );
-            });
-          })()}
-        </div>
-      )}
-
-      {/* Section 3: Scope (Included/Excluded) */}
-      {!isMarkdownOnly && !summaryIsHtml && content.scope && (
-        <div className="doc-section">
-          <div className="doc-section-number">3</div>
-          <h2 className="doc-section-title">Scope Definition</h2>
-
-          {content.scope.included && content.scope.included.length > 0 && (
-            <>
-              <h3 className="doc-subsection-title">Included in Scope</h3>
-              <ul className="doc-list">
-                {content.scope.included.map((item, idx) => (
-                  <li key={idx} className="doc-scope-item included">{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          {content.scope.excluded && content.scope.excluded.length > 0 && (
-            <>
-              <h3 className="doc-subsection-title">Excluded from Scope</h3>
-              <ul className="doc-list">
-                {content.scope.excluded.map((item, idx) => (
-                  <li key={idx} className="doc-scope-item excluded">{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Section 4: Assumptions */}
-      {!isMarkdownOnly && !summaryIsHtml && content.assumptions && content.assumptions.length > 0 && (
-        <div className="doc-section">
-          <div className="doc-section-number">4</div>
-          <h2 className="doc-section-title">Assumptions</h2>
-          <ol className="doc-list-ordered">
-            {content.assumptions.map((assumption, idx) => (
-              <li key={idx} className="doc-list-ordered-item">{assumption}</li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Section 5: Risks */}
-      {!isMarkdownOnly && !summaryIsHtml && content.risks && content.risks.length > 0 && (
-        <div className="doc-section">
-          <div className="doc-section-number">5</div>
-          <h2 className="doc-section-title">Risks & Mitigation</h2>
-          <div className="risks-list">
-            {content.risks.map((risk, index) => (
-              <RiskItem key={index} risk={risk} index={index} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Section 6: Timeline */}
-      {!isMarkdownOnly && !summaryIsHtml && content.timeline && (
-        <div className="doc-section">
-          <div className="doc-section-number">6</div>
-          <h2 className="doc-section-title">Project Timeline</h2>
-
-          {content.timeline.estimated_start && content.timeline.estimated_end && (
-            <p className="doc-body-text">
-              <span className="doc-emphasis">Duration:</span>{' '}
-              {new Date(content.timeline.estimated_start).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}{' '}
-              to{' '}
-              {new Date(content.timeline.estimated_end).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}
-            </p>
-          )}
-
-          {content.timeline.milestones && content.timeline.milestones.length > 0 && (
-            <>
-              <h3 className="doc-subsection-title">Key Milestones</h3>
-              <div style={{ marginLeft: '16px' }}>
-                {content.timeline.milestones.map((milestone, idx) => (
-                  <div key={idx} className="doc-timeline-item">
-                    <span className="doc-timeline-date">
-                      {new Date(milestone.target_date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </span>
-                    <span className="doc-timeline-milestone">{milestone.name}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Section 7: Project Totals - Removed from preview as per user request */}
-      {/* Estimate Summary section commented out - not shown in preview */}
+      {/* Canonical document body */}
+      <div className="doc-content-body">
+        {bodyIsHtml ? (
+          // HTML produced/edited by the Tiptap editor.
+          // Use the same typography/layout classes as the inline editor
+          // so Preview and Edit modes look identical.
+          <div className="doc-editor-preview" dangerouslySetInnerHTML={{ __html: body }} />
+        ) : (
+          <MarkdownBody content={body} />
+        )}
+      </div>
     </div>
   );
 }
 
 export default QuoteDocument;
+

@@ -84,20 +84,20 @@ SEO-friendly markup
 [List translated pages]
 Note: Only include section 2.3 for multi-language websites. Omit for single-language sites.
 
-3. Multi-language Setup (if applicable)
+3. Multi-language Setup (only include if mentioned in requirements or chat)
 Implementation of WPML or Polylang (client to confirm preference)
 Language switcher setup
 Language-specific URLs
 [Any special font support]
 
-4. Interactive Tools (Embed Only) (if applicable)
+4. Interactive Tools (Embed Only) (only include if mentioned in requirements or chat)
 Note: Tools will be designed externally and provided for embedding. Only embed support is included.
 [Tool Name 1]
 Embedded on [Page Name]
 [Tool Name 2]
 Embedded on [Page Name]
 
-5. Content Migration & SEO Safety (if applicable)
+5. Content Migration & SEO Safety (only include if SEO/migration is mentioned)
 Migration of [X]–[Y] existing blog posts
 Migration of images and media
 Image optimization for the web
@@ -261,6 +261,7 @@ Note: This is a ballpark estimate based on the details we have. Once we receive 
 6. Use plain text formatting, NO markdown tables, NO emojis
 7. Number sections as shown (1, 2, 2.1, 2.2, 3, etc.)
 8. Always end with the ballpark estimate note
+9. If Multi-language, Interactive Tools, or Content Migration & SEO Safety are NOT mentioned in the requirements or chat, OMIT sections 3, 4, and/or 5 entirely instead of writing "Not applicable for this project."
 
 For general questions not related to requirements, respond helpfully and conversationally.""",
 
@@ -475,17 +476,17 @@ SEO-friendly markup
 [List translated pages]
 Note: Only include section 2.3 for multi-language websites. For single-language English sites, omit this section entirely.
 
-3. Multi-language Setup (if applicable)
+3. Multi-language Setup (only include if mentioned in requirements or chat)
 Implementation of WPML or Polylang (client to confirm preference)
 Language switcher setup
 Language-specific URLs
 
-4. Interactive Tools (Embed Only) (if applicable)
+4. Interactive Tools (Embed Only) (only include if mentioned in requirements or chat)
 Note: Tools will be designed externally and provided for embedding. Only embed support is included.
 [Tool Name]
 Embedded on [Page Name]
 
-5. Content Migration & SEO Safety (if applicable)
+5. Content Migration & SEO Safety (only include if SEO/migration is mentioned)
 Migration of [X]–[Y] existing blog posts
 Migration of images and media
 Image optimization for the web
@@ -587,6 +588,7 @@ Before submitting your response, verify:
 ✓ Are hour estimates specific ranges (e.g., "180-220 hours") not "[X] – [Y] hours"?
 ✓ Is the timeline specific (e.g., "8-10 weeks") not "[X] – [Y] weeks"?
 ✓ Are migration counts specific (e.g., "50-60 blog posts") not "[X]–[Y] blog posts"?
+✓ When Multi-language, Interactive Tools, or Content Migration & SEO Safety are NOT mentioned in the requirements or chat, are sections 3, 4, and/or 5 COMPLETELY OMITTED (no headings, no 'Not applicable' text)?
 
 If any answer is NO, revise your response before submitting.
 """

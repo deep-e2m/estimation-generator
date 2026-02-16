@@ -113,6 +113,19 @@ function markdownToHtml(markdown: string): string {
       continue;
     }
 
+    // Skip metadata lines like "Prepared for:", "Prepared by:", "Date:", etc.
+    // These are rendered in the document header and should not be duplicated
+    // in the body content.
+    const metadataPatterns = [
+      /^\*\*(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline|Client will provide|Plugins|Note)[:\s]*\*\*:?\s*(.*)$/i,
+      /^\*\*(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline)[:\s]*\*\*\s*(.*)$/i,
+      /^(Prepared for|Prepared by|Date|Platform|Languages|Estimated Total Effort|Estimated Timeline|Client will provide|Plugins|Note):\s*(.*)$/i,
+    ];
+    if (metadataPatterns.some((pattern) => pattern.test(trimmed))) {
+      closeList();
+      continue;
+    }
+
     // Horizontal rule
     if (/^-{3,}$/.test(trimmed) || /^\*{3,}$/.test(trimmed)) {
       closeList();
@@ -359,10 +372,29 @@ function structuredContentToHtml(content: QuoteContent): string {
 
 /**
  * Detect if a string contains HTML tags (from Tiptap editor).
- * Used to decide whether content needs markdown-to-HTML conversion.
+ *
+ * This is intentionally conservative but needs to handle:
+ * - Clean fragments starting with headings/paragraphs/lists (Tiptap output)
+ * - HTML pasted from Google Docs/Word where the first tag might be <hr>,
+ *   <div>, <span>, or a table element.
+ *
+ * We trim leading whitespace, require the string to start with "<", and then
+ * check for a small allow‑list of common block/inline tags. This avoids
+ * misclassifying plain text that only happens to contain "<" later in the line.
  */
 export function isHtmlContent(content: string): boolean {
-  return /^<(?:h[1-6]|p|ul|ol|li|strong|em|div|blockquote)\b/m.test(content);
+  const trimmed = content.trimStart();
+
+  // Fast path: markdown/plain text will almost never start with "<"
+  if (!trimmed.startsWith('<')) {
+    return false;
+  }
+
+  // Allow-list of tags we expect at the start of our HTML fragments.
+  // Extend this list if future editor output introduces new top-level tags.
+  return /^<(?:h[1-6]|p|ul|ol|li|strong|em|div|blockquote|hr|table|thead|tbody|tr|td|th|span)\b/i.test(
+    trimmed
+  );
 }
 
 /**
