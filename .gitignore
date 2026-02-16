@@ -194,3 +194,16 @@ dump.rdb
 
 # Images
 *.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+
+# ==========================================
+# Junk / accidental files
+# ==========================================
+# Common unsaved or mistakenly added files
+Untitled
+/cd
+/frontend@0.0.0

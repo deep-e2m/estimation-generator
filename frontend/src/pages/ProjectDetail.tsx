@@ -22,6 +22,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { parseTotalHoursFromContent, parseRequirementsCountFromContent } from '@/lib/quote-content-parse';
 import { projectsService, quotesService } from '@/services';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -131,17 +132,25 @@ export function ProjectDetailPage() {
     }
   }, [id, navigate, shouldAutoStartChat]);
 
-  // Calculate stats
-  const totalHours = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
-  const requirementsCount = quote?.content?.deliverables?.length ?? 0;
+  // Calculate stats: use API values first, then parse from quote content so cards stay in sync with the document
+  const totalHoursFromApi = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
+  const totalHoursParsed = parseTotalHoursFromContent(quote?.content ?? null);
+  const totalHours = totalHoursFromApi > 0 ? totalHoursFromApi : totalHoursParsed;
+
+  // Use requirements_count from project API (stored from quote metadata); fallback to parsing quote content when 0
+  const requirementsCount =
+    (project?.requirements_count ?? 0) || parseRequirementsCountFromContent(quote?.content ?? null);
+
   const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
 
-  // Prepare stat pill data for the title section
+  // Prepare stat cards data for EstimateChat (display hours as integer when whole number)
+  const totalHoursDisplay = totalHours > 0 ? (Number.isInteger(totalHours) ? `${totalHours}h` : `${Math.round(totalHours)}h`) : '—';
   const statCardsData = [
     {
       label: 'Total Hours',
-      value: totalHours > 0 ? `${totalHours}h` : '—',
-      icon: <Clock style={{ width: 14, height: 14 }} />,
+      value: totalHoursDisplay,
+      subtext: totalHours > 0 ? 'Estimated effort' : 'No estimate yet',
+      icon: <Clock style={{ width: 24, height: 24 }} />,
       iconClass: 'hours',
     },
     {

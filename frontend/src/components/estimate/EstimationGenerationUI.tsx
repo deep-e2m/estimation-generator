@@ -323,17 +323,8 @@ export function EstimationGenerationUI({
         const nextProgress = prev + 1.5;
         const currentStepThreshold = (currentStep + 1) * progressPerStep;
 
-        // Update live stats based on progress ONLY if real data hasn't been received
-        // These are placeholder animations while waiting for the actual API response
-        if (!analysisReceived) {
-          if (nextProgress < 20) {
-            setLiveStats(s => ({ ...s, requirementsFound: Math.min(Math.floor(nextProgress * 0.3), 5) }));
-          } else if (nextProgress < 40) {
-            setLiveStats(s => ({ ...s, requirementsFound: Math.min(Math.floor(nextProgress * 0.4), 8), tasksIdentified: Math.min(Math.floor((nextProgress - 20) * 0.2), 4) }));
-          } else if (nextProgress < 80) {
-            setLiveStats(s => ({ ...s, tasksIdentified: Math.min(Math.floor((nextProgress - 20) * 0.3), 6), hoursCalculated: Math.min(Math.floor((nextProgress - 40) * 2), 80) }));
-          }
-        }
+        // We do not animate fake requirements/tasks/hours here so the final values
+        // match the API and Project Detail (single source of truth).
 
         // Check if we should advance to next step
         if (nextProgress >= currentStepThreshold && currentStep < ANALYSIS_STEPS.length - 1) {
@@ -361,18 +352,38 @@ export function EstimationGenerationUI({
     hasStartedRef.current = true;
 
     const startGeneration = async () => {
+      // Frontend validation before sending request
+      const description = project.description?.trim() || '';
+      const name = project.name?.trim() || '';
+
+      // Validate project name exists
+      if (name.length < 2) {
+        setError('Project name is required. Please provide a meaningful project name.');
+        setIsGenerating(false);
+        return;
+      }
+
       abortControllerRef.current = new AbortController();
       stepStartTimeRef.current = Date.now();
 
       const request: GenerateQuoteRequest = {
-        requirements: project.description || '',
+        requirements: description,
         use_rag: true,
         regenerate: true, // Allow regeneration if estimate already exists
         project_context: {
           platform: project.platform,
-          project_name: project.name,
+          project_name: name,
         },
       };
+
+      // Log for debugging
+      console.log('[QUOTE_GEN] Starting generation:', {
+        projectId: project.id,
+        projectName: name,
+        requirementsLength: description.length,
+        platform: project.platform,
+        hasContext: !!request.project_context,
+      });
 
       try {
         const response = await quoteService.generateQuote(project.id, request);
@@ -384,12 +395,12 @@ export function EstimationGenerationUI({
         setStepTimes(prev => ({ ...prev, [currentStep]: timeTaken }));
         setCompletedSteps(prev => [...prev, ANALYSIS_STEPS.length - 1]);
         
-        // Set REAL stats from API response
+        // Set REAL stats from API response only (no fallback) so Live Analysis matches Project Detail
         setAnalysisReceived(true);
         setLiveStats({
-          requirementsFound: analysis?.requirements_count || Math.max(5, Math.floor((project.description?.length || 100) / 50)),
-          tasksIdentified: analysis?.tasks_count || Math.max(5, Math.floor((quote.total_hours || 100) / 20)),
-          hoursCalculated: quote.total_hours || 0,
+          requirementsFound: analysis?.requirements_count ?? 0,
+          tasksIdentified: analysis?.tasks_count ?? 0,
+          hoursCalculated: quote.total_hours ?? 0,
         });
         
         setProgress(100);

@@ -71,9 +71,9 @@ class QuoteGenerateRequest(BaseModel):
 
     requirements: str = Field(
         ...,
-        min_length=10,
+        min_length=0,
         max_length=50000,
-        description="Client requirements for the project",
+        description="Client requirements for the project (any length; estimation also uses project title and uploaded documents)",
         examples=["Build a WordPress site with WooCommerce, 10 product pages, shopping cart..."],
     )
     title: Optional[str] = Field(
@@ -248,6 +248,7 @@ class QuoteSummaryResponse(BaseModel):
     id: UUID = Field(..., description="Unique quote identifier")
     quote_number: str = Field(default="", description="Human-readable quote number")
     project_id: UUID = Field(..., description="ID of the parent project")
+    project_name: Optional[str] = Field(None, description="Name of the parent project")
     title: str = Field(..., description="Quote title")
     total_hours: Decimal = Field(..., description="Estimated total hours")
     platform: str = Field(..., description="Target platform")
@@ -299,6 +300,18 @@ class AnalysisMetadata(BaseModel):
     sections_count: int = Field(default=0, description="Number of sections in the quote")
     pages_count: int = Field(default=0, description="Number of pages identified")
     complexity_factors: list[str] = Field(default_factory=list, description="Factors affecting complexity")
+    has_multi_language: bool = Field(
+        default=False,
+        description="True when requirements/quote include multi-language scope",
+    )
+    has_interactive_tools: bool = Field(
+        default=False,
+        description="True when requirements/quote include interactive tools/embeds",
+    )
+    has_seo: bool = Field(
+        default=False,
+        description="True when requirements/quote include SEO or analytics work",
+    )
 
 
 class QuoteGenerationMetadata(BaseModel):

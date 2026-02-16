@@ -1,12 +1,12 @@
 /**
  * Projects Page - Stitch Design
- * 
+ *
  * Professional full-width layout with status filter tabs,
  * colorful project cards, and proper pagination.
  */
 
-import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
@@ -27,18 +27,32 @@ import { Badge } from '@/components/ui/badge'
 import { Dropdown } from '@/components/ui/dropdown'
 import { Spinner } from '@/components/ui/spinner'
 import { NativeSelect } from '@/components/ui'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { projectsService } from '@/services'
 import { formatRelativeTime } from '@/lib/utils'
 import type { ProjectStatus } from '@/types'
-import type { ProjectSummary } from '@/types/project'
+import type { ProjectSummary, ProjectUpdate } from '@/types/project'
 
 // Status tabs configuration
 const STATUS_TABS = [
   { value: 'all', label: 'All Status' },
   { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
+  { value: 'archived', label: 'Archived' },
   { value: 'completed', label: 'Completed' },
 ] as const
+
+type ProjectEditForm = {
+  name: string
+  description: string
+  client_name: string
+}
 
 // Folder icon colors - matching Stitch design
 const FOLDER_COLORS = [
@@ -55,7 +69,6 @@ function StatusBadge({ status }: { status: string }) {
     active: 'active' as const,
     completed: 'completed' as const,
     archived: 'archived' as const,
-    draft: 'draft' as const,
   }[status] || 'secondary'
 
   return <Badge variant={variant}>{status.toUpperCase()}</Badge>
@@ -69,15 +82,15 @@ function ProjectCard({
   project,
   index,
   onClick,
+  onSeeMore,
   onAction,
 }: {
   project: ProjectSummary
   index: number
   onClick: () => void
+  onSeeMore: () => void
   onAction: (action: string, project: ProjectSummary) => void
 }) {
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
-
   const dropdownOptions = [
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
     { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
@@ -90,11 +103,6 @@ function ProjectCard({
 
   const description = project.description || ''
   const isTruncatable = description.length > DESCRIPTION_TRUNCATE_LENGTH
-
-  const handleToggleDescription = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsDescriptionExpanded((prev) => !prev)
-  }, [])
 
   return (
     <div className="projects-card" onClick={onClick}>
@@ -110,34 +118,27 @@ function ProjectCard({
           <StatusBadge status={project.status} />
         </div>
         {description && (
-          <p className={`projects-card-description ${isDescriptionExpanded ? 'projects-card-description-expanded' : ''}`}>
-            {isTruncatable && !isDescriptionExpanded
-              ? <>
-                  {description.slice(0, DESCRIPTION_TRUNCATE_LENGTH).trimEnd()}...{' '}
-                  <button
-                    type="button"
-                    className="projects-card-description-toggle"
-                    onClick={handleToggleDescription}
-                  >
-                    See more
-                  </button>
-                </>
-              : <>
-                  {description}
-                  {isTruncatable && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        className="projects-card-description-toggle"
-                        onClick={handleToggleDescription}
-                      >
-                        See less
-                      </button>
-                    </>
-                  )}
-                </>
-            }
+          <p className="projects-card-description">
+            {isTruncatable ? (
+              <>
+                {description.slice(0, DESCRIPTION_TRUNCATE_LENGTH).trimEnd()}...
+                {' '}
+                <button
+                  type="button"
+                  className="projects-card-description-toggle"
+                  onClick={(e) => {
+                    // Parent card click navigates to project detail;
+                    // stopping propagation here prevents accidental navigation.
+                    e.stopPropagation()
+                    onSeeMore()
+                  }}
+                >
+                  See more
+                </button>
+              </>
+            ) : (
+              description
+            )}
           </p>
         )}
       </div>
@@ -290,11 +291,23 @@ function Pagination({
 
 export default function Projects() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
+  const urlSearch = searchParams.get('search') ?? ''
+  const [search, setSearch] = useState(urlSearch)
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [itemsPerPage, setItemsPerPage] = useState<number>(10)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogProject, setDialogProject] = useState<ProjectSummary | null>(null)
+  const [editForm, setEditForm] = useState<ProjectEditForm | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Sync URL search param into state (e.g. from global header search)
+  useEffect(() => {
+    setSearch(urlSearch)
+    setPage(1)
+  }, [urlSearch])
 
   // Handle items per page change
   const handleItemsPerPageChange = (newSize: number) => {
@@ -302,12 +315,14 @@ export default function Projects() {
     setPage(1) // Reset to first page
   }
 
-  // Delete project mutation
+  // Delete project mutation (cascade deletes quotes in DB; invalidate dashboard so stats/lists refresh)
   const deleteMutation = useMutation({
     mutationFn: (projectId: string) => projectsService.delete(projectId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-quotes'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 
@@ -317,8 +332,22 @@ export default function Projects() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
+
+  // Update project mutation (for inline dialog edits)
+  const updateMutation = useMutation({
+    mutationFn: (payload: { projectId: string; data: ProjectUpdate }) =>
+      projectsService.update(payload.projectId, payload.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    },
+  })
+
+  const isSaving = updateMutation.isPending
 
   // Handle dropdown actions
   const handleProjectAction = async (action: string, project: ProjectSummary) => {
@@ -342,6 +371,57 @@ export default function Projects() {
           }
         }
         break
+    }
+  }
+
+  const handleOpenDialog = (project: ProjectSummary) => {
+    setDialogProject(project)
+    setEditForm({
+      name: project.name,
+      description: project.description || '',
+      client_name: project.client_name || '',
+    })
+    setSaveError(null)
+    setDialogOpen(true)
+  }
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false)
+    setDialogProject(null)
+    setEditForm(null)
+    setSaveError(null)
+  }
+
+  const handleEditFieldChange = (field: keyof ProjectEditForm, value: string) => {
+    setEditForm((prev) => (prev ? { ...prev, [field]: value } : prev))
+  }
+
+  const handleSaveProject = async () => {
+    if (!dialogProject || !editForm) return
+
+    const trimmedName = editForm.name.trim()
+    if (!trimmedName) {
+      setSaveError('Project name is required.')
+      return
+    }
+
+    const payload: ProjectUpdate = {
+      name: trimmedName,
+      description: editForm.description.trim() || undefined,
+      client_name: editForm.client_name.trim() || undefined,
+    }
+
+    setSaveError(null)
+
+    try {
+      await updateMutation.mutateAsync({
+        projectId: dialogProject.id,
+        data: payload,
+      })
+      handleCloseDialog()
+    } catch (err) {
+      console.error('Failed to update project:', err)
+      setSaveError('Failed to save changes. Please try again.')
     }
   }
 
@@ -398,8 +478,13 @@ export default function Projects() {
             placeholder="Search projects..."
             value={search}
             onChange={(e) => {
-              setSearch(e.target.value)
+              const value = e.target.value
+              setSearch(value)
               setPage(1)
+              const next = new URLSearchParams(searchParams)
+              if (value) next.set('search', value)
+              else next.delete('search')
+              setSearchParams(next)
             }}
           />
         </div>
@@ -479,6 +564,7 @@ export default function Projects() {
                 project={project}
                 index={index}
                 onClick={() => navigate(`/projects/${project.id}`)}
+                onSeeMore={() => handleOpenDialog(project)}
                 onAction={handleProjectAction}
               />
             ))}
@@ -496,6 +582,119 @@ export default function Projects() {
           )}
         </>
       )}
+
+      {/* Project details dialog (opened from "See more") */}
+      <Dialog
+        open={dialogOpen && !!dialogProject}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseDialog()
+          } else if (dialogProject) {
+            setDialogOpen(true)
+          }
+        }}
+      >
+        <DialogContent className="projects-detail-dialog">
+          <DialogHeader>
+            <DialogTitle className="projects-detail-dialog-title">
+              {dialogProject?.name ?? 'Project'}
+            </DialogTitle>
+            {dialogProject && (
+              <DialogDescription className="projects-detail-dialog-desc">
+                View and edit the full project brief and client details without leaving the projects list.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {dialogProject && editForm && (
+            <div className="projects-detail-dialog-body">
+              <div className="projects-detail-dialog-meta">
+                <span className="projects-detail-dialog-status">
+                  <span className="projects-detail-dialog-status-label">Status</span>
+                  <span
+                    className={`projects-detail-dialog-status-value projects-detail-dialog-status-${dialogProject.status}`}
+                  >
+                    {dialogProject.status.toUpperCase()}
+                  </span>
+                </span>
+                {dialogProject.platform && (
+                  <span className="projects-detail-dialog-chip">
+                    {dialogProject.platform}
+                  </span>
+                )}
+                <span className="projects-detail-dialog-chip">
+                  {dialogProject.quotes_count} {dialogProject.quotes_count === 1 ? 'quote' : 'quotes'}
+                </span>
+              </div>
+
+              <div className="projects-detail-dialog-field">
+                <label className="projects-detail-dialog-label" htmlFor="project-name-input">
+                  Project name
+                </label>
+                <input
+                  id="project-name-input"
+                  className="projects-detail-dialog-input"
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => handleEditFieldChange('name', e.target.value)}
+                />
+              </div>
+
+              <div className="projects-detail-dialog-field">
+                <label className="projects-detail-dialog-label" htmlFor="client-name-input">
+                  Client name (optional)
+                </label>
+                <input
+                  id="client-name-input"
+                  className="projects-detail-dialog-input"
+                  type="text"
+                  value={editForm.client_name}
+                  onChange={(e) => handleEditFieldChange('client_name', e.target.value)}
+                />
+              </div>
+
+              <div className="projects-detail-dialog-field">
+                <label className="projects-detail-dialog-label" htmlFor="project-description-input">
+                  Project brief / description
+                </label>
+                <textarea
+                  id="project-description-input"
+                  className="projects-detail-dialog-textarea"
+                  rows={8}
+                  value={editForm.description}
+                  onChange={(e) => handleEditFieldChange('description', e.target.value)}
+                />
+                <p className="projects-detail-dialog-hint">
+                  Long briefs are best viewed here so the projects list stays compact.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="projects-detail-dialog-footer">
+            <div className="projects-detail-dialog-footer-left">
+              {saveError && <p className="projects-detail-dialog-error">{saveError}</p>}
+            </div>
+            <div className="projects-detail-dialog-footer-right">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloseDialog}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveProject}
+                disabled={isSaving || !dialogProject}
+              >
+                {isSaving ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

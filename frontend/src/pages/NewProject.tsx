@@ -101,8 +101,6 @@ export function NewProjectPage() {
 
     if (!formData.description.trim()) {
       newErrors.description = 'Project description is required'
-    } else if (formData.description.trim().length < 10) {
-      newErrors.description = 'Description must be at least 10 characters'
     }
 
     if (!formData.platform) {
@@ -380,7 +378,7 @@ export function NewProjectPage() {
                   onChange={handleFileChange}
                   className="new-project-upload-input"
                   disabled={isSubmitting}
-                  accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
+                  accept=".pdf,.doc,.docx,.txt,.md,text/markdown,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
                 />
                 <div className="new-project-upload">
                   <div className="new-project-upload-icon">
@@ -390,7 +388,7 @@ export function NewProjectPage() {
                     <span>Click to upload</span> or drag and drop
                   </p>
                   <p className="new-project-upload-hint">
-                    PDF, DOC, PNG, JPG (MAX 10MB EACH)
+                    PDF, DOC, TXT, MD (Markdown), PNG, JPG (MAX 10MB EACH)
                   </p>
                 </div>
               </div>

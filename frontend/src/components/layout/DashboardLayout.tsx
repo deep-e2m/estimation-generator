@@ -221,11 +221,27 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('')
   const location = useLocation()
   const navigate = useNavigate()
 
   // Sidebar is expanded when pinned OR hovered
   const isExpanded = isPinned || isHovered
+
+  // Global search: navigate to projects with search param (DB-backed list)
+  const handleGlobalSearchSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault()
+      const q = globalSearchQuery.trim()
+      if (q) {
+        navigate(`/projects?search=${encodeURIComponent(q)}`)
+        setGlobalSearchQuery('')
+      } else {
+        navigate('/projects')
+      }
+    },
+    [globalSearchQuery, navigate]
+  )
 
   // Handle mouse events for hover-to-expand
   const handleMouseEnter = useCallback(() => {
@@ -451,15 +467,18 @@ export default function DashboardLayout() {
 
           {/* Right side */}
           <div className="header-right">
-            {/* Search */}
-            <div className="header-search" style={{ display: 'flex' }}>
+            {/* Search: navigates to Projects with search param for DB-backed results */}
+            <form className="header-search" style={{ display: 'flex' }} onSubmit={handleGlobalSearchSubmit}>
               <Search style={{ width: 16, height: 16, color: 'var(--color-gray-400)', flexShrink: 0 }} />
               <input
                 type="search"
-                placeholder="Search projects, quotes..."
+                placeholder="Search projects..."
                 className="header-search-input"
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                aria-label="Search projects"
               />
-            </div>
+            </form>
 
             {/* Notifications */}
             <motion.button

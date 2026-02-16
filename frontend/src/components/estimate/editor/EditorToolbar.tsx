@@ -35,6 +35,8 @@ import {
   Redo,
   Eye,
   Pencil,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Editor } from '@tiptap/react';
@@ -50,6 +52,12 @@ export interface EditorToolbarProps {
   isQuoteEditable: boolean;
   /** Tiptap editor instance for formatting commands (null in preview mode) */
   editor: Editor | null;
+  /** Whether there are unsaved changes */
+  hasUnsavedChanges?: boolean;
+  /** Whether a save operation is in progress */
+  isSaving?: boolean;
+  /** Callback to manually save changes */
+  onSave?: () => void;
 }
 
 /** Icon toolbar button for formatting actions */
@@ -125,6 +133,9 @@ export function EditorToolbar({
   onModeChange,
   isQuoteEditable,
   editor,
+  hasUnsavedChanges = false,
+  isSaving = false,
+  onSave,
 }: EditorToolbarProps) {
   return (
     <div className="editor-toolbar">
@@ -159,6 +170,31 @@ export function EditorToolbar({
           Edit
         </button>
       </div>
+
+      {/* Save button: visible only in edit mode with unsaved changes */}
+      {mode === 'edit' && hasUnsavedChanges && onSave && (
+        <div className="editor-toolbar__save-group">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="editor-toolbar__save-btn"
+            title="Save changes (Ctrl+S)"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save />
+                Save Changes
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Formatting controls: visible only in edit mode with an active editor */}
       {mode === 'edit' && editor && (
@@ -246,7 +282,7 @@ export function EditorToolbar({
             />
             <ToolbarBtn
               icon={Highlighter}
-              onClick={() => editor.chain().focus().toggleHighlight().run()}
+              onClick={() => (editor.chain().focus() as unknown as { toggleHighlight: () => { run: () => boolean } }).toggleHighlight().run()}
               isActive={editor.isActive('highlight')}
               title="Highlight"
             />
@@ -290,7 +326,7 @@ export function EditorToolbar({
               onClick={() => {
                 const url = window.prompt('Enter URL:');
                 if (url) {
-                  editor.chain().focus().setLink({ href: url }).run();
+                  (editor.chain().focus() as unknown as { setLink: (a: { href: string }) => { run: () => boolean } }).setLink({ href: url }).run();
                 }
               }}
               isActive={editor.isActive('link')}
@@ -298,7 +334,7 @@ export function EditorToolbar({
             />
             <ToolbarBtn
               icon={TableIcon}
-              onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+              onClick={() => (editor.chain().focus() as unknown as { insertTable: (o: { rows: number; cols: number; withHeaderRow: boolean }) => { run: () => boolean } }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
               title="Insert Table"
             />
           </div>

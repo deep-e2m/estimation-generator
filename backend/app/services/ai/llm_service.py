@@ -200,6 +200,66 @@ class LLMService:
         exclusions = self._extract_section(content, ["exclusions", "out of scope"])
         breakdown = self._extract_breakdown(content)
 
+        # VALIDATION: Check if project name appears in output
+        project_name = None
+        if project_context:
+            project_name = project_context.get("project_name") or project_context.get("client_name")
+
+        if project_name:
+            # Check if project name appears in the generated content
+            if project_name.lower() not in content.lower():
+                logger.warning(
+                    "VALIDATION_WARNING: Project name '%s' not found in generated quote. "
+                    "Content length: %d chars. This may indicate the model generated a generic estimate.",
+                    project_name,
+                    len(content),
+                )
+            else:
+                logger.info(
+                    "VALIDATION_PASS: Project name '%s' found in generated quote.",
+                    project_name,
+                )
+
+        # VALIDATION: Check requirements overlap
+        # Calculate word overlap between requirements and output
+        if requirements and len(requirements) > 50:
+            # Extract meaningful words (>3 chars, not common stopwords)
+            stopwords = {
+                'the', 'and', 'for', 'with', 'this', 'that', 'from', 'will', 'are', 'has', 'have',
+                'been', 'was', 'were', 'but', 'not', 'can', 'all', 'about', 'into', 'through',
+                'our', 'your', 'their', 'which', 'when', 'where', 'who', 'what', 'how', 'should',
+                'would', 'could', 'may', 'might', 'must', 'shall', 'need', 'want', 'like', 'also'
+            }
+
+            requirements_words = {
+                word.lower() for word in requirements.split()
+                if len(word) > 3 and word.lower() not in stopwords
+            }
+            content_words = {
+                word.lower() for word in content.split()
+                if len(word) > 3 and word.lower() not in stopwords
+            }
+
+            if requirements_words:
+                common_words = requirements_words & content_words
+                overlap_ratio = len(common_words) / len(requirements_words)
+
+                if overlap_ratio < 0.15:  # Less than 15% overlap
+                    logger.warning(
+                        "VALIDATION_WARNING: Low overlap between requirements and output. "
+                        "Overlap ratio: %.1f%%. This may indicate the model didn't address the requirements. "
+                        "Common words: %d / %d",
+                        overlap_ratio * 100,
+                        len(common_words),
+                        len(requirements_words),
+                    )
+                else:
+                    logger.info(
+                        "VALIDATION_PASS: Requirements overlap: %.1f%% (%d common words)",
+                        overlap_ratio * 100,
+                        len(common_words),
+                    )
+
         # Calculate cost if hourly rate provided
         total_cost = None
         if hourly_rate and hours_data.get("total"):

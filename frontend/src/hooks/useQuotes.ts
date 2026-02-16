@@ -106,6 +106,8 @@ export function useDeleteQuote() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.quotes.lists(),
       });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-quotes'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.removeQueries({
         queryKey: queryKeys.quotes.detail(variables.projectId, variables.quoteId),
       });

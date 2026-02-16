@@ -16,6 +16,8 @@ function getFileIcon(fileName: string) {
   switch (extension) {
     case 'pdf':
       return <FileText className="h-5 w-5 text-error-600" />;
+    case 'md':
+      return <FileText className="h-5 w-5 text-primary-600" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
@@ -26,6 +28,7 @@ function getFileIcon(fileName: string) {
       return <FileSpreadsheet className="h-5 w-5 text-success-600" />;
     case 'doc':
     case 'docx':
+    case 'md':
       return <FileText className="h-5 w-5 text-primary-600" />;
     default:
       return <File className="h-5 w-5 text-gray-400" />;
@@ -101,7 +104,7 @@ export function FileUploadZone({
           onChange={onFileChange}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           disabled={isSubmitting}
-          accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
+          accept=".pdf,.doc,.docx,.txt,.md,text/markdown,.png,.jpg,.jpeg,.gif,.xlsx,.xls"
           aria-label="Choose files to upload"
         />
         <div
@@ -130,7 +133,7 @@ export function FileUploadZone({
                 <span className="font-medium text-primary-600">Click to upload</span> or drag and drop
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                PDF, DOC, DOCX, TXT, PNG, JPG, XLSX (Max 10MB each)
+                PDF, DOC, DOCX, TXT, MD (Markdown), PNG, JPG, XLSX (Max 10MB each)
               </p>
             </>
           )}

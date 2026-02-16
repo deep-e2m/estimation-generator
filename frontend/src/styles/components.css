@@ -705,6 +705,12 @@
   animation: fadeInScale var(--transition-fast);
 }
 
+/* Portal-rendered dropdown (position fixed, no margin) */
+.dropdown-content-portal {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .dropdown-item {
   display: flex;
   align-items: center;

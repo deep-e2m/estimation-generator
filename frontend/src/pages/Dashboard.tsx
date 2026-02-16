@@ -5,9 +5,9 @@
  * Matches the Stitch design mockup with modern UI components.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   FolderOpen,
@@ -22,12 +22,25 @@ import {
   History,
   Share2,
   Calendar,
+  BarChart3,
+  Edit,
+  Archive,
+  Trash2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Dropdown } from '@/components/ui/dropdown'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { useUser } from '@/store/authStore'
 import { projectsService } from '@/services/projects.service'
 import { quotesService } from '@/services/quotes.service'
+import { dashboardService } from '@/services/dashboard.service'
 import { formatRelativeTime } from '@/lib/date'
 import type { QuoteSummary, QuoteStatus, ProjectStatus } from '@/types'
 
@@ -169,10 +182,18 @@ function StatCard({ label, value, subLabel, icon: Icon, trend, trendUp = true, b
 interface RecentProjectsProps {
   projects: ProjectWithDeadline[]
   isLoading: boolean
+  onProjectAction?: (action: string, project: ProjectWithDeadline) => void
 }
 
-function RecentProjectsList({ projects, isLoading }: RecentProjectsProps) {
+function RecentProjectsList({ projects, isLoading, onProjectAction }: RecentProjectsProps) {
   const navigate = useNavigate()
+
+  const projectDropdownOptions = [
+    { value: 'view', label: 'View project', icon: <Edit style={{ width: 16, height: 16 }} /> },
+    { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
+    { value: 'divider', label: '', divider: true },
+    { value: 'delete', label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true },
+  ]
 
   if (isLoading) {
     return <ListSkeleton />
@@ -215,15 +236,32 @@ function RecentProjectsList({ projects, isLoading }: RecentProjectsProps) {
               <Badge variant={getStatusBadgeVariant(project.status)}>
                 {project.status === 'active' ? 'ACTIVE' : project.status === 'completed' ? 'COMPLETED' : project.status.toUpperCase().replace('_', ' ')}
               </Badge>
-              <button 
-                className="dashboard-list-item-menu"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  // TODO: Add dropdown menu
-                }}
-              >
-                <MoreVertical style={{ width: 16, height: 16 }} />
-              </button>
+              {onProjectAction ? (
+                <Dropdown
+                  align="right"
+                  trigger={
+                    <button
+                      className="dashboard-list-item-menu"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Project actions"
+                    >
+                      <MoreVertical style={{ width: 16, height: 16 }} />
+                    </button>
+                  }
+                  options={projectDropdownOptions}
+                  onSelect={(value) => {
+                    if (value === 'view') {
+                      navigate(`/projects/${project.id}`)
+                    } else {
+                      onProjectAction(value, project)
+                    }
+                  }}
+                />
+              ) : (
+                <button className="dashboard-list-item-menu" onClick={(e) => e.stopPropagation()} aria-hidden>
+                  <MoreVertical style={{ width: 16, height: 16 }} />
+                </button>
+              )}
             </div>
           </div>
         )
@@ -293,7 +331,14 @@ function RecentQuotesList({ quotes, isLoading }: RecentQuotesProps) {
         <div
           key={quote.id}
           className="dashboard-list-item"
-          onClick={() => navigate(`/quotes/${quote.id}`)}
+          onClick={() => {
+            const projectId = quote.project?.id
+            if (projectId) {
+              navigate(`/projects/${projectId}/quotes/${quote.id}`)
+            } else {
+              navigate(`/projects`)
+            }
+          }}
         >
           <div className="dashboard-list-item-icon green">
             <FileText style={{ width: 20, height: 20 }} />
@@ -323,13 +368,32 @@ function RecentQuotesList({ quotes, isLoading }: RecentQuotesProps) {
 // ============================================
 
 interface AIPerformanceProps {
-  totalAnalysis: number
+  /** Total hours estimated (from dashboard stats API) – real data from DB */
+  totalAnalysis: number;
+  /** Accuracy / margin / efficiency: from API; may be benchmark (placeholder) or measured */
+  accuracyPercent: number | null;
+  marginOfErrorPercent: number | null;
+  aiEfficiencyPercent: number | null;
+  /** 'benchmark' = placeholder values; 'measured' = real */
+  metricsSource: 'benchmark' | 'measured' | null;
+  /** Open Full Analytics popup */
+  onFullAnalytics: () => void;
 }
 
-function AIPerformanceCard({ totalAnalysis }: AIPerformanceProps) {
-  const accuracy = 94
+function AIPerformanceCard({
+  totalAnalysis,
+  accuracyPercent,
+  marginOfErrorPercent,
+  aiEfficiencyPercent,
+  metricsSource,
+  onFullAnalytics,
+}: AIPerformanceProps) {
   const circumference = 2 * Math.PI * 60
-  const strokeDashoffset = circumference - (accuracy / 100) * circumference
+  const hasAccuracy = accuracyPercent != null
+  const strokeDashoffset = hasAccuracy
+    ? circumference - (accuracyPercent / 100) * circumference
+    : circumference
+  const isBenchmark = metricsSource === 'benchmark'
 
   return (
     <div className="dashboard-ai-performance">
@@ -340,7 +404,7 @@ function AIPerformanceCard({ totalAnalysis }: AIPerformanceProps) {
         <h3 className="dashboard-ai-performance-title">AI Performance</h3>
       </div>
 
-      {/* Accuracy Donut */}
+      {/* Accuracy Donut - empty when no data */}
       <div className="dashboard-accuracy-container">
         <div className="dashboard-accuracy-ring">
           <svg className="dashboard-accuracy-svg" viewBox="0 0 140 140">
@@ -362,30 +426,48 @@ function AIPerformanceCard({ totalAnalysis }: AIPerformanceProps) {
             />
           </svg>
           <div className="dashboard-accuracy-center">
-            <span className="dashboard-accuracy-value">{accuracy}%</span>
+            <span className="dashboard-accuracy-value">
+              {hasAccuracy ? `${accuracyPercent}%` : '—'}
+            </span>
             <span className="dashboard-accuracy-label">ACCURACY</span>
+            {isBenchmark && (
+              <span className="dashboard-accuracy-benchmark" title="Industry typical; not yet measured from your quotes">
+                Typical
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Total Analysis = real DB data; Accuracy/Margin/Efficiency may be benchmark */}
       <div className="dashboard-ai-stats">
         <div className="dashboard-ai-stat-row">
           <span className="dashboard-ai-stat-label">Total Analysis</span>
-          <span className="dashboard-ai-stat-value">{totalAnalysis}</span>
+          <span className="dashboard-ai-stat-value" title="Total hours from your quotes (from database)">
+            {totalAnalysis}
+          </span>
         </div>
         <div className="dashboard-ai-stat-row">
           <span className="dashboard-ai-stat-label">Margin of Error</span>
-          <span className="dashboard-ai-stat-value">±2%</span>
+          <span className="dashboard-ai-stat-value" title={isBenchmark ? 'Typical range; not yet measured' : undefined}>
+            {marginOfErrorPercent != null ? `±${marginOfErrorPercent}%` : '—'}
+            {isBenchmark && <span className="dashboard-ai-stat-benchmark"> typ.</span>}
+          </span>
         </div>
         <div className="dashboard-ai-stat-row">
           <span className="dashboard-ai-stat-label">AI Efficiency</span>
-          <span className="dashboard-ai-stat-value positive">+18.4%</span>
+          <span className="dashboard-ai-stat-value positive" title={isBenchmark ? 'Typical gain; not yet measured' : undefined}>
+            {aiEfficiencyPercent != null ? `+${aiEfficiencyPercent}%` : '—'}
+            {isBenchmark && <span className="dashboard-ai-stat-benchmark"> typ.</span>}
+          </span>
         </div>
       </div>
 
-      {/* Full Analytics Button */}
-      <button className="dashboard-ai-analytics-btn">
+      <button
+        type="button"
+        className="dashboard-ai-analytics-btn"
+        onClick={onFullAnalytics}
+      >
         Full Analytics
       </button>
     </div>
@@ -532,48 +614,224 @@ function QuickActionsCard() {
 // MAIN DASHBOARD COMPONENT - Stitch Design
 // ============================================
 
+// ============================================
+// FULL ANALYTICS POPUP (graph, models, tokens, accuracy)
+// ============================================
+
+interface FullAnalyticsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function FullAnalyticsDialog({ open, onOpenChange }: FullAnalyticsDialogProps) {
+  const { data: analytics, isLoading } = useQuery({
+    queryKey: ['dashboard-analytics'],
+    queryFn: () => dashboardService.getAnalytics(),
+    enabled: open,
+    staleTime: 60000,
+  })
+
+  const models = analytics?.models ?? []
+  const maxTokens = Math.max(...models.map((m) => m.total_tokens), 1)
+  const hasAnyAccuracy = models.some((m) => m.accuracy_percent != null)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="dashboard-analytics-dialog">
+        <DialogHeader>
+          <DialogTitle className="dashboard-analytics-dialog-title">
+            <BarChart3 className="dashboard-analytics-dialog-title-icon" />
+            AI Analytics
+          </DialogTitle>
+          <DialogDescription className="dashboard-analytics-dialog-desc">
+            Usage and token consumption across models used for your quotes.
+          </DialogDescription>
+          <p className="dashboard-analytics-data-note">
+            Quotes analyzed, total tokens, and per-model usage are from your saved quotes (accurate). Per-model accuracy will appear when we have feedback data.
+          </p>
+        </DialogHeader>
+        <div className="dashboard-analytics-body">
+          {isLoading ? (
+            <div className="dashboard-analytics-loading">
+              <span className="dashboard-analytics-loading-text">Loading analytics…</span>
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              {analytics && (
+                <div className="dashboard-analytics-summary-cards">
+                  <div className="dashboard-analytics-summary-card">
+                    <span className="dashboard-analytics-summary-card-value">
+                      {analytics.total_quotes_analyzed}
+                    </span>
+                    <span className="dashboard-analytics-summary-card-label">Quotes analyzed</span>
+                  </div>
+                  <div className="dashboard-analytics-summary-card">
+                    <span className="dashboard-analytics-summary-card-value">
+                      {analytics.total_tokens_all_time.toLocaleString()}
+                    </span>
+                    <span className="dashboard-analytics-summary-card-label">Total tokens</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Tokens by model chart */}
+              {models.length > 0 ? (
+                <section className="dashboard-analytics-section">
+                  <h3 className="dashboard-analytics-section-title">Tokens by model</h3>
+                  <div className="dashboard-analytics-chart">
+                    <div className="dashboard-analytics-bars">
+                      {models.map((m) => (
+                        <div key={m.model_id} className="dashboard-analytics-bar-row">
+                          <span className="dashboard-analytics-bar-label" title={m.model_id}>
+                            {m.model_id.split('/').pop() ?? m.model_id}
+                          </span>
+                          <div className="dashboard-analytics-bar-track">
+                            <div
+                              className="dashboard-analytics-bar-fill"
+                              style={{
+                                width: `${(m.total_tokens / maxTokens) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="dashboard-analytics-bar-value">
+                            {m.total_tokens.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* Models used */}
+              <section className="dashboard-analytics-section">
+                <h3 className="dashboard-analytics-section-title">Models used</h3>
+                {models.length === 0 ? (
+                  <p className="dashboard-analytics-empty">
+                    No model data yet. Generate a quote to see usage here.
+                  </p>
+                ) : (
+                  <>
+                    <ul className="dashboard-analytics-models-list">
+                      {models.map((m) => (
+                        <li key={m.model_id} className="dashboard-analytics-model-card">
+                          <div className="dashboard-analytics-model-card-top">
+                            <span className="dashboard-analytics-model-name" title={m.model_id}>
+                              {m.model_id.split('/').pop() ?? m.model_id}
+                            </span>
+                            <span className="dashboard-analytics-model-stats">
+                              {m.quote_count} quote{m.quote_count !== 1 ? 's' : ''} · {m.total_tokens.toLocaleString()} tokens
+                              {m.total_cost > 0 && ` · $${m.total_cost.toFixed(4)}`}
+                            </span>
+                          </div>
+                          <p className="dashboard-analytics-model-desc">{m.description}</p>
+                          {hasAnyAccuracy && (
+                            <div className="dashboard-analytics-model-accuracy">
+                              Accuracy: {m.accuracy_percent != null ? `${m.accuracy_percent}%` : '—'}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {!hasAnyAccuracy && (
+                      <p className="dashboard-analytics-accuracy-note">
+                        Per-model accuracy will appear here once we have enough feedback data.
+                      </p>
+                    )}
+                  </>
+                )}
+              </section>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================
+// MAIN DASHBOARD COMPONENT - Stitch Design
+// ============================================
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const user = useUser()
+  const queryClient = useQueryClient()
+  const [fullAnalyticsOpen, setFullAnalyticsOpen] = useState(false)
 
-  // Fetch real data from API
+  // Dashboard stats from DB (so totals and hours stay correct when projects/quotes are deleted)
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => dashboardService.getStats(),
+    staleTime: 10000,
+  })
+
+  // Fetch list data for "recent" sections only (not for card totals)
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['dashboard-projects'],
     queryFn: () => projectsService.list({ sort_by: 'updated_at', sort_order: 'desc' }, 1, 10),
-    staleTime: 30000,
+    staleTime: 10000,
   })
 
   const { data: quotesData, isLoading: quotesLoading } = useQuery({
     queryKey: ['dashboard-quotes'],
     queryFn: () => quotesService.list({ sort_by: 'created_at', sort_order: 'desc' }, undefined, 10),
-    staleTime: 30000,
+    staleTime: 10000,
   })
 
-  // Extract data
+  const deleteProjectMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-quotes'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+
+  const archiveProjectMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.archive(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+
+  const handleProjectAction = (action: string, project: ProjectWithDeadline) => {
+    if (action === 'archive') {
+      archiveProjectMutation.mutate(project.id)
+    } else if (action === 'delete') {
+      if (window.confirm(`Delete "${project.name}"? This will permanently delete the project and all associated quotes. This cannot be undone.`)) {
+        deleteProjectMutation.mutate(project.id)
+      }
+    }
+  }
+
+  // Lists for recent projects / recent quotes
   const projects: ProjectWithDeadline[] = (projectsData?.data || []) as ProjectWithDeadline[]
   const quotes = quotesData?.data || []
-  const totalProjects = projectsData?.pagination?.total_count || projects.length
-  const totalQuotes = quotesData?.pagination?.total_count || quotes.length
-  
-  // Calculate stats
-  const activeProjects = projects.filter(p => p.status === 'active').length
-  const pendingQuotes = quotes.filter(q => q.status === 'draft' || q.status === 'generating').length
-  const totalHoursEstimated = quotes.reduce((sum, q) => sum + (q.totals.total_expected_hours || 0), 0)
-  const totalAnalysis = totalHoursEstimated || 142 // Default to match mockup
+
+  // Card values from DB stats (fallback to list-derived only while stats load)
+  const totalProjects = stats?.total_projects ?? projectsData?.pagination?.total_count ?? projects.length
+  const totalQuotes = stats?.total_quotes ?? quotesData?.pagination?.total_count ?? quotes.length
+  const activeProjects = stats?.active_projects ?? projects.filter(p => p.status === 'active').length
+  const pendingQuotes = stats?.pending_quotes ?? quotes.filter(q => q.status === 'draft' || q.status === 'generating').length
+  const totalHoursEstimated = stats?.total_hours_estimated ?? quotes.reduce((sum, q) => sum + (q.totals.total_expected_hours || 0), 0)
+  const totalAnalysis = totalHoursEstimated || 0
 
   const greeting = getGreeting()
   const firstName = user?.full_name?.split(' ')[0] || 'User'
   const dailyTip = getDailyTip()
 
-  // Stats configuration - Stitch Design (3 cards only)
-  const stats = [
+  // Stats configuration - Stitch Design (3 cards only); values from DB via dashboard-stats
+  const statsCards = [
     {
       label: 'Total Projects',
       value: totalProjects,
       subLabel: `${activeProjects} Active now`,
       icon: FolderOpen,
-      trend: '+3%',
-      trendUp: true,
       iconBg: 'var(--color-primary-100)',
       iconColor: 'var(--color-primary-600)',
     },
@@ -587,8 +845,8 @@ export default function Dashboard() {
     },
     {
       label: 'Hours Estimated',
-      value: `${totalHoursEstimated || 142}h`,
-      subLabel: 'This month',
+      value: `${totalHoursEstimated}h`,
+      subLabel: 'All time',
       icon: Clock,
       badge: 'AI POWERED',
       iconBg: '#fef3c7',
@@ -617,7 +875,7 @@ export default function Dashboard() {
 
       {/* Stats Grid - Always rendered immediately with default values */}
       <div className="dashboard-stats-grid" style={{ marginBottom: 'var(--space-6)' }}>
-        {stats.map((stat) => (
+        {statsCards.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
@@ -640,7 +898,8 @@ export default function Dashboard() {
             <div style={{ padding: 'var(--space-2) var(--space-3) var(--space-4)' }}>
               <RecentProjectsList 
                 projects={projects.slice(0, 3)} 
-                isLoading={projectsLoading} 
+                isLoading={projectsLoading}
+                onProjectAction={handleProjectAction}
               />
             </div>
           </Card>
@@ -652,12 +911,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Right Column - AI Performance */}
+        {/* Right Column - AI Performance (values from dashboard-stats API; no hardcoded fallbacks) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-          {/* AI Performance Card */}
-          <AIPerformanceCard totalAnalysis={totalAnalysis} />
+          <AIPerformanceCard
+            totalAnalysis={totalAnalysis}
+            accuracyPercent={stats?.ai_accuracy_percent ?? null}
+            marginOfErrorPercent={stats?.margin_of_error_percent ?? null}
+            aiEfficiencyPercent={stats?.ai_efficiency_percent ?? null}
+            metricsSource={stats?.ai_metrics_source ?? null}
+            onFullAnalytics={() => setFullAnalyticsOpen(true)}
+          />
         </div>
       </div>
+
+      <FullAnalyticsDialog
+        open={fullAnalyticsOpen}
+        onOpenChange={setFullAnalyticsOpen}
+      />
     </div>
   )
 }
