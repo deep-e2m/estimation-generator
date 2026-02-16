@@ -7,7 +7,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
 import { isMarkdownOnlyContent } from '@/lib/quote-normalizer';
-import type { Quote } from '@/types';
+import type { Deliverable, Quote } from '@/types';
 import type { Risk } from '@/types/quote.types';
 
 interface QuoteDocumentProps {
@@ -107,10 +107,10 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
               {formatDate(quote.created_at)}
             </span>
           </div>
-          {(quote.project?.name || quote.project_name) && (
+          {quote.project?.name && (
             <div className="doc-metadata-item">
               <span className="doc-metadata-label">Project</span>
-              <span className="doc-metadata-value">{quote.project?.name || quote.project_name}</span>
+              <span className="doc-metadata-value">{quote.project.name}</span>
             </div>
           )}
         </div>
@@ -138,9 +138,9 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
           <div className="doc-section-number">2</div>
           <h2 className="doc-section-title">Deliverables & Scope</h2>
           {(() => {
-            // Group deliverables by category
+            // Group deliverables by category (optional; Deliverable type uses estimate)
             const grouped = content.deliverables.reduce((acc, d) => {
-              const cat = d.category || 'General';
+              const cat = (d as Deliverable & { category?: string }).category ?? 'General';
               if (!acc[cat]) acc[cat] = [];
               acc[cat].push(d);
               return acc;
@@ -148,7 +148,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
 
             return Object.entries(grouped).map(([category, items]) => {
               const categoryTotal = items.reduce((sum, item) =>
-                sum + (item.estimated_hours?.expected ?? 0), 0
+                sum + (item.estimate?.expected_hours ?? 0), 0
               );
 
               return (
@@ -162,17 +162,17 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
                       <div className="doc-deliverable-header">
                         <span className="doc-deliverable-name">{item.name}</span>
                         <span className="doc-deliverable-hours">
-                          {item.estimated_hours?.expected ?? 0}h
+                          {item.estimate?.expected_hours ?? 0}h
                         </span>
                       </div>
                       {item.description && (
                         <p className="doc-deliverable-desc">{item.description}</p>
                       )}
-                      {item.estimated_hours && (
+                      {item.estimate && (
                         <div className="doc-deliverable-estimates">
-                          <span>Min: {item.estimated_hours.optimistic}h</span>
-                          <span>Expected: {item.estimated_hours.expected}h</span>
-                          <span>Max: {item.estimated_hours.pessimistic}h</span>
+                          <span>Min: {item.estimate.optimistic_hours}h</span>
+                          <span>Expected: {item.estimate.expected_hours}h</span>
+                          <span>Max: {item.estimate.pessimistic_hours}h</span>
                         </div>
                       )}
                     </div>
@@ -246,16 +246,16 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
           <div className="doc-section-number">6</div>
           <h2 className="doc-section-title">Project Timeline</h2>
 
-          {content.timeline.start_date && content.timeline.end_date && (
+          {content.timeline.estimated_start && content.timeline.estimated_end && (
             <p className="doc-body-text">
               <span className="doc-emphasis">Duration:</span>{' '}
-              {new Date(content.timeline.start_date).toLocaleDateString('en-US', {
+              {new Date(content.timeline.estimated_start).toLocaleDateString('en-US', {
                 month: 'long',
                 day: 'numeric',
                 year: 'numeric'
               })}{' '}
               to{' '}
-              {new Date(content.timeline.end_date).toLocaleDateString('en-US', {
+              {new Date(content.timeline.estimated_end).toLocaleDateString('en-US', {
                 month: 'long',
                 day: 'numeric',
                 year: 'numeric'
@@ -270,7 +270,7 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
                 {content.timeline.milestones.map((milestone, idx) => (
                   <div key={idx} className="doc-timeline-item">
                     <span className="doc-timeline-date">
-                      {new Date(milestone.date).toLocaleDateString('en-US', {
+                      {new Date(milestone.target_date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                         year: 'numeric'

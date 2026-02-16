@@ -261,12 +261,14 @@ export default function Projects() {
     setPage(1) // Reset to first page
   }
 
-  // Delete project mutation
+  // Delete project mutation (cascade deletes quotes in DB; invalidate dashboard so stats/lists refresh)
   const deleteMutation = useMutation({
     mutationFn: (projectId: string) => projectsService.delete(projectId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-quotes'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 
@@ -276,6 +278,7 @@ export default function Projects() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 

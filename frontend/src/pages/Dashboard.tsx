@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/store/authStore'
 import { projectsService } from '@/services/projects.service'
 import { quotesService } from '@/services/quotes.service'
+import { dashboardService } from '@/services/dashboard.service'
 import { formatRelativeTime } from '@/lib/date'
 import type { QuoteSummary, QuoteStatus, ProjectStatus } from '@/types'
 
@@ -536,7 +537,14 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const user = useUser()
 
-  // Fetch real data from API
+  // Dashboard stats from DB (so totals and hours stay correct when projects/quotes are deleted)
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => dashboardService.getStats(),
+    staleTime: 30000,
+  })
+
+  // Fetch list data for "recent" sections only (not for card totals)
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['dashboard-projects'],
     queryFn: () => projectsService.list({ sort_by: 'updated_at', sort_order: 'desc' }, 1, 10),
@@ -549,31 +557,29 @@ export default function Dashboard() {
     staleTime: 30000,
   })
 
-  // Extract data
+  // Lists for recent projects / recent quotes
   const projects: ProjectWithDeadline[] = (projectsData?.data || []) as ProjectWithDeadline[]
   const quotes = quotesData?.data || []
-  const totalProjects = projectsData?.pagination?.total_count || projects.length
-  const totalQuotes = quotesData?.pagination?.total_count || quotes.length
-  
-  // Calculate stats
-  const activeProjects = projects.filter(p => p.status === 'active').length
-  const pendingQuotes = quotes.filter(q => q.status === 'draft' || q.status === 'generating').length
-  const totalHoursEstimated = quotes.reduce((sum, q) => sum + (q.totals.total_expected_hours || 0), 0)
-  const totalAnalysis = totalHoursEstimated || 142 // Default to match mockup
+
+  // Card values from DB stats (fallback to list-derived only while stats load)
+  const totalProjects = stats?.total_projects ?? projectsData?.pagination?.total_count ?? projects.length
+  const totalQuotes = stats?.total_quotes ?? quotesData?.pagination?.total_count ?? quotes.length
+  const activeProjects = stats?.active_projects ?? projects.filter(p => p.status === 'active').length
+  const pendingQuotes = stats?.pending_quotes ?? quotes.filter(q => q.status === 'draft' || q.status === 'generating').length
+  const totalHoursEstimated = stats?.total_hours_estimated ?? quotes.reduce((sum, q) => sum + (q.totals.total_expected_hours || 0), 0)
+  const totalAnalysis = totalHoursEstimated || 0
 
   const greeting = getGreeting()
   const firstName = user?.full_name?.split(' ')[0] || 'User'
   const dailyTip = getDailyTip()
 
-  // Stats configuration - Stitch Design (3 cards only)
-  const stats = [
+  // Stats configuration - Stitch Design (3 cards only); values from DB via dashboard-stats
+  const statsCards = [
     {
       label: 'Total Projects',
       value: totalProjects,
       subLabel: `${activeProjects} Active now`,
       icon: FolderOpen,
-      trend: '+3%',
-      trendUp: true,
       iconBg: 'var(--color-primary-100)',
       iconColor: 'var(--color-primary-600)',
     },
@@ -587,8 +593,8 @@ export default function Dashboard() {
     },
     {
       label: 'Hours Estimated',
-      value: `${totalHoursEstimated || 142}h`,
-      subLabel: 'This month',
+      value: `${totalHoursEstimated}h`,
+      subLabel: 'All time',
       icon: Clock,
       badge: 'AI POWERED',
       iconBg: '#fef3c7',
@@ -617,7 +623,7 @@ export default function Dashboard() {
 
       {/* Stats Grid - Always rendered immediately with default values */}
       <div className="dashboard-stats-grid" style={{ marginBottom: 'var(--space-6)' }}>
-        {stats.map((stat) => (
+        {statsCards.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
