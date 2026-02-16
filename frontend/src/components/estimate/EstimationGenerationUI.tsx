@@ -361,18 +361,38 @@ export function EstimationGenerationUI({
     hasStartedRef.current = true;
 
     const startGeneration = async () => {
+      // Frontend validation before sending request
+      const description = project.description?.trim() || '';
+      const name = project.name?.trim() || '';
+
+      // Validate project name exists
+      if (name.length < 2) {
+        setError('Project name is required. Please provide a meaningful project name.');
+        setIsGenerating(false);
+        return;
+      }
+
       abortControllerRef.current = new AbortController();
       stepStartTimeRef.current = Date.now();
 
       const request: GenerateQuoteRequest = {
-        requirements: project.description || '',
+        requirements: description,
         use_rag: true,
         regenerate: true, // Allow regeneration if estimate already exists
         project_context: {
           platform: project.platform,
-          project_name: project.name,
+          project_name: name,
         },
       };
+
+      // Log for debugging
+      console.log('[QUOTE_GEN] Starting generation:', {
+        projectId: project.id,
+        projectName: name,
+        requirementsLength: description.length,
+        platform: project.platform,
+        hasContext: !!request.project_context,
+      });
 
       try {
         const response = await quoteService.generateQuote(project.id, request);

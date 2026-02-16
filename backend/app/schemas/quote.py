@@ -71,9 +71,9 @@ class QuoteGenerateRequest(BaseModel):
 
     requirements: str = Field(
         ...,
-        min_length=10,
+        min_length=0,
         max_length=50000,
-        description="Client requirements for the project",
+        description="Client requirements for the project (any length; estimation also uses project title and uploaded documents)",
         examples=["Build a WordPress site with WooCommerce, 10 product pages, shopping cart..."],
     )
     title: Optional[str] = Field(

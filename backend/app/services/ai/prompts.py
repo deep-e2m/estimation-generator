@@ -5,6 +5,7 @@ This module provides structured prompt templates for various LLM tasks
 including quote generation, chat responses, and requirement analysis.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
@@ -24,6 +25,8 @@ When generating quotes, you should:
 3. Include reasonable assumptions and exclusions
 4. Highlight any risks or dependencies
 5. Use a professional, confident tone
+6. Derive the project timeline from the requirements when they specify phases or total duration (do not compress timeline to match hours alone)
+7. Include every capability mentioned in the requirements (e.g. donations/tax receipts, SEO, analytics, SSL, backups, accessibility, filters) as explicit deliverables where applicable
 
 Your estimates should be thorough but concise, focusing on deliverables the client cares about.""",
 
@@ -97,12 +100,14 @@ Responsive design for desktop, tablet, and mobile
 Clean and scalable structure for future expansion
 Performance and speed optimization
 Cross-browser compatibility testing
+(When required by CLIENT REQUIREMENTS, also include: SSL/hosting security; automated backups; built-in accessibility/ADA compliance; SEO setup and Analytics integration with event tracking.)
 
 7. Estimated Effort & Timeline
 Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -234,40 +239,75 @@ Additional WordPress expertise:
 
     messages.append({"role": "system", "content": system_content})
 
-    # Build user prompt
-    user_content = f"""Generate a professional project quote based on the following requirements.
+    # Extract project name (CRITICAL - ensure it's always present)
+    project_name = None
+    client_name = None
+    if project_context:
+        project_name = project_context.get("project_name")
+        client_name = project_context.get("client_name")
 
-## Client Requirements
+    # Fallback: extract project name from requirements first line if not provided
+    if not project_name:
+        first_line = requirements.split('\n')[0][:100].strip()
+        project_name = first_line if first_line else "this project"
+
+    # Generate current date in the same format as frontend (e.g., "February 16, 2025")
+    current_date = datetime.now().strftime("%B %d, %Y")
+
+    # Build user prompt with project identification FIRST
+    user_content = f"""Generate a professional project quote for the following specific project.
+
+# PROJECT IDENTIFICATION (CRITICAL - YOU MUST USE THIS IN YOUR RESPONSE)
+Project Name: {project_name}
+Platform: {platform}
+
+CRITICAL INSTRUCTION: You MUST mention "{project_name}" in the Project Overview section (section 1) to confirm you understand this is a quote specifically for this project. Do NOT generate a generic estimate.
+
+# CLIENT REQUIREMENTS (PRIMARY SOURCE - BASE YOUR ENTIRE ESTIMATE ON THIS)
 {requirements}
 
-## Platform
-{platform}
+# REQUIREMENTS AS SINGLE SOURCE OF TRUTH
+- Your estimate must directly address the requirements above. Every page, feature, and hour estimate should be based on what is described in the requirements. Do not use generic templates.
+- Include every capability explicitly listed in the requirements (e.g. filters, payment options, tax receipts, SEO, analytics, backups, SSL, accessibility). If something is mentioned in the requirements, there must be a corresponding deliverable or note in the quote.
+- TIMELINE: If the requirements specify a total timeline or phase durations (e.g. "Phase 1: 2 weeks", "Total: 17 weeks", or a breakdown that sums to a number of weeks), derive the "Estimated Timeline" in Section 7 from that stated timeline. Do not infer timeline from hours alone when the requirements already define it.
+
+# SCOPE COMPLETENESS (include when mentioned in requirements)
+- Donations: If donations/fundraising are required, include tax receipt generation, payment methods (e.g. PayPal, bank transfer), and donation impact/usage section if specified.
+- Technical: If hosting/deployment is mentioned, include SSL and automated backups where appropriate.
+- Accessibility: If ADA or accessibility compliance is required, include built-in accessibility (semantic markup, ARIA, keyboard nav, contrast) in scope, not only a third-party widget.
+- Filters and search: If the requirements list specific filters (e.g. species, breed, compatibility with kids/pets), list each filter type in the relevant section.
+- SEO and analytics: If the requirements mention SEO or analytics, include keyword-optimized content setup, schema markup where relevant, and Google Analytics (or equivalent) with event tracking for key actions (e.g. adoptions, donations) as deliverables.
 """
 
-    # Add RAG context if available
+    # Add RAG context with clear subordinate framing
     if rag_context:
         user_content += f"""
-## Reference: Similar Historical Projects
-The following are examples from similar projects we've completed. Use these as reference for estimation accuracy and formatting:
+# REFERENCE EXAMPLES ONLY (SECONDARY SOURCE - FOR FORMAT AND BENCHMARKING)
+The following are examples from DIFFERENT historical projects. Use these ONLY for:
+- Hour estimation benchmarks and ranges
+- Output formatting and structure guidance
+- Common WordPress patterns and assumptions
+
+IMPORTANT: Do NOT copy these examples. They are different projects with different requirements. Your estimate must be based on the requirements above for "{project_name}".
 
 {rag_context}
 """
 
-    # Add project context if available
+    # Add additional project context
     if project_context:
         context_parts = []
-        if project_context.get("client_name"):
-            context_parts.append(f"Client: {project_context['client_name']}")
+        if client_name:
+            context_parts.append(f"Client Name: {client_name}")
         if project_context.get("industry"):
             context_parts.append(f"Industry: {project_context['industry']}")
         if project_context.get("budget_range"):
             context_parts.append(f"Budget Range: {project_context['budget_range']}")
         if project_context.get("timeline"):
-            context_parts.append(f"Timeline: {project_context['timeline']}")
+            context_parts.append(f"Desired Timeline: {project_context['timeline']}")
 
         if context_parts:
             user_content += f"""
-## Project Context
+# ADDITIONAL PROJECT CONTEXT
 {chr(10).join(context_parts)}
 """
 
@@ -279,21 +319,30 @@ Please format the quote according to this template:
 {formatting_template}
 """
     else:
-        user_content += """
-## Output Format: ESTIMATION FORMAT (E2M Standard)
-Please structure your quote EXACTLY as follows using plain text (no markdown tables, no emojis):
+        # Use client_name or "Client" for the prepared_for field
+        prepared_for = client_name if client_name else "Client"
+
+        user_content += f"""
+# OUTPUT FORMAT: E2M Standard Estimation Format
+Structure your quote EXACTLY as follows using plain text (no markdown tables, no emojis):
 
 ---
 
-Prepared for: [Client Name or "Client"]
-Prepared by: E2M Solutions 
-Date: [Current Date]
+Prepared for: {prepared_for}
+Prepared by: E2M Solutions
+Date: {current_date}
 Website Development Scope & Commercial Estimate
-Platform: [Platform + Page Builder]
-Languages: [List languages]
+Platform: {platform}
+Languages: [Specify based on requirements]
 
 1. Project Overview
-[2-4 sentence summary of what the project covers, key features, and the goal.]
+CRITICAL: Write 2-4 sentences that:
+- Explicitly mentions the project name "{project_name}"
+- Summarizes the key features from the CLIENT REQUIREMENTS above
+- States the project goal based on the requirements
+- Is SPECIFIC to this project, not a generic description
+
+Example opening: "This estimate covers the development of {project_name}, a [describe based on requirements]..."
 
 2. Website Structure & Page Scope
 2.1 [Primary Language] Website – Core Pages ([X] Pages)
@@ -341,12 +390,14 @@ Responsive design for desktop, tablet, and mobile
 Clean and scalable structure for future expansion
 Performance and speed optimization
 Cross-browser compatibility testing
+(When required by CLIENT REQUIREMENTS, also include: SSL/hosting security; automated backups; built-in accessibility/ADA compliance; SEO setup and Analytics integration with event tracking.)
 
 7. Estimated Effort & Timeline
 Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -373,7 +424,18 @@ Note: This is a ballpark estimate based on the details we have. Once we receive 
 
 ---
 
-Be specific with hours (use tight ranges like 180-200, not 100-300). Base estimates on platform complexity.
+# FINAL VALIDATION CHECKLIST (Verify before responding)
+Before submitting your response, verify:
+✓ Does the Project Overview (section 1) explicitly mention "{project_name}"?
+✓ Are all listed pages/features taken from the CLIENT REQUIREMENTS, not from historical examples?
+✓ Are the hour estimates based on the actual complexity described in the requirements?
+✓ Are assumptions specific to "{project_name}", not generic?
+✓ Did you avoid copying historical examples verbatim?
+✓ Is this estimate clearly for "{project_name}" and not a generic WordPress site?
+✓ TIMELINE: If the requirements specified a timeline or phase durations, does Section 7 Estimated Timeline match (or derive from) that timeline?
+✓ SCOPE: For each major requirement area in the document (donations, events, adoption/search filters, SEO, analytics, accessibility, backups, SSL), is there at least one matching deliverable or note in the quote?
+
+If any answer is NO, revise your response before submitting.
 """
 
     messages.append({"role": "user", "content": user_content})
@@ -396,6 +458,14 @@ def build_chat_response_prompt(
         List of message dictionaries for the chat API.
     """
     system_content = SYSTEM_PROMPTS["chat_assistant"]
+
+    # Add current date instruction to the system prompt
+    current_date = datetime.now().strftime("%B %d, %Y")
+    system_content += f"""
+
+IMPORTANT: When generating quotes, use the current date: {current_date}
+Replace any [Current Date] placeholders with this date.
+"""
 
     # Add project context to system prompt if available
     if project_context:
@@ -836,12 +906,14 @@ Responsive design for desktop, tablet, and mobile
 Clean and scalable structure for future expansion
 Performance and speed optimization
 Cross-browser compatibility testing
+(When required by CLIENT REQUIREMENTS, also include: SSL/hosting security; automated backups; built-in accessibility/ADA compliance; SEO setup and Analytics integration with event tracking.)
 
 7. Estimated Effort & Timeline
 Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -948,12 +1020,14 @@ Reusable global components
 Responsive design for desktop, tablet, and mobile
 Performance and speed optimization
 Cross-browser compatibility testing
+(When required by CLIENT REQUIREMENTS, also include: SSL/hosting security; automated backups; built-in accessibility/ADA compliance; SEO setup and Analytics integration with event tracking.)
 
 7. Estimated Effort & Timeline
 Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
+CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:

@@ -1,0 +1,792 @@
+/**
+ * Inline Quote Editor Styles
+ *
+ * Styles the Tiptap ProseMirror editor content to visually match the
+ * QuoteDocument preview layout. This ensures preview and edit modes
+ * look nearly identical -- the only difference is the cursor and toolbar.
+ *
+ * .doc-editor-preview: read-only preview of saved HTML content uses the
+ * same typography/layout as the editor so switching between preview and
+ * edit does not disturb layout or format.
+ *
+ * Typography and spacing values are aligned with:
+ * - .doc-container / .doc-section-title / .doc-body-text (structured preview)
+ * - .markdown-body .md-section-header / .md-paragraph (markdown preview)
+ *
+ * Targets .inline-quote-editor .ProseMirror and .doc-editor-preview for scoping.
+ */
+
+/* ============================================================================
+   Editor Container
+   When nested inside .doc-container, the container provides max-width and
+   centering. The editor itself just fills its parent.
+   ============================================================================ */
+
+.inline-quote-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: white;
+}
+
+.inline-quote-editor-content {
+  width: 100%;
+}
+
+/* ============================================================================
+   ProseMirror Core
+   Font and color settings match the markdown-body / doc-body-text styling.
+   Padding is minimal since .doc-container provides outer spacing.
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror,
+.doc-editor-preview {
+  outline: none;
+  padding: 0 0 24px 0;
+  font-family: var(--font-family, 'Inter', system-ui, -apple-system, sans-serif);
+  font-size: 15px;
+  line-height: 1.75;
+  color: #334155; /* gray-700 — matches md-paragraph color */
+}
+
+.inline-quote-editor .ProseMirror {
+  min-height: 400px;
+  cursor: text;
+}
+
+.doc-editor-preview {
+  min-height: 0;
+  cursor: default;
+}
+
+.inline-quote-editor .ProseMirror:focus {
+  outline: none;
+}
+
+/* Placeholder styling */
+.inline-quote-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8; /* gray-400 */
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+
+/* ============================================================================
+   Headings — Match preview heading hierarchy
+
+   h1: doc-section-title sizing (24px bold, gray-300 border-bottom)
+   h2: md-section-header sizing (20px bold, primary-500 border-bottom)
+   h3: md-subsection-header (17px semibold, primary-400 left border)
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror h1,
+.doc-editor-preview h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a; /* gray-900 */
+  margin: 32px 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #cbd5e1; /* gray-300 — matches doc-section-title */
+  line-height: 1.3;
+}
+
+.inline-quote-editor .ProseMirror h1:first-child,
+.doc-editor-preview h1:first-child {
+  margin-top: 0;
+}
+
+/* h2: matches .markdown-body .md-section-header exactly */
+.inline-quote-editor .ProseMirror h2,
+.doc-editor-preview h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a; /* gray-900 */
+  margin: 32px 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #3b82f6; /* primary-500 — matches md-section-header */
+  line-height: 1.3;
+}
+
+.inline-quote-editor .ProseMirror h2:first-child,
+.doc-editor-preview h2:first-child {
+  margin-top: 16px;
+}
+
+/* h3: matches .markdown-body .md-subsection-header exactly */
+.inline-quote-editor .ProseMirror h3,
+.doc-editor-preview h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e293b; /* gray-800 */
+  margin: 24px 0 12px 0;
+  padding-left: 12px;
+  border-left: 4px solid #60a5fa; /* primary-400 — matches md-subsection-header */
+  line-height: 1.4;
+}
+
+/* ============================================================================
+   Paragraphs — Match .markdown-body .md-paragraph exactly
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror p,
+.doc-editor-preview p {
+  font-size: 15px;
+  line-height: 1.75;
+  color: #334155; /* gray-700 */
+  margin: 12px 0;
+}
+
+/* ============================================================================
+   Bullet Lists — Match .markdown-body .md-bullet-list / .md-bullet-item
+   Uses blue circle bullets instead of default disc markers.
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror ul,
+.doc-editor-preview ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 16px 0;
+}
+
+.inline-quote-editor .ProseMirror ul li,
+.doc-editor-preview ul li {
+  position: relative;
+  padding-left: 24px;
+  margin: 8px 0;
+  line-height: 1.65;
+  color: #334155; /* gray-700 */
+  font-size: 14px;
+}
+
+/* Blue circle bullet — matches md-bullet-item::before */
+.inline-quote-editor .ProseMirror ul li::before,
+.doc-editor-preview ul li::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  background: #3b82f6; /* primary-500 — matches md-bullet-item */
+  border-radius: 50%;
+}
+
+.inline-quote-editor .ProseMirror ul li p,
+.doc-editor-preview ul li p {
+  margin: 0;
+}
+
+.inline-quote-editor .ProseMirror ul li strong,
+.doc-editor-preview ul li strong {
+  color: #1e293b; /* gray-800 — matches md-bullet-item strong */
+}
+
+/* Nested unordered lists */
+.inline-quote-editor .ProseMirror ul ul,
+.doc-editor-preview ul ul {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.inline-quote-editor .ProseMirror ul ul li::before,
+.doc-editor-preview ul ul li::before {
+  background: #60a5fa; /* primary-400 — lighter blue for nested */
+  width: 5px;
+  height: 5px;
+}
+
+/* ============================================================================
+   Ordered Lists — Match doc-list-ordered styles
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror ol,
+.doc-editor-preview ol {
+  list-style-type: decimal;
+  padding-left: 28px;
+  margin: 8px 0 16px 0;
+}
+
+.inline-quote-editor .ProseMirror ol li,
+.doc-editor-preview ol li {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #334155; /* gray-700 */
+  margin-bottom: 8px;
+}
+
+.inline-quote-editor .ProseMirror ol li p,
+.doc-editor-preview ol li p {
+  margin: 0;
+}
+
+/* Nested ordered lists */
+.inline-quote-editor .ProseMirror ol ol,
+.inline-quote-editor .ProseMirror ul ol,
+.doc-editor-preview ol ol,
+.doc-editor-preview ul ol {
+  list-style-type: lower-alpha;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+/* ============================================================================
+   Inline Formatting — Match markdown-body strong / em styles
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror strong,
+.doc-editor-preview strong {
+  font-weight: 600;
+  color: #0f172a; /* gray-900 — matches markdown-body strong */
+}
+
+.inline-quote-editor .ProseMirror em,
+.doc-editor-preview em {
+  font-style: italic;
+}
+
+.inline-quote-editor .ProseMirror s,
+.doc-editor-preview s {
+  text-decoration: line-through;
+  color: #64748b; /* gray-500 */
+}
+
+.inline-quote-editor .ProseMirror u,
+.doc-editor-preview u {
+  text-decoration: underline;
+}
+
+.inline-quote-editor .ProseMirror code,
+.doc-editor-preview code {
+  background-color: #f1f5f9; /* gray-100 */
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  color: #dc2626; /* error-600 */
+}
+
+/* ============================================================================
+   Blockquote
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror blockquote,
+.doc-editor-preview blockquote {
+  margin: 16px 0;
+  padding: 12px 20px;
+  border-left: 4px solid #60a5fa; /* primary-400 */
+  background-color: #eff6ff; /* primary-50 */
+  font-style: italic;
+  color: #334155; /* gray-700 */
+}
+
+.inline-quote-editor .ProseMirror blockquote p,
+.doc-editor-preview blockquote p {
+  margin-bottom: 8px;
+}
+
+.inline-quote-editor .ProseMirror blockquote p:last-child,
+.doc-editor-preview blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
+   Horizontal Rule — Match .markdown-body .md-separator gradient style
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror hr,
+.doc-editor-preview hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    #cbd5e1 20%,
+    #cbd5e1 80%,
+    transparent
+  );
+  margin: 24px 0;
+}
+
+/* ============================================================================
+   Code Block
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror pre,
+.doc-editor-preview pre {
+  background-color: #0f172a; /* gray-900 */
+  color: #e2e8f0; /* gray-200 */
+  padding: 16px;
+  margin: 16px 0;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.inline-quote-editor .ProseMirror pre code,
+.doc-editor-preview pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* ============================================================================
+   Links
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror a,
+.doc-editor-preview a {
+  color: #2563eb; /* primary-600 */
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inline-quote-editor .ProseMirror a:hover,
+.doc-editor-preview a:hover {
+  color: #1d4ed8; /* primary-700 */
+}
+
+/* ============================================================================
+   Table — Styled for clean data presentation within estimates
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror table,
+.doc-editor-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.inline-quote-editor .ProseMirror th,
+.inline-quote-editor .ProseMirror td,
+.doc-editor-preview th,
+.doc-editor-preview td {
+  border: 1px solid #e2e8f0; /* gray-200 */
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.inline-quote-editor .ProseMirror th,
+.doc-editor-preview th {
+  background-color: #f8fafc; /* gray-50 */
+  font-weight: 600;
+  color: #0f172a; /* gray-900 */
+}
+
+.inline-quote-editor .ProseMirror tr:hover td,
+.doc-editor-preview tr:hover td {
+  background-color: #f8fafc; /* gray-50 */
+}
+
+/* Selected cell highlight for table editing */
+.inline-quote-editor .ProseMirror .selectedCell::after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(59, 130, 246, 0.1); /* primary-500 10% */
+  pointer-events: none;
+}
+
+.inline-quote-editor .ProseMirror th,
+.inline-quote-editor .ProseMirror td {
+  position: relative;
+}
+
+/* Column resize handle */
+.inline-quote-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: #3b82f6; /* primary-500 */
+  pointer-events: none;
+}
+
+.inline-quote-editor .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* ============================================================================
+   Highlight — Yellow background for marked text
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror mark,
+.doc-editor-preview mark {
+  background-color: #fef08a; /* yellow-200 */
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* ============================================================================
+   Text Alignment
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror [style*="text-align: center"],
+.doc-editor-preview [style*="text-align: center"] {
+  text-align: center;
+}
+
+.inline-quote-editor .ProseMirror [style*="text-align: right"],
+.doc-editor-preview [style*="text-align: right"] {
+  text-align: right;
+}
+
+/* ============================================================================
+   Subscript / Superscript
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror sub,
+.doc-editor-preview sub {
+  vertical-align: sub;
+  font-size: 0.75em;
+}
+
+.inline-quote-editor .ProseMirror sup,
+.doc-editor-preview sup {
+  vertical-align: super;
+  font-size: 0.75em;
+}
+
+/* ============================================================================
+   Selection
+   ============================================================================ */
+
+.inline-quote-editor .ProseMirror ::selection {
+  background-color: #bfdbfe; /* primary-200 */
+}
+
+/* ============================================================================
+   Responsive
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .inline-quote-editor .ProseMirror,
+  .doc-editor-preview {
+    padding: 0 0 16px 0;
+    font-size: 14px;
+  }
+
+  .inline-quote-editor .ProseMirror h1,
+  .doc-editor-preview h1 {
+    font-size: 20px;
+  }
+
+  .inline-quote-editor .ProseMirror h2,
+  .doc-editor-preview h2 {
+    font-size: 17px;
+  }
+
+  .inline-quote-editor .ProseMirror h3,
+  .doc-editor-preview h3 {
+    font-size: 16px;
+  }
+}
+
+/* ============================================================================
+   Editor Toolbar
+   Professional toolbar styled after Notion / Google Docs.
+   Clean white bar, grouped icons with clear dividers, ample breathing room.
+   ============================================================================ */
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: white;
+  border-bottom: 1px solid var(--color-gray-200, #e2e8f0);
+  flex-shrink: 0;
+  gap: 4px;
+  min-height: 48px;
+  flex-wrap: wrap;
+}
+
+/* ----- Mode Toggle (Preview / Edit) ----- */
+
+.editor-toolbar__mode-toggle {
+  display: inline-flex;
+  border-radius: 8px;
+  border: 1px solid var(--color-gray-200, #e2e8f0);
+  overflow: hidden;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.editor-toolbar__mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+  background: white;
+  color: var(--color-gray-500, #64748b);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.editor-toolbar__mode-btn:hover:not(.editor-toolbar__mode-btn--active):not(:disabled) {
+  background: var(--color-gray-50, #f8fafc);
+  color: var(--color-gray-700, #334155);
+}
+
+.editor-toolbar__mode-btn--active {
+  background: var(--color-gray-900, #0f172a);
+  color: white;
+}
+
+.editor-toolbar__mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.editor-toolbar__mode-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* ----- Save Button Group ----- */
+
+.editor-toolbar__save-group {
+  display: inline-flex;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.editor-toolbar__save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.editor-toolbar__save-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.editor-toolbar__save-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.editor-toolbar__save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.editor-toolbar__save-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ----- Separator between mode toggle and formatting tools ----- */
+
+.editor-toolbar__separator {
+  width: 1px;
+  height: 24px;
+  background: var(--color-gray-200, #e2e8f0);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+/* Taller separator used between mode toggle and format controls */
+.editor-toolbar__separator--tall {
+  height: 28px;
+  background: var(--color-gray-300, #cbd5e1);
+  margin: 0 12px;
+}
+
+/* ----- Formatting Button Group ----- */
+
+.editor-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ----- Icon Button (Bold, Italic, Lists, etc.) ----- */
+
+.editor-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-gray-500, #64748b);
+  transition: background-color 150ms ease, color 150ms ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.editor-toolbar__btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.editor-toolbar__btn:hover:not(:disabled) {
+  background: var(--color-gray-100, #f1f5f9);
+  color: var(--color-gray-700, #334155);
+}
+
+.editor-toolbar__btn--active {
+  background: var(--color-primary-100, #dbeafe);
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+.editor-toolbar__btn--active:hover:not(:disabled) {
+  background: var(--color-primary-200, #bfdbfe);
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+.editor-toolbar__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+/* ----- Heading Button (H1, H2, H3 — text label) ----- */
+
+.editor-toolbar__heading-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-gray-500, #64748b);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
+  transition: background-color 150ms ease, color 150ms ease;
+  flex-shrink: 0;
+}
+
+.editor-toolbar__heading-btn:hover {
+  background: var(--color-gray-100, #f1f5f9);
+  color: var(--color-gray-700, #334155);
+}
+
+.editor-toolbar__heading-btn--active {
+  background: var(--color-primary-100, #dbeafe);
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+.editor-toolbar__heading-btn--active:hover {
+  background: var(--color-primary-200, #bfdbfe);
+  color: var(--color-primary-700, #1d4ed8);
+}
+
+/* ----- Formatting controls wrapper (all controls after mode toggle) ----- */
+
+.editor-toolbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+/* ----- Responsive: compact on small screens ----- */
+
+@media (max-width: 768px) {
+  .editor-toolbar {
+    padding: 6px 10px;
+    gap: 2px;
+    min-height: 42px;
+  }
+
+  .editor-toolbar__mode-toggle {
+    margin-right: 10px;
+  }
+
+  .editor-toolbar__mode-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .editor-toolbar__save-group {
+    margin-right: 10px;
+  }
+
+  .editor-toolbar__save-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .editor-toolbar__save-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .editor-toolbar__btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .editor-toolbar__btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .editor-toolbar__heading-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+
+  .editor-toolbar__separator {
+    height: 20px;
+    margin: 0 4px;
+  }
+
+  .editor-toolbar__separator--tall {
+    height: 24px;
+    margin: 0 8px;
+  }
+}

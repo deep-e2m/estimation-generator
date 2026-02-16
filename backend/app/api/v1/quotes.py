@@ -432,11 +432,14 @@ async def generate_quote(
 
     # Determine title
     title = request.title
-    if not title:
+    if not title and (request.requirements or "").strip():
         # Generate title from requirements (first 100 chars)
-        title = request.requirements[:100].strip()
-        if len(request.requirements) > 100:
-            title = title.rsplit(" ", 1)[0] + "..."
+        req = request.requirements[:100].strip()
+        title = req + ("..." if len(request.requirements) > 100 else "")
+    if not title and request.project_context:
+        title = (request.project_context.get("project_name") or "").strip()
+    if not title:
+        title = project.name or "Project Estimate"
 
     # Determine complexity
     complexity = Complexity.MEDIUM
