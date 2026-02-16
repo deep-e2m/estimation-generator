@@ -154,6 +154,7 @@ export const quotesService = {
       id: string;
       quote_number: string;
       project_id: string;
+      project_name?: string;
       title: string;
       total_hours: number;
       total_cost?: number;
@@ -178,13 +179,16 @@ export const quotesService = {
       `/api/v1/quotes?${params.toString()}`
     );
 
-    // Map backend response to frontend format
+    // Map backend response to frontend format (project.id used for quote detail navigation)
     const backendData = response.data.data;
     const mappedQuotes: QuoteSummary[] = (backendData.quotes || []).map((q) => ({
       id: q.id,
       quote_number: q.quote_number || `QT-${q.id.slice(0, 8).toUpperCase()}`,
       version: 1,
       status: (q.status as QuoteSummary['status']) || 'draft',
+      project: q.project_id
+        ? { id: q.project_id, name: q.project_name ?? '' }
+        : undefined,
       platform: q.platform as QuoteSummary['platform'],
       totals: {
         total_expected_hours: Number(q.total_hours) || 0,

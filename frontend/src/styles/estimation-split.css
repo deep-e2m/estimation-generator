@@ -2937,6 +2937,9 @@
   line-height: 1.65;
   color: var(--color-gray-700);
   font-size: 14px;
+  /* Ensure long plugin/feature lines wrap cleanly in narrow layouts */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .markdown-body .md-bullet-item::before {

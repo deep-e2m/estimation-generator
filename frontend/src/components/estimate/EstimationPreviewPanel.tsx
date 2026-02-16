@@ -287,25 +287,37 @@ export function EstimationPreviewPanel({
           <div className="doc-container">
             {/* Non-editable document header -- matches QuoteDocument exactly */}
             <div className="doc-header">
-              <h1 className="doc-title">Project Estimate Document</h1>
+              <h1 className="doc-title">
+                {(quote.project?.name || project.name)
+                  ? `Proposal for ${quote.project?.name || project.name}`
+                  : 'Project Proposal'}
+              </h1>
               <div className="doc-metadata">
-                <div className="doc-metadata-item">
-                  <span className="doc-metadata-label">Quote Number</span>
-                  <span className="doc-metadata-value">
-                    {quote.quote_number || `EST-${quote.id?.slice(0, 8).toUpperCase()}`}
-                  </span>
-                </div>
                 <div className="doc-metadata-item">
                   <span className="doc-metadata-label">Date</span>
                   <span className="doc-metadata-value">
                     {formatDate(quote.created_at)}
                   </span>
                 </div>
-                {(quote.project?.name || quote.project_name || project.name) && (
+                {(quote as Quote & { client_name?: string }).client_name ||
+                  project.client_name ||
+                  quote.project?.name ||
+                  project.name ? (
                   <div className="doc-metadata-item">
-                    <span className="doc-metadata-label">Project</span>
+                    <span className="doc-metadata-label">Prepared for</span>
                     <span className="doc-metadata-value">
-                      {quote.project?.name || quote.project_name || project.name}
+                      {(quote as Quote & { client_name?: string }).client_name ||
+                        project.client_name ||
+                        quote.project?.name ||
+                        project.name}
+                    </span>
+                  </div>
+                ) : null}
+                {quote.created_by?.full_name && (
+                  <div className="doc-metadata-item">
+                    <span className="doc-metadata-label">Prepared by</span>
+                    <span className="doc-metadata-value">
+                      {quote.created_by.full_name}
                     </span>
                   </div>
                 )}

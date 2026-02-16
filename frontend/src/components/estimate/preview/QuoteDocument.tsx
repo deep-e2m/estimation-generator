@@ -51,11 +51,18 @@ function RiskItem({ risk, index }: { risk: Risk; index: number }) {
 export function QuoteDocument({ quote }: QuoteDocumentProps) {
   const content = quote.content;
 
+  // Derive key header fields
+  const projectName = quote.project?.name || '';
+  const preparedFor = (quote as Quote & { client_name?: string }).client_name || projectName || 'Client';
+  const preparedBy = quote.created_by?.full_name || 'Estimate AI';
+
   if (!content) {
     return (
       <div className="doc-container">
         <div className="doc-header">
-          <h1 className="doc-title">Project Estimate Document</h1>
+          <h1 className="doc-title">
+            {projectName ? `Proposal for ${projectName}` : 'Project Proposal'}
+          </h1>
           <p className="doc-body-text" style={{ textAlign: 'center', color: 'var(--color-gray-500)' }}>
             The estimate content is still being generated. Please wait...
           </p>
@@ -97,24 +104,26 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     <div className="doc-container">
       {/* Professional Document Header */}
       <div className="doc-header">
-        <h1 className="doc-title">Project Estimate Document</h1>
+        <h1 className="doc-title">
+          {projectName ? `Proposal for ${projectName}` : 'Project Proposal'}
+        </h1>
         <div className="doc-metadata">
-          <div className="doc-metadata-item">
-            <span className="doc-metadata-label">Quote Number</span>
-            <span className="doc-metadata-value">
-              {quote.quote_number || `EST-${quote.id?.slice(0, 8).toUpperCase()}`}
-            </span>
-          </div>
           <div className="doc-metadata-item">
             <span className="doc-metadata-label">Date</span>
             <span className="doc-metadata-value">
               {formatDate(quote.created_at)}
             </span>
           </div>
-          {quote.project?.name && (
+          {preparedFor && (
             <div className="doc-metadata-item">
-              <span className="doc-metadata-label">Project</span>
-              <span className="doc-metadata-value">{quote.project.name}</span>
+              <span className="doc-metadata-label">Prepared for</span>
+              <span className="doc-metadata-value">{preparedFor}</span>
+            </div>
+          )}
+          {preparedBy && (
+            <div className="doc-metadata-item">
+              <span className="doc-metadata-label">Prepared by</span>
+              <span className="doc-metadata-value">{preparedBy}</span>
             </div>
           )}
         </div>

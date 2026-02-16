@@ -137,9 +137,9 @@ export function ProjectDetailPage() {
   const totalHoursParsed = parseTotalHoursFromContent(quote?.content ?? null);
   const totalHours = totalHoursFromApi > 0 ? totalHoursFromApi : totalHoursParsed;
 
-  const requirementsFromApi = quote?.content?.deliverables?.length ?? 0;
-  const requirementsParsed = parseRequirementsCountFromContent(quote?.content ?? null);
-  const requirementsCount = requirementsFromApi > 0 ? requirementsFromApi : requirementsParsed;
+  // Use requirements_count from project API (stored from quote metadata); fallback to parsing quote content when 0
+  const requirementsCount =
+    (project?.requirements_count ?? 0) || parseRequirementsCountFromContent(quote?.content ?? null);
 
   const lastUpdated = quote?.updated_at ?? project?.updated_at ?? project?.created_at ?? new Date().toISOString();
 

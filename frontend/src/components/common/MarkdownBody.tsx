@@ -107,6 +107,17 @@ function getLineType(line: string, trimmed: string): {
     };
   }
 
+  // Plain markdown header without numeric prefix, commonly used for
+  // subsection-style labels like "#### WordPress Core Setup:"
+  // Treat these as page/feature names so they get proper visual hierarchy.
+  const plainHashHeaderMatch = trimmed.match(/^####\s+(.+)$/);
+  if (plainHashHeaderMatch) {
+    return {
+      type: 'page-name',
+      content: stripBold(plainHashHeaderMatch[1]),
+    };
+  }
+
   // Plain section header: 1. Project Overview (number at start, capital letter follows)
   const plainSectionMatch = trimmed.match(/^(\d+)\.\s+([A-Z][A-Za-z&\s,]+.*)$/);
   if (plainSectionMatch && !trimmed.match(/^\d+\.\d/)) {
@@ -276,14 +287,10 @@ function groupElements(elements: Array<{ node: React.ReactNode; type: string; ke
   };
 
   const flushMetadata = () => {
-    if (currentMetadata.length > 0) {
-      result.push(
-        <div key={`metadata-block-${metadataKey++}`} className="md-metadata-block">
-          {currentMetadata}
-        </div>
-      );
-      currentMetadata = [];
-    }
+    // Intentionally no-op: metadata (Prepared for/by, Date, Platform, etc.)
+    // is now rendered in the document header, so we skip rendering it inside
+    // the markdown body to avoid duplication.
+    currentMetadata = [];
   };
 
   elements.forEach((el) => {

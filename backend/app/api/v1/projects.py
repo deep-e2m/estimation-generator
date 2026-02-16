@@ -253,6 +253,19 @@ async def get_project(
     quote_count_result = await db.execute(quote_count_query)
     quote_count = quote_count_result.scalar() or 0
 
+    # Get requirements count from the latest quote's metadata
+    requirements_count = 0
+    latest_quote_query = (
+        select(Quote)
+        .where(Quote.project_id == project.id)
+        .order_by(Quote.created_at.desc())
+        .limit(1)
+    )
+    latest_quote_result = await db.execute(latest_quote_query)
+    latest_quote = latest_quote_result.scalar_one_or_none()
+    if latest_quote and latest_quote.extra_data:
+        requirements_count = latest_quote.extra_data.get("requirements_count", 0)
+
     # Build owner from eagerly-loaded creator
     owner = ProjectOwner(
         id=project.creator.id,
@@ -283,7 +296,7 @@ async def get_project(
         owner=owner,
         team_members=[],
         target_completion_date=None,
-        requirements_count=0,
+        requirements_count=requirements_count,
     )
 
     return ProjectDetailDataResponse(

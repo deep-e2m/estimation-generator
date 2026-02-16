@@ -85,36 +85,40 @@ async def get_quote_with_access_check(
 def extract_analysis_metadata(content: str, requirements: str, breakdown: list | None = None) -> AnalysisMetadata:
     """
     Extract analysis metadata from generated quote content.
-    
+
     Parses the content to count requirements, tasks, sections, and pages.
+    Requirements count is derived from the requirements text so it stays
+    consistent between live analysis and project detail.
     """
     import re
-    
-    # Count requirements from the original requirements text
-    # Look for numbered items, bullet points, or lines with key requirement indicators
-    req_patterns = [
+
+    # Count requirements from the original requirements text (single source of truth)
+    # 1) Explicit list items: bullets, numbered items
+    req_list_patterns = [
         r'^\s*[-•*]\s+',  # Bullet points
-        r'^\s*\d+[.)]\s+',  # Numbered items
-        r'(?:need|require|want|must|should)\s+',  # Requirement keywords
+        r'^\s*\d+[.)]\s+',  # Numbered items (1. 2) etc.)
     ]
-    requirements_lines = requirements.split('\n')
+    # 2) Lines that look like requirement phrases (keyword or substantial line)
+    req_phrase_pattern = re.compile(
+        r'(?:need|require|want|must|should|include|feature|page|section)\s+',
+        re.IGNORECASE,
+    )
+    requirements_lines = [ln.strip() for ln in requirements.split('\n') if ln.strip()]
     requirements_count = 0
     for line in requirements_lines:
-        line = line.strip()
-        if not line:
+        if not line or line.startswith('#'):
             continue
-        for pattern in req_patterns:
-            if re.search(pattern, line, re.IGNORECASE):
-                requirements_count += 1
-                break
-        else:
-            # Count non-empty lines that look like requirements
-            if len(line) > 20 and not line.startswith('#'):
-                requirements_count += 1
-    
-    # Ensure minimum count
-    requirements_count = max(requirements_count, 3)
-    
+        is_list_item = any(re.search(p, line) for p in req_list_patterns)
+        is_requirement_phrase = len(line) > 15 and (req_phrase_pattern.search(line) or len(line) > 40)
+        if is_list_item or is_requirement_phrase:
+            requirements_count += 1
+    # If no structured items found, treat each substantial non-empty line as one requirement
+    if requirements_count == 0 and requirements_lines:
+        requirements_count = sum(1 for ln in requirements_lines if len(ln) > 10 and not ln.startswith('#'))
+    # When there was input but no lines matched, treat as one requirement
+    if requirements.strip() and requirements_count == 0:
+        requirements_count = 1
+
     # Count tasks from the breakdown if available, or from content
     tasks_count = 0
     if breakdown and isinstance(breakdown, list):
@@ -161,20 +165,45 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
     
     pages_count = max(pages_count, 1)
     
-    # Identify complexity factors
-    complexity_factors = []
-    if re.search(r'multi[- ]?language|bilingual|multilingual|wpml|polylang', content, re.IGNORECASE):
-        complexity_factors.append('Multi-language support')
+    # Identify complexity factors and feature flags
+    complexity_factors: list[str] = []
+
+    # Multi-language support
+    multi_lang_pattern = r'multi[- ]?language|bilingual|multilingual|wpml|polylang'
+    has_multi_language = bool(re.search(multi_lang_pattern, content, re.IGNORECASE))
+    if has_multi_language:
+        complexity_factors.append("Multi-language support")
+
+    # E-commerce
     if re.search(r'e[- ]?commerce|woocommerce|shop|cart|checkout', content, re.IGNORECASE):
-        complexity_factors.append('E-commerce functionality')
+        complexity_factors.append("E-commerce functionality")
+
+    # Custom development
     if re.search(r'custom\s+(?:plugin|theme|development)', content, re.IGNORECASE):
-        complexity_factors.append('Custom development')
+        complexity_factors.append("Custom development")
+
+    # Content migration
     if re.search(r'migration|migrate|transfer', content, re.IGNORECASE):
-        complexity_factors.append('Content migration')
+        complexity_factors.append("Content migration")
+
+    # API / integrations
     if re.search(r'api|integration|third[- ]?party', content, re.IGNORECASE):
-        complexity_factors.append('API/Integration work')
-    if re.search(r'interactive|calculator|tool|embed', content, re.IGNORECASE):
-        complexity_factors.append('Interactive tools')
+        complexity_factors.append("API/Integration work")
+
+    # Interactive tools / calculators / embeds
+    interactive_pattern = r'interactive|calculator|tool|embed'
+    has_interactive_tools = bool(re.search(interactive_pattern, content, re.IGNORECASE))
+    if has_interactive_tools:
+        complexity_factors.append("Interactive tools")
+
+    # SEO / analytics (check both requirements and generated content)
+    seo_source = f"{requirements}\n{content}"
+    seo_pattern = (
+        r'\bseo\b|search engine|rank math|yoast|google analytics|ga4\b|analytics\b|schema markup|structured data'
+    )
+    has_seo = bool(re.search(seo_pattern, seo_source, re.IGNORECASE))
+    if has_seo:
+        complexity_factors.append("SEO and analytics")
     
     return AnalysisMetadata(
         requirements_count=requirements_count,
@@ -182,6 +211,9 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
         sections_count=sections_count,
         pages_count=pages_count,
         complexity_factors=complexity_factors,
+        has_multi_language=has_multi_language,
+        has_interactive_tools=has_interactive_tools,
+        has_seo=has_seo,
     )
 
 
@@ -258,9 +290,10 @@ async def list_all_quotes(
     else:
         sort_expression = sort_column.desc()
 
-    # Fetch quotes with pagination and sorting
+    # Fetch quotes with pagination and sorting (eager load project for project_name)
     paginated_query = (
         base_query
+        .options(selectinload(Quote.project))
         .order_by(sort_expression)
         .offset(offset)
         .limit(limit)
@@ -274,6 +307,7 @@ async def list_all_quotes(
             id=quote.id,
             quote_number=f"QT-{str(quote.id)[:8].upper()}",
             project_id=quote.project_id,
+            project_name=quote.project.name if quote.project else None,
             title=quote.title,
             total_hours=quote.total_hours,
             platform=quote.platform,
@@ -450,6 +484,13 @@ async def generate_quote(
         elif result.total_hours > 80:
             complexity = Complexity.HIGH
 
+    # Extract analysis metadata to get requirements count and feature flags
+    analysis_metadata = extract_analysis_metadata(
+        content=result.content,
+        requirements=request.requirements,
+        breakdown=result.breakdown,
+    )
+
     # Create quote in database (HOURS ONLY - NO PRICING)
     # NOTE: total_cost is intentionally set to 0 - billing/pricing is out of scope
     # and handled by a separate sales team
@@ -472,6 +513,14 @@ async def generate_quote(
             "breakdown": result.breakdown,
             "assumptions": result.assumptions,
             "exclusions": result.exclusions,
+            "requirements_count": analysis_metadata.requirements_count,
+            # Persist analysis snapshot and feature flags for dashboard / estimation UI
+            "analysis": analysis_metadata.model_dump(),
+            "feature_flags": {
+                "multi_language": analysis_metadata.has_multi_language,
+                "interactive_tools": analysis_metadata.has_interactive_tools,
+                "seo": analysis_metadata.has_seo,
+            },
         },
     )
 
@@ -520,11 +569,7 @@ async def generate_quote(
                 generation_cost=result.generation_cost,
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
-                analysis=extract_analysis_metadata(
-                    content=result.content,
-                    requirements=request.requirements,
-                    breakdown=result.breakdown,
-                ),
+                analysis=analysis_metadata,
             ),
         ),
     )
@@ -1089,19 +1134,35 @@ async def regenerate_quote(
     quote.total_hours = Decimal(str(result.total_hours or quote.total_hours))
     quote.total_cost = Decimal("0")  # Cost not used
 
+    # Recompute analysis on regenerated content so feature flags stay in sync
+    analysis_metadata = extract_analysis_metadata(
+        content=result.content,
+        requirements=quote.requirements,
+        breakdown=result.breakdown,
+    )
+
     # Update extra_data
     existing_metadata = quote.extra_data or {}
-    existing_metadata.update({
-        "model_used": result.model_used,
-        "tokens_used": result.tokens_used,
-        "generation_cost": result.generation_cost,
-        "rag_context_used": bool(rag_context),
-        "breakdown": result.breakdown,
-        "assumptions": result.assumptions,
-        "exclusions": result.exclusions,
-        "regeneration_feedback": request.feedback,
-        "regeneration_count": existing_metadata.get("regeneration_count", 0) + 1,
-    })
+    existing_metadata.update(
+        {
+            "model_used": result.model_used,
+            "tokens_used": result.tokens_used,
+            "generation_cost": result.generation_cost,
+            "rag_context_used": bool(rag_context),
+            "breakdown": result.breakdown,
+            "assumptions": result.assumptions,
+            "exclusions": result.exclusions,
+            "regeneration_feedback": request.feedback,
+            "regeneration_count": existing_metadata.get("regeneration_count", 0) + 1,
+            "requirements_count": analysis_metadata.requirements_count,
+            "analysis": analysis_metadata.model_dump(),
+            "feature_flags": {
+                "multi_language": analysis_metadata.has_multi_language,
+                "interactive_tools": analysis_metadata.has_interactive_tools,
+                "seo": analysis_metadata.has_seo,
+            },
+        }
+    )
     quote.extra_data = existing_metadata
 
     await db.commit()
@@ -1144,11 +1205,7 @@ async def regenerate_quote(
                 generation_cost=result.generation_cost,
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
-                analysis=extract_analysis_metadata(
-                    content=result.content,
-                    requirements=quote.requirements,
-                    breakdown=result.breakdown,
-                ),
+                analysis=analysis_metadata,
             ),
         ),
     )
@@ -1248,24 +1305,44 @@ async def refine_quote(
     # Update quote in database
     quote.content = updated_content
 
-    # Update extra_data to track refinement
+    # Recompute analysis on refined content to keep feature flags up to date
+    breakdown_for_analysis = None
+    if quote.extra_data:
+        breakdown_for_analysis = quote.extra_data.get("breakdown")
+
+    analysis_metadata = extract_analysis_metadata(
+        content=updated_content,
+        requirements=quote.requirements,
+        breakdown=breakdown_for_analysis,
+    )
+
+    # Update extra_data to track refinement and analysis
     existing_metadata = quote.extra_data or {}
     refinement_history = existing_metadata.get("refinement_history", [])
-    refinement_history.append({
-        "message": request.message,
-        "ai_response": ai_message,
-        "changes": [
-            {
-                "section": change.section,
-                "change_type": change.change_type,
-                "description": change.description,
-            }
-            for change in changes
-        ],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    refinement_history.append(
+        {
+            "message": request.message,
+            "ai_response": ai_message,
+            "changes": [
+                {
+                    "section": change.section,
+                    "change_type": change.change_type,
+                    "description": change.description,
+                }
+                for change in changes
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     existing_metadata["refinement_history"] = refinement_history
     existing_metadata["refinement_count"] = len(refinement_history)
+    existing_metadata["requirements_count"] = analysis_metadata.requirements_count
+    existing_metadata["analysis"] = analysis_metadata.model_dump()
+    existing_metadata["feature_flags"] = {
+        "multi_language": analysis_metadata.has_multi_language,
+        "interactive_tools": analysis_metadata.has_interactive_tools,
+        "seo": analysis_metadata.has_seo,
+    }
     quote.extra_data = existing_metadata
 
     await db.commit()
