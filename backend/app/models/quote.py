@@ -35,6 +35,18 @@ class QuoteStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class ContentFormat(str, enum.Enum):
+    """
+    Content format for quote document content.
+
+    Tracks whether the content was produced by AI (markdown) or
+    edited in the Tiptap rich-text editor (html).
+    """
+
+    MARKDOWN = "markdown"
+    HTML = "html"
+
+
 class Complexity(str, enum.Enum):
     """
     Project complexity levels.
@@ -60,6 +72,7 @@ class Quote(Base, UUIDMixin, TimestampMixin):
         project_id: Reference to the parent project.
         title: Quote title (max 500 characters).
         content: Full quote document content.
+        content_format: Format of the content ('markdown' or 'html').
         requirements: Original requirements provided.
         total_hours: Estimated total hours (decimal).
         total_cost: Estimated total cost (decimal).
@@ -96,6 +109,19 @@ class Quote(Base, UUIDMixin, TimestampMixin):
         Text,
         nullable=False,
         doc="Full quote document content",
+    )
+
+    content_format: Mapped[ContentFormat] = mapped_column(
+        Enum(
+            ContentFormat,
+            name="content_format",
+            create_constraint=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=ContentFormat.MARKDOWN,
+        server_default="markdown",
+        doc="Format of the content field: 'markdown' (AI-generated) or 'html' (Tiptap editor)",
     )
 
     requirements: Mapped[str] = mapped_column(

@@ -32,26 +32,16 @@ import { EstimationPreviewPanel } from './EstimationPreviewPanel';
 type TabType = 'estimate' | 'chat' | 'history' | 'export';
 type MobileViewType = 'chat' | 'preview';
 
-interface StatCardData {
-  label: string;
-  value: string | number;
-  subtext?: string;
-  icon: React.ReactNode;
-  iconClass: string;
-}
-
 interface EstimationSplitViewProps {
   project: Project;
   initialQuote: Quote;
   onQuoteUpdated?: (quote: Quote) => void;
-  statCards?: StatCardData[];
 }
 
 export function EstimationSplitView({
   project,
   initialQuote,
   onQuoteUpdated,
-  statCards,
 }: EstimationSplitViewProps) {
   const navigate = useNavigate();
   const [currentQuote, setCurrentQuote] = useState<Quote>(initialQuote);
@@ -85,6 +75,17 @@ export function EstimationSplitView({
       }, 2500);
 
       // Notify parent
+      if (onQuoteUpdated) {
+        onQuoteUpdated(updatedQuote);
+      }
+    },
+    [onQuoteUpdated]
+  );
+
+  // Handle quote saved from the inline editor (no change descriptions)
+  const handleQuoteSaved = useCallback(
+    (updatedQuote: Quote) => {
+      setCurrentQuote(updatedQuote);
       if (onQuoteUpdated) {
         onQuoteUpdated(updatedQuote);
       }
@@ -223,30 +224,12 @@ export function EstimationSplitView({
             >
           {activeTab === 'estimate' && (
             <div className="estimation-panel-preview-wrap">
-              {/* Stat Cards above preview */}
-              {statCards && statCards.length > 0 && (
-                <div className="estimation-stat-cards">
-                  {statCards.map((card, index) => (
-                    <div key={index} className={`estimation-stat-card ${card.iconClass}`}>
-                      <div className="estimation-stat-content">
-                        <span className="estimation-stat-label">{card.label}</span>
-                        <span className="estimation-stat-value">{card.value}</span>
-                        {card.subtext && (
-                          <span className="estimation-stat-subtext">{card.subtext}</span>
-                        )}
-                      </div>
-                      <div className={`estimation-stat-icon ${card.iconClass}`}>
-                        {card.icon}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               <div className="estimation-panel-preview-inner">
                 <EstimationPreviewPanel
                   quote={currentQuote}
+                  project={project}
                   recentChanges={recentChanges}
+                  onQuoteSaved={handleQuoteSaved}
                 />
               </div>
             </div>
@@ -408,7 +391,9 @@ export function EstimationSplitView({
               >
                 <EstimationPreviewPanel
                   quote={currentQuote}
+                  project={project}
                   recentChanges={recentChanges}
+                  onQuoteSaved={handleQuoteSaved}
                 />
               </motion.div>
             )}

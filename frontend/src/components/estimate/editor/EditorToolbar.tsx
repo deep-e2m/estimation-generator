@@ -11,9 +11,9 @@
  * - Heading buttons (H1, H2, H3)
  * - Bold, Italic, Strikethrough
  * - Bullet list / Numbered list
- * - Underline
+ * - Underline, Highlight
  * - Text alignment (Left, Center, Right)
- * - Horizontal Rule
+ * - Horizontal Rule, Link, Table insert
  */
 
 import React from 'react';
@@ -22,12 +22,15 @@ import {
   Italic,
   Strikethrough,
   Underline as UnderlineIcon,
+  Highlighter,
   List,
   ListOrdered,
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Link as LinkIcon,
   Minus,
+  Table as TableIcon,
   Undo,
   Redo,
   Eye,
@@ -269,13 +272,19 @@ export function EditorToolbar({
 
           <Divider />
 
-          {/* Underline (Highlight requires @tiptap/extension-highlight) */}
+          {/* Underline + Highlight */}
           <div className="editor-toolbar__group">
             <ToolbarBtn
               icon={UnderlineIcon}
               onClick={() => editor.chain().focus().toggleUnderline().run()}
               isActive={editor.isActive('underline')}
               title="Underline (Ctrl+U)"
+            />
+            <ToolbarBtn
+              icon={Highlighter}
+              onClick={() => (editor.chain().focus() as unknown as { toggleHighlight: () => { run: () => boolean } }).toggleHighlight().run()}
+              isActive={editor.isActive('highlight')}
+              title="Highlight"
             />
           </div>
 
@@ -305,12 +314,28 @@ export function EditorToolbar({
 
           <Divider />
 
-          {/* Insert controls (Link/Table require @tiptap/extension-link, @tiptap/extension-table) */}
+          {/* Insert controls */}
           <div className="editor-toolbar__group">
             <ToolbarBtn
               icon={Minus}
               onClick={() => editor.chain().focus().setHorizontalRule().run()}
               title="Horizontal Rule"
+            />
+            <ToolbarBtn
+              icon={LinkIcon}
+              onClick={() => {
+                const url = window.prompt('Enter URL:');
+                if (url) {
+                  (editor.chain().focus() as unknown as { setLink: (a: { href: string }) => { run: () => boolean } }).setLink({ href: url }).run();
+                }
+              }}
+              isActive={editor.isActive('link')}
+              title="Insert Link"
+            />
+            <ToolbarBtn
+              icon={TableIcon}
+              onClick={() => (editor.chain().focus() as unknown as { insertTable: (o: { rows: number; cols: number; withHeaderRow: boolean }) => { run: () => boolean } }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+              title="Insert Table"
             />
           </div>
         </div>

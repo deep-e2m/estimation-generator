@@ -16,5 +16,8 @@ export * from './chat';
 // Preview sub-components
 export * from './preview';
 
+// Editor sub-components
+export * from './editor';
+
 // Animation utilities
 export * from './animations';
