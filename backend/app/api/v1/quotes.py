@@ -10,11 +10,11 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import ceil
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
@@ -40,10 +40,12 @@ from app.schemas.quote import (
     QuoteStatusUpdate,
     QuoteSummaryResponse,
     QuoteUpdate,
+    RefinedProjectUpdate,
     RefineQuoteDataResponse,
     RefineQuoteRequest,
     RefineQuoteResponse,
 )
+from app.services.ai.knowledge_service import get_knowledge_service
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
 from app.services.export.html_utils import is_html_content, sanitize_html
@@ -52,6 +54,77 @@ from app.services.quote_refinement_service import get_refinement_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# =============================================================================
+# WebSocket Connection Manager for Quotes
+# =============================================================================
+
+
+class QuoteConnectionManager:
+    """
+    Manages WebSocket connections for per-quote real-time updates.
+
+    The manager is intentionally payload-agnostic: it simply relays
+    JSON messages between clients subscribed to the same quote ID.
+    This keeps the backend simple and lets the frontend control the
+    exact Quote shape used for live estimation.
+    """
+
+    def __init__(self) -> None:
+        # quote_id (str) -> list[WebSocket]
+        self.active_connections: dict[str, list[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, quote_id: str) -> None:
+        """Accept a new WebSocket connection for a quote."""
+        await websocket.accept()
+        self.active_connections.setdefault(quote_id, []).append(websocket)
+        logger.info("WebSocket connected for quote %s (total=%d)", quote_id, len(self.active_connections[quote_id]))
+
+    def disconnect(self, websocket: WebSocket, quote_id: str) -> None:
+        """Remove a WebSocket connection for a quote."""
+        connections = self.active_connections.get(quote_id)
+        if not connections:
+            return
+
+        self.active_connections[quote_id] = [ws for ws in connections if ws is not websocket]
+        if not self.active_connections[quote_id]:
+            del self.active_connections[quote_id]
+        logger.info("WebSocket disconnected for quote %s", quote_id)
+
+    async def broadcast(self, quote_id: str, message: dict[str, Any], *, exclude: WebSocket | None = None) -> None:
+        """
+        Broadcast a JSON message to all connections for a quote.
+
+        The message is serialized once and sent to all active sockets.
+        """
+        connections = self.active_connections.get(quote_id)
+        if not connections:
+            return
+
+        import json
+
+        data = json.dumps(message)
+
+        for ws in list(connections):
+            if exclude is not None and ws is exclude:
+                continue
+            try:
+                await ws.send_text(data)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("Error sending WebSocket message for quote %s: %s", quote_id, exc)
+
+
+# Global manager instance used by WebSocket endpoint
+quote_ws_manager = QuoteConnectionManager()
+
+# Default "Prepared by" value for generation and export (user can override via metadata)
+DEFAULT_PREPARED_BY = "E2M Solutions"
+
+
+def _prepared_by(extra_data: Optional[dict]) -> str:
+    """Return prepared_by from quote metadata or default to E2M Solutions."""
+    return (extra_data or {}).get("prepared_by") or DEFAULT_PREPARED_BY
 
 
 # =============================================================================
@@ -242,6 +315,11 @@ async def list_all_quotes(
     status_filter: Optional[QuoteStatus] = Query(
         default=None, alias="status", description="Filter by quote status"
     ),
+    search: Optional[str] = Query(
+        default=None,
+        max_length=100,
+        description="Search by quote number (e.g. QT-...), project name, or quote title",
+    ),
 ) -> QuoteListResponse:
     """
     List all quotes for the current user with pagination and sorting.
@@ -254,6 +332,7 @@ async def list_all_quotes(
         sort_by: Field to sort by.
         sort_order: Sort order (asc/desc).
         status_filter: Optional status filter.
+        search: Optional search in quote number, project name, or title (DB-backed).
 
     Returns:
         QuoteListResponse: Paginated list of quotes.
@@ -263,6 +342,17 @@ async def list_all_quotes(
 
     if status_filter:
         base_query = base_query.where(Quote.status == status_filter)
+
+    # DB-backed search: quote number (id), project name, or title
+    if search and search.strip():
+        search_term = f"%{search.strip()}%"
+        base_query = base_query.join(Quote.project).where(
+            or_(
+                Project.name.ilike(search_term),
+                Quote.title.ilike(search_term),
+                cast(Quote.id, String).ilike(search_term),
+            )
+        )
 
     # Get total count
     count_query = select(func.count()).select_from(base_query.subquery())
@@ -560,6 +650,7 @@ async def generate_quote(
                 approved_by=new_quote.approved_by,
                 approved_at=new_quote.approved_at,
                 metadata=new_quote.extra_data,
+                prepared_by=_prepared_by(new_quote.extra_data),
                 created_at=new_quote.created_at,
                 updated_at=new_quote.updated_at,
             ),
@@ -756,6 +847,7 @@ async def get_quote(
             approved_by=quote.approved_by,
             approved_at=quote.approved_at,
             metadata=quote.extra_data,
+            prepared_by=_prepared_by(quote.extra_data),
             created_at=quote.created_at,
             updated_at=quote.updated_at,
             project_name=quote.project.name if quote.project else None,
@@ -847,27 +939,44 @@ async def update_quote(
 
     logger.info("Quote updated: id=%s", quote.id)
 
+    response_data = QuoteResponse(
+        id=quote.id,
+        quote_number=f"QT-{str(quote.id)[:8].upper()}",
+        project_id=quote.project_id,
+        title=quote.title,
+        content=quote.content,
+        content_format=quote.content_format,
+        requirements=quote.requirements,
+        total_hours=quote.total_hours,
+        platform=quote.platform,
+        complexity=quote.complexity,
+        status=quote.status,
+        created_by=quote.created_by,
+        approved_by=quote.approved_by,
+        approved_at=quote.approved_at,
+        metadata=quote.extra_data,
+        prepared_by=_prepared_by(quote.extra_data),
+        created_at=quote.created_at,
+        updated_at=quote.updated_at,
+    )
+
+    # Broadcast updated quote snapshot to all realtime subscribers
+    try:
+        await quote_ws_manager.broadcast(
+            str(quote.id),
+            {
+                "type": "quote.updated",
+                "quote_id": str(quote.id),
+                "project_id": str(quote.project_id),
+                "payload": response_data.model_dump(mode="json"),
+            },
+        )
+    except Exception as exc:  # pragma: no cover - best-effort notification
+        logger.warning("Failed to broadcast quote update over WebSocket: %s", exc)
+
     return QuoteDataResponse(
         success=True,
-        data=QuoteResponse(
-            id=quote.id,
-            quote_number=f"QT-{str(quote.id)[:8].upper()}",
-            project_id=quote.project_id,
-            title=quote.title,
-            content=quote.content,
-            content_format=quote.content_format,
-            requirements=quote.requirements,
-            total_hours=quote.total_hours,
-            platform=quote.platform,
-            complexity=quote.complexity,
-            status=quote.status,
-            created_by=quote.created_by,
-            approved_by=quote.approved_by,
-            approved_at=quote.approved_at,
-            metadata=quote.extra_data,
-            created_at=quote.created_at,
-            updated_at=quote.updated_at,
-        ),
+        data=response_data,
     )
 
 
@@ -949,6 +1058,15 @@ async def update_quote_status(
 
     logger.info("Quote status updated: id=%s, status=%s", quote.id, quote.status.value)
 
+    # Ingest approved quote into RAG knowledge base (own session; do not pass db)
+    if new_status == QuoteStatus.APPROVED:
+        try:
+            knowledge_service = get_knowledge_service()
+            count = await knowledge_service.ingest_approved_quote(str(quote.id), db_session=None)
+            logger.info("Ingested approved quote into knowledge base: quote_id=%s, embeddings=%d", quote.id, count)
+        except Exception as e:
+            logger.warning("Failed to ingest approved quote into knowledge base: quote_id=%s, error=%s", quote.id, e)
+
     return QuoteDataResponse(
         success=True,
         data=QuoteResponse(
@@ -967,6 +1085,7 @@ async def update_quote_status(
             approved_by=quote.approved_by,
             approved_at=quote.approved_at,
             metadata=quote.extra_data,
+            prepared_by=_prepared_by(quote.extra_data),
             created_at=quote.created_at,
             updated_at=quote.updated_at,
         ),
@@ -1196,6 +1315,7 @@ async def regenerate_quote(
                 approved_by=quote.approved_by,
                 approved_at=quote.approved_at,
                 metadata=quote.extra_data,
+                prepared_by=_prepared_by(quote.extra_data),
                 created_at=quote.created_at,
                 updated_at=quote.updated_at,
             ),
@@ -1263,8 +1383,8 @@ async def refine_quote(
         current_user.email,
     )
 
-    # Verify project access
-    await get_project_with_access(project_id, current_user, db)
+    # Verify project access and get project (may update name/description from chat)
+    project = await get_project_with_access(project_id, current_user, db)
 
     # Get quote
     quote = await get_quote_with_access_check(quote_id, current_user, db)
@@ -1285,12 +1405,20 @@ async def refine_quote(
             f"Cannot refine quote with status '{quote.status.value}'",
         )
 
-    # Process refinement request
+    # Process refinement request (pass project context for project_updates / new_total_hours)
     try:
         refinement_service = get_refinement_service()
-        updated_content, ai_message, changes = await refinement_service.refine_quote_conversational(
+        (
+            updated_content,
+            ai_message,
+            changes,
+            new_total_hours,
+            project_updates,
+        ) = await refinement_service.refine_quote_conversational(
             quote=quote,
             user_message=request.message,
+            project_name=project.name,
+            project_description=project.description,
         )
     except Exception as e:
         logger.error("Quote refinement failed: %s", str(e))
@@ -1304,6 +1432,22 @@ async def refine_quote(
 
     # Update quote in database
     quote.content = updated_content
+
+    # Apply new total hours when user asked to change estimation time (e.g. "increase by 20 hrs")
+    if new_total_hours is not None:
+        quote.total_hours = Decimal(str(new_total_hours))
+
+    # Apply project name/description updates when user asked to change them via chat
+    updated_project_response: Optional[RefinedProjectUpdate] = None
+    if project_updates:
+        if "name" in project_updates and project_updates["name"] is not None:
+            project.name = project_updates["name"]
+        if "description" in project_updates:
+            project.description = project_updates.get("description")
+        updated_project_response = RefinedProjectUpdate(
+            name=project.name,
+            description=project.description,
+        )
 
     # Recompute analysis on refined content to keep feature flags up to date
     breakdown_for_analysis = None
@@ -1373,11 +1517,13 @@ async def refine_quote(
                 approved_by=quote.approved_by,
                 approved_at=quote.approved_at,
                 metadata=quote.extra_data,
+                prepared_by=_prepared_by(quote.extra_data),
                 created_at=quote.created_at,
                 updated_at=quote.updated_at,
             ),
             ai_message=ai_message,
             changes_applied=changes,
+            updated_project=updated_project_response,
         ),
     )
 
@@ -1489,15 +1635,10 @@ async def export_quote_docx(
     assumptions = metadata.get("assumptions", [])
     exclusions = metadata.get("exclusions", [])
 
-    # Determine client name from project or metadata
-    client_name = project.name
-    if quote.extra_data and quote.extra_data.get("client_name"):
-        client_name = quote.extra_data.get("client_name")
-
-    # Prepare export data
+    # "Prepared for" uses project name only (client_name removed from system)
     export_data = QuoteExportData(
         title=quote.title,
-        client_name=client_name,
+        client_name=project.name,
         project_name=project.name,
         requirements=quote.requirements,
         content=quote.content,
@@ -1506,6 +1647,7 @@ async def export_quote_docx(
         complexity=quote.complexity.value,
         created_at=quote.created_at,
         creator_name=quote.creator.full_name if quote.creator else None,
+        prepared_by=_prepared_by(quote.extra_data),
         breakdown=breakdown if breakdown else None,
         assumptions=assumptions if assumptions else None,
         exclusions=exclusions if exclusions else None,
@@ -1580,7 +1722,7 @@ async def export_quote_pdf(
     import html as html_lib
     import io
 
-    from weasyprint import HTML, CSS
+    from weasyprint import HTML
 
     logger.info(
         "Exporting quote as PDF: project_id=%s, quote_id=%s, user=%s",
@@ -1625,12 +1767,11 @@ async def export_quote_pdf(
 
     metadata = quote.extra_data or {}
 
-    client_name = project.name
-    if metadata.get("client_name"):
-        client_name = metadata["client_name"]
+    # "Prepared for" uses project name only (client_name removed from system)
+    prepared_for_name = project.name
 
-    # Determine body HTML
-    raw_content = quote.content or ""
+    # Determine body HTML (ensure str: content is Text but can be None in edge cases)
+    raw_content = str(quote.content) if quote.content is not None else ""
     if is_html_content(raw_content):
         body_html = raw_content
     else:
@@ -1643,18 +1784,28 @@ async def export_quote_pdf(
         body_html = "\n".join(paragraphs) or "<p>No content available.</p>"
 
     created_str = quote.created_at.strftime("%B %d, %Y")
-    prepared_by = ""
-    if quote.creator and getattr(quote.creator, "full_name", None):
-        prepared_by = quote.creator.full_name
+    prepared_by = _prepared_by(quote.extra_data)
 
     title_text = quote.title or "Project Estimate"
+    # Escape for safe embedding in HTML (avoid broken markup / WeasyPrint errors)
+    title_escaped = html_lib.escape(str(title_text))
+    prepared_for_escaped = html_lib.escape(str(prepared_for_name or ""))
+    prepared_by_escaped = html_lib.escape(str(prepared_by or ""))
 
-    html_string = f"""
+    # Build HTML in two parts so body_html is never inside an f-string (user content
+    # can contain { or } which would be interpreted as f-string expressions and cause 500).
+    meta_extra = ""
+    if prepared_for_escaped:
+        meta_extra += "&nbsp; &nbsp; <strong>Prepared for:</strong> " + prepared_for_escaped
+    if prepared_by_escaped:
+        meta_extra += "&nbsp; &nbsp; <strong>Prepared by:</strong> " + prepared_by_escaped
+
+    html_header = f"""
 <!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Proposal - {title_text}</title>
+    <title>Proposal - {title_escaped}</title>
     <style>
       @page {{
         margin: 1in;
@@ -1740,26 +1891,23 @@ async def export_quote_pdf(
       <p class="company-tagline">Digital Excellence Delivered</p>
       <p class="meta">
         <strong>Date:</strong> {created_str}
-        {"&nbsp; &nbsp; <strong>Prepared for:</strong> " + client_name if client_name else ""}
-        {"&nbsp; &nbsp; <strong>Prepared by:</strong> " + prepared_by if prepared_by else ""}
+        {meta_extra}
       </p>
     </div>
 
     <div>
       <p class="title">Project Proposal</p>
-      <p class="subtitle">{title_text}</p>
+      <p class="subtitle">{title_escaped}</p>
     </div>
 
     <h1>Executive Summary & Scope</h1>
-    {body_html}
-  </body>
-</html>
-    """.strip()
+"""
+    html_string = (html_header.strip() + "\n" + body_html + "\n  </body>\n</html>")
 
     try:
-        pdf_bytes = HTML(string=html_string).write_pdf(stylesheets=[CSS(string="")])
+        pdf_bytes = HTML(string=html_string).write_pdf()
     except Exception as e:
-        logger.error("Failed to generate PDF document: %s", str(e))
+        logger.error("Failed to generate PDF document: %s", str(e), exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -1768,10 +1916,12 @@ async def export_quote_pdf(
             },
         )
 
+    # Safe filename from title (quote.title can be None in edge cases)
+    title_for_filename = (quote.title or "Project Estimate")[:50]
     safe_title = "".join(
         c if c.isalnum() or c in (" ", "-", "_") else "_"
-        for c in quote.title[:50]
-    ).strip()
+        for c in title_for_filename
+    ).strip() or "Proposal"
     filename = f"Proposal_{safe_title}_{quote.created_at.strftime('%Y%m%d')}.pdf"
 
     logger.info("PDF export completed: quote_id=%s, filename=%s", quote_id, filename)
@@ -1784,3 +1934,126 @@ async def export_quote_pdf(
             "Content-Length": str(len(pdf_bytes)),
         },
     )
+
+
+# =============================================================================
+# WebSocket Endpoint for Quote Realtime Updates
+# =============================================================================
+
+
+@router.websocket("/ws/quotes/{quote_id}")
+async def websocket_quote_updates(
+    websocket: WebSocket,
+    quote_id: UUID,
+    token: str = Query(..., description="Bearer access token for authentication"),
+) -> None:
+    """
+    WebSocket endpoint for real-time quote updates.
+
+    This endpoint is **server-push only** for now:
+    - Clients connect with a JWT access token.
+    - The server broadcasts full quote snapshots whenever a quote changes
+      (generate, refine, edit, status change, delete).
+
+    Message types (server -> client):
+    - quote.sync: Initial snapshot when connection is established
+    - quote.updated: Quote content/metadata changed
+    - quote.status_changed: Quote status changed
+    - quote.deleted: Quote has been deleted
+    """
+    from app.core.database import get_session_factory
+    from app.core.security import verify_access_token
+    from app.models.project import Project
+    from app.models.user import User
+    from app.schemas.quote import QuoteDetailResponse
+
+    # Authenticate token
+    try:
+        payload = verify_access_token(token)
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Verify user and access to quote, and fetch initial snapshot
+    session_factory = get_session_factory()
+    async with session_factory() as db:
+        user = await db.get(User, UUID(user_id))
+        if not user or not user.is_active:
+            await websocket.close(code=4001, reason="User not found")
+            return
+
+        # Load quote with project for header/project name
+        result = await db.execute(
+            select(Quote)
+            .options(selectinload(Quote.project))
+            .where(Quote.id == quote_id)
+        )
+        quote = result.scalar_one_or_none()
+        if not quote:
+            await websocket.close(code=4004, reason="Quote not found")
+            return
+
+        # Basic access control: owner or admin only
+        if quote.created_by != user.id and not user.is_admin:
+            await websocket.close(code=4003, reason="Access denied")
+            return
+
+        # Ensure project still exists (defensive)
+        project = await db.get(Project, quote.project_id)
+        if not project:
+            await websocket.close(code=4004, reason="Project not found")
+            return
+
+        # Build initial detail snapshot (matches GET /quotes/{id})
+        detail = QuoteDetailResponse(
+            id=quote.id,
+            project_id=quote.project_id,
+            title=quote.title,
+            content=quote.content,
+            content_format=quote.content_format,
+            requirements=quote.requirements,
+            total_hours=quote.total_hours,
+            platform=quote.platform,
+            complexity=quote.complexity,
+            status=quote.status,
+            created_by=quote.created_by,
+            approved_by=quote.approved_by,
+            approved_at=quote.approved_at,
+            metadata=quote.extra_data,
+            prepared_by=_prepared_by(quote.extra_data),
+            created_at=quote.created_at,
+            updated_at=quote.updated_at,
+            project_name=quote.project.name if quote.project else None,
+            creator_name=None,
+            approver_name=None,
+        )
+
+    quote_id_str = str(quote_id)
+
+    # Register connection
+    await quote_ws_manager.connect(websocket, quote_id_str)
+
+    # Send initial sync payload
+    await websocket.send_json(
+        {
+            "type": "quote.sync",
+            "quote_id": quote_id_str,
+            "project_id": str(detail.project_id),
+            "payload": detail.model_dump(mode="json"),
+        }
+    )
+
+    try:
+        # Keep the connection open; we currently ignore any client-sent messages.
+        while True:
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+    finally:
+        quote_ws_manager.disconnect(websocket, quote_id_str)
+

@@ -3,7 +3,7 @@
  * Handles all chat-related API calls including streaming support
  */
 
-import { apiClient } from './api';
+import { apiClient, LONG_REQUEST_TIMEOUT_MS } from './api';
 import type {
   ApiResponse,
   ChatResponse,
@@ -55,7 +55,8 @@ export const chatService = {
   ): Promise<ChatResponse> => {
     const response = await apiClient.post<ApiResponse<ChatResponse>>(
       `/api/v1/projects/${projectId}/chat`,
-      { content, context }
+      { content, context },
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     return response.data.data;
   },

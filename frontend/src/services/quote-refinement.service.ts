@@ -4,15 +4,20 @@
  */
 
 import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
-import { apiClient } from './api';
+import { apiClient, LONG_REQUEST_TIMEOUT_MS } from './api';
 import type { ApiResponse } from '../types';
-import type { RefineQuoteRequest, RefineQuoteResponse } from '../types/quote.types';
+import type {
+  RefineQuoteRequest,
+  RefineQuoteResponse,
+  RefinedProjectUpdate,
+} from '../types/quote.types';
 
 /** Backend refine response (updated_quote has content as string) */
 interface RefineQuoteApiResponse {
   updated_quote: ApiQuote;
   ai_message: string;
   changes_applied: RefineQuoteResponse['changes_applied'];
+  updated_project?: RefinedProjectUpdate | null;
 }
 
 /**
@@ -29,7 +34,8 @@ export class QuoteRefinementService {
   ): Promise<RefineQuoteResponse> {
     const response = await apiClient.post<ApiResponse<RefineQuoteApiResponse>>(
       `/api/v1/projects/${projectId}/quotes/${quoteId}/refine`,
-      { message } as RefineQuoteRequest
+      { message } as RefineQuoteRequest,
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
 
     const data = response.data.data;
@@ -38,6 +44,7 @@ export class QuoteRefinementService {
       updated_quote,
       ai_message: data.ai_message,
       changes_applied: data.changes_applied,
+      updated_project: data.updated_project ?? undefined,
     };
   }
 }

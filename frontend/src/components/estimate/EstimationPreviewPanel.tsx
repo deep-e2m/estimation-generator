@@ -306,28 +306,22 @@ export function EstimationPreviewPanel({
                     {formatDate(quote.created_at)}
                   </span>
                 </div>
-                {(quote as Quote & { client_name?: string }).client_name ||
-                  project.client_name ||
-                  quote.project?.name ||
-                  project.name ? (
+                {(quote.project?.name || project.name) ? (
                   <div className="doc-metadata-item">
                     <span className="doc-metadata-label">Prepared for</span>
                     <span className="doc-metadata-value">
-                      {(quote as Quote & { client_name?: string }).client_name ||
-                        project.client_name ||
-                        quote.project?.name ||
-                        project.name}
+                      {quote.project?.name || project.name}
                     </span>
                   </div>
                 ) : null}
-                {quote.created_by?.full_name && (
-                  <div className="doc-metadata-item">
-                    <span className="doc-metadata-label">Prepared by</span>
-                    <span className="doc-metadata-value">
-                      {quote.created_by.full_name}
-                    </span>
-                  </div>
-                )}
+                <div className="doc-metadata-item">
+                  <span className="doc-metadata-label">Prepared by</span>
+                  <span className="doc-metadata-value">
+                    {quote.prepared_by ??
+                      quote.metadata?.prepared_by ??
+                      'E2M Solutions'}
+                  </span>
+                </div>
               </div>
             </div>
 

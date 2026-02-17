@@ -70,8 +70,8 @@ export function QuoteDetail() {
         setIsExporting(true);
         const blob = await quoteService.exportQuote(projectId, quoteId, format);
 
-        const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
-        const filename = `${quote.quote_number}-${clientName}.${format}`;
+        const projectName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
+        const filename = `${quote.quote_number}-${projectName}.${format}`;
 
         quoteService.triggerDownload(blob, filename);
         toast.success(`${format.toUpperCase()} export downloaded`);

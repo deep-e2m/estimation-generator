@@ -3,7 +3,7 @@
  * Handles all quote-related API calls for the Estimate AI system
  */
 
-import { apiClient } from './api';
+import { apiClient, LONG_REQUEST_TIMEOUT_MS } from './api';
 import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
 import type {
   ApiResponse,
@@ -34,7 +34,6 @@ export interface QuoteGenerateRequest {
 export interface QuoteUpdateRequest {
   content?: Partial<Quote['content']>;
   status?: QuoteStatus;
-  client_name?: string;
   platform?: string;
 }
 
@@ -66,7 +65,8 @@ export const quotesService = {
   generate: async (projectId: string, data: QuoteGenerateRequest): Promise<Quote> => {
     const response = await apiClient.post<ApiResponse<ApiQuote>>(
       `/api/v1/projects/${projectId}/quotes`,
-      data
+      data,
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     // Normalize API response to frontend Quote format
     return normalizeQuoteFromApi(response.data.data);

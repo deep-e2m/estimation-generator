@@ -113,8 +113,7 @@ class KnowledgeService:
                 q.platform,
                 q.total_hours,
                 q.status,
-                p.name as project_name,
-                p.client_name
+                p.name as project_name
             FROM quotes q
             LEFT JOIN projects p ON q.project_id = p.id
             WHERE q.id = :quote_id
@@ -154,7 +153,6 @@ class KnowledgeService:
                 "platform": quote.platform,
                 "total_hours": quote.total_hours,
                 "project_name": quote.project_name,
-                "client_name": quote.client_name,
                 "summary": self._extract_summary(quote.content),
                 "project_type": self._infer_project_type(quote.content, quote.requirements),
             }
@@ -165,14 +163,14 @@ class KnowledgeService:
                 db_session=db_session,
             )
 
-            # Ingest with chunking
+            # Ingest with token-based chunking (sizes from settings)
             count = await self.rag_service.ingest_document(
                 content=content,
                 source_type="quote",
                 source_id=f"quote-{quote_id}",
                 metadata=metadata,
-                chunk_size=512,
-                chunk_overlap=50,
+                chunk_size=settings.KNOWLEDGE_CHUNK_SIZE,
+                chunk_overlap=settings.KNOWLEDGE_CHUNK_OVERLAP,
                 db_session=db_session,
             )
 
@@ -393,14 +391,14 @@ class KnowledgeService:
             db_session=db_session,
         )
 
-        # Ingest document
+        # Ingest document (token-based chunking from settings)
         count = await self.rag_service.ingest_document(
             content=content,
             source_type="training_quote",
             source_id=source_id,
             metadata=metadata,
-            chunk_size=512,
-            chunk_overlap=50,
+            chunk_size=settings.KNOWLEDGE_CHUNK_SIZE,
+            chunk_overlap=settings.KNOWLEDGE_CHUNK_OVERLAP,
             db_session=db_session,
         )
 

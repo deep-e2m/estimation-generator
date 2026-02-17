@@ -180,7 +180,7 @@ export interface GenerateQuoteRequest {
   regenerate?: boolean;  // if true, delete existing estimate and create new one
   project_context?: {    // additional project context
     platform?: Platform;
-    client_name?: string;
+    project_name?: string;
     industry?: string;
     [key: string]: unknown;
   };
@@ -284,8 +284,16 @@ export interface RefineQuoteRequest {
   message: string;
 }
 
+/** Project fields updated via refine chat (name/description). */
+export interface RefinedProjectUpdate {
+  name?: string | null;
+  description?: string | null;
+}
+
 export interface RefineQuoteResponse {
   updated_quote: Quote;
   ai_message: string;
   changes_applied: ChangeDescription[];
+  /** Set when the user asked to change project name or description via chat. */
+  updated_project?: RefinedProjectUpdate | null;
 }

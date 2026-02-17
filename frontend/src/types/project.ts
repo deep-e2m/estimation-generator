@@ -26,7 +26,6 @@ export interface ProjectSummary {
   id: string;
   name: string;
   description?: string;
-  client_name?: string;
   platform?: ProjectPlatform;
   status: ProjectStatus;
   quotes_count: number;
@@ -36,6 +35,7 @@ export interface ProjectSummary {
 
 // Full project details
 export interface Project extends ProjectSummary {
+  additional_instructions?: string;
   client_email?: string;
   target_completion_date?: string;
   owner: Pick<User, 'id' | 'full_name' | 'email' | 'avatar_url'>;
@@ -61,7 +61,6 @@ export interface ProjectCreate {
 export interface ProjectUpdate {
   name?: string;
   description?: string;
-  client_name?: string;
   client_email?: string;
   platform?: ProjectPlatform;
   status?: ProjectStatus;

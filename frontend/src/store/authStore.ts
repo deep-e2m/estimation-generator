@@ -228,3 +228,34 @@ export const useUser = () => useAuthStore((state) => state.user)
 export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated)
 export const useAuthLoading = () => useAuthStore((state) => state.isLoading)
 export const useAuthError = () => useAuthStore((state) => state.error)
+
+/**
+ * Ensure we have a valid (non-expired) access token.
+ *
+ * - Returns the existing token if it's still valid.
+ * - Attempts a refresh when the token is close to expiry.
+ * - Returns null if no valid token can be obtained.
+ *
+ * This is safe to call from non-React code (e.g. WebSocket services).
+ */
+export async function ensureValidAccessToken(): Promise<string | null> {
+  const token = getAccessToken()
+
+  if (!token) {
+    return null
+  }
+
+  // If token is still valid (with buffer), just use it.
+  if (!isTokenExpired(token)) {
+    return token
+  }
+
+  // Try to refresh using the store's refreshToken action.
+  const refreshed = await useAuthStore.getState().refreshToken()
+  if (!refreshed) {
+    return null
+  }
+
+  // Read the (potentially) new token from storage.
+  return getAccessToken()
+}

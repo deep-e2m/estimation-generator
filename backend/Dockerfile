@@ -23,10 +23,17 @@ FROM python:3.11-slim as runtime
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (WeasyPrint needs cairo/pango for PDF export)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-xlib-2.0-0 \
+    libcairo2 \
+    libffi8 \
+    libglib2.0-0t64 \
+    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react';
 import { quoteRefinementService } from '../services/quote-refinement.service';
 import type { ChatMessage } from '../types/chat';
-import type { Quote, ChangeDescription } from '../types/quote.types';
+import type { Quote, ChangeDescription, RefinedProjectUpdate } from '../types/quote.types';
 
 interface UseQuoteRefinementReturn {
   messages: ChatMessage[];
@@ -22,7 +22,11 @@ interface UseQuoteRefinementReturn {
 export function useQuoteRefinement(
   projectId: string,
   quoteId: string,
-  onQuoteUpdated: (quote: Quote, changes: ChangeDescription[]) => void
+  onQuoteUpdated: (
+    quote: Quote,
+    changes: ChangeDescription[],
+    updatedProject?: RefinedProjectUpdate | null
+  ) => void
 ): UseQuoteRefinementReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -65,8 +69,12 @@ export function useQuoteRefinement(
 
         setMessages((prev) => [...prev, aiMessage]);
 
-        // Notify parent of quote update
-        onQuoteUpdated(response.updated_quote, response.changes_applied);
+        // Notify parent of quote update (and project if name/description changed via chat)
+        onQuoteUpdated(
+          response.updated_quote,
+          response.changes_applied,
+          response.updated_project ?? undefined
+        );
       } catch (err: any) {
         const errorMessage = err.response?.data?.error?.message || 'Failed to process request';
         setError(errorMessage);

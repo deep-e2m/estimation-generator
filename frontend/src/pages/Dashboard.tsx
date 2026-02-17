@@ -49,7 +49,6 @@ interface ProjectWithDeadline {
   id: string
   name: string
   description?: string
-  client_name?: string
   platform?: string
   status: ProjectStatus
   quotes_count: number
@@ -401,7 +400,17 @@ function AIPerformanceCard({
         <div className="dashboard-ai-performance-icon">
           <Sparkles style={{ width: 16, height: 16, color: 'white' }} />
         </div>
-        <h3 className="dashboard-ai-performance-title">AI Performance</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <h3 className="dashboard-ai-performance-title">AI Performance</h3>
+          {isBenchmark && (
+            <span
+              className="dashboard-accuracy-benchmark"
+              title="Values are industry-typical placeholders; real metrics will appear when measured from your quotes"
+            >
+              Benchmark
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Accuracy Donut - empty when no data */}

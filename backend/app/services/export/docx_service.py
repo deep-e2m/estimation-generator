@@ -53,7 +53,7 @@ class QuoteExportData:
 
     Attributes:
         title: The quote title.
-        client_name: Name of the client (extracted from project or metadata).
+        client_name: Name shown as "Prepared for" (project name; kept for export schema compatibility).
         project_name: Name of the project.
         requirements: Original requirements text.
         content: Full quote content from LLM.
@@ -62,7 +62,8 @@ class QuoteExportData:
         platform: Target platform.
         complexity: Project complexity level.
         created_at: When the quote was created.
-        creator_name: Name of the quote creator.
+        creator_name: Name of the quote creator (optional; deprecated in favor of prepared_by).
+        prepared_by: Name shown as "Prepared by" (default E2M Solutions; user can override).
         breakdown: Hour breakdown by phase/task (from metadata).
         assumptions: List of assumptions (from metadata).
         exclusions: List of exclusions (from metadata).
@@ -80,6 +81,7 @@ class QuoteExportData:
     complexity: str
     created_at: datetime
     creator_name: Optional[str] = None
+    prepared_by: Optional[str] = None
     breakdown: Optional[list[dict[str, Any]]] = None
     assumptions: Optional[list[str]] = None
     exclusions: Optional[list[str]] = None
@@ -376,7 +378,7 @@ class DocxExportService:
         project_run.font.italic = True
         project_run.font.color.rgb = self.TEXT_COLOR
 
-        # Prepared by section
+        # Prepared by section (default E2M Solutions; user can override via prepared_by)
         prepared_para = self._document.add_paragraph()
         prepared_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         prepared_para.paragraph_format.space_before = Pt(48)
@@ -389,21 +391,12 @@ class DocxExportService:
         company_para = self._document.add_paragraph()
         company_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        company_run = company_para.add_run(self.COMPANY_NAME)
+        prepared_by_value = (data.prepared_by or self.COMPANY_NAME).strip() or self.COMPANY_NAME
+        company_run = company_para.add_run(prepared_by_value)
         company_run.font.name = self.FONT_NAME_HEADING
         company_run.font.size = Pt(16)
         company_run.font.bold = True
         company_run.font.color.rgb = self.PRIMARY_COLOR
-
-        # Creator name if available
-        if data.creator_name:
-            creator_para = self._document.add_paragraph()
-            creator_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            creator_run = creator_para.add_run(data.creator_name)
-            creator_run.font.name = self.FONT_NAME
-            creator_run.font.size = Pt(12)
-            creator_run.font.color.rgb = self.TEXT_COLOR
 
         # Date
         date_para = self._document.add_paragraph()
@@ -437,7 +430,7 @@ class DocxExportService:
         # Populate table
         rows_data = [
             ("Project Name", data.project_name),
-            ("Client", data.client_name),
+            ("Project", data.client_name),
             ("Platform", data.platform.replace("_", " ").title()),
             ("Complexity", data.complexity.title()),
             ("Total Estimated Hours", f"{data.total_hours:,.1f} hours"),

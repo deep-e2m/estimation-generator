@@ -178,7 +178,7 @@ export function QuoteHistory() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
               type="text"
-              placeholder="Search by quote number or client name..."
+              placeholder="Search by quote number or project name..."
               value={searchValue}
               onChange={handleSearchChange}
               className="pl-10"
@@ -436,9 +436,6 @@ function QuoteTableRow({ quote }: { quote: QuoteSummary }) {
       <td className="px-4 py-4">
         <div className="max-w-xs">
           <p className="truncate font-medium text-gray-900">
-            {quote.client_name || 'No client'}
-          </p>
-          <p className="truncate text-sm text-gray-500">
             {quote.project?.name || 'No project'}
           </p>
         </div>
@@ -485,7 +482,7 @@ function QuoteMobileCard({ quote }: { quote: QuoteSummary }) {
         <div>
           <p className="font-medium text-primary-600">{quote.quote_number}</p>
           <p className="mt-1 font-medium text-gray-900">
-            {quote.client_name || 'No client'}
+            {quote.project?.name || 'No project'}
           </p>
         </div>
         <span

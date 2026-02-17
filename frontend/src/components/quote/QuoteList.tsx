@@ -94,8 +94,8 @@ function QuoteCard({ quote, onClick }: QuoteCardProps) {
                     </span>
                   )}
                 </div>
-                {quote.client_name && (
-                  <p className="text-sm text-gray-500 truncate">{quote.client_name}</p>
+                {quote.project?.name && (
+                  <p className="text-sm text-gray-500 truncate">{quote.project.name}</p>
                 )}
               </div>
             </div>

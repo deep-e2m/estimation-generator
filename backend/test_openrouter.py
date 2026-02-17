@@ -204,8 +204,10 @@ async def test_conversational_refinement():
         )
 
         service = QuoteRefinementService()
-        updated_content, explanation, changes = await service.refine_quote_conversational(
-            quote, "Add 2 hours to the total."
+        updated_content, explanation, changes, new_total_hours, project_updates = (
+            await service.refine_quote_conversational(
+                quote, "Add 2 hours to the total."
+            )
         )
 
         assert isinstance(updated_content, str), "updated_content should be str"

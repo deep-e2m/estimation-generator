@@ -224,6 +224,10 @@ class QuoteResponse(BaseModel):
     approved_by: Optional[UUID] = Field(None, description="ID of user who approved the quote")
     approved_at: Optional[datetime] = Field(None, description="Approval timestamp")
     metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    prepared_by: Optional[str] = Field(
+        None,
+        description="Name shown as 'Prepared by' (default E2M Solutions; editable by user)",
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
@@ -277,6 +281,13 @@ class QuoteDetailResponse(QuoteResponse):
     approver_name: Optional[str] = Field(None, description="Name of the approver (if approved)")
 
 
+class RefinedProjectUpdate(BaseModel):
+    """Project fields updated by refine (e.g. name/description from chat)."""
+
+    name: Optional[str] = Field(None, description="Updated project name if changed")
+    description: Optional[str] = Field(None, description="Updated project description if changed")
+
+
 class RefineQuoteResponse(BaseModel):
     """Response schema for conversational quote refinement."""
 
@@ -284,6 +295,10 @@ class RefineQuoteResponse(BaseModel):
     ai_message: str = Field(..., description="AI explanation of what was changed")
     changes_applied: list[ChangeDescription] = Field(
         ..., description="List of changes that were applied"
+    )
+    updated_project: Optional[RefinedProjectUpdate] = Field(
+        None,
+        description="Project name/description if updated via chat; absent otherwise",
     )
 
 

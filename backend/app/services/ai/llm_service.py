@@ -203,7 +203,7 @@ class LLMService:
         # VALIDATION: Check if project name appears in output
         project_name = None
         if project_context:
-            project_name = project_context.get("project_name") or project_context.get("client_name")
+            project_name = project_context.get("project_name")
 
         if project_name:
             # Check if project name appears in the generated content
@@ -660,6 +660,10 @@ Focus on practical, actionable information relevant to project estimation."""
         """
         Extract hours estimate from quote content.
 
+        Prefers the "Estimated Total Effort" / Section 7 total when present,
+        so phase breakdowns (e.g. "Design: 20-30 hours") do not override the
+        true total (e.g. "15-18 hours") in limited-scope quotes.
+
         Handles various formats:
         - "40 hours"
         - "40-60 hours"
@@ -670,8 +674,32 @@ Focus on practical, actionable information relevant to project estimation."""
             Dictionary with 'total', 'min', and 'max' values.
         """
         result: Dict[str, Optional[float]] = {"total": None, "min": None, "max": None}
+        content_lower = content.lower()
+        range_re = re.compile(r"(\d+(?:\.\d+)?)\s*[-to]+\s*(\d+(?:\.\d+)?)\s*hours?")
 
-        # Look for hour ranges (e.g., "40-60 hours", "40 to 60 hours")
+        # Prefer hours in "Estimated Total Effort" or "7. Estimated" section (authoritative total)
+        for anchor in ("estimated total effort", "7. estimated"):
+            idx = content_lower.find(anchor)
+            if idx >= 0:
+                block = content[idx : idx + 400]
+                match = range_re.search(block)
+                if match:
+                    result["min"] = float(match.group(1))
+                    result["max"] = float(match.group(2))
+                    result["total"] = (result["min"] + result["max"]) / 2
+                    return result
+                # Single value in same section
+                single = re.search(
+                    r"(?:total|estimated).*?(\d+(?:\.\d+)?)\s*hours?",
+                    block,
+                    re.IGNORECASE,
+                )
+                if single:
+                    val = float(single.group(1))
+                    result["total"] = val
+                    return result
+
+        # Look for hour ranges anywhere (e.g., "40-60 hours", "40 to 60 hours")
         range_patterns = [
             r"(\d+(?:\.\d+)?)\s*[-to]+\s*(\d+(?:\.\d+)?)\s*hours?",
             r"estimated.*?(\d+(?:\.\d+)?)\s*[-to]+\s*(\d+(?:\.\d+)?)\s*hours?",
@@ -679,7 +707,7 @@ Focus on practical, actionable information relevant to project estimation."""
         ]
 
         for pattern in range_patterns:
-            match = re.search(pattern, content.lower())
+            match = re.search(pattern, content_lower)
             if match:
                 result["min"] = float(match.group(1))
                 result["max"] = float(match.group(2))
@@ -694,7 +722,7 @@ Focus on practical, actionable information relevant to project estimation."""
         ]
 
         for pattern in single_patterns:
-            match = re.search(pattern, content.lower())
+            match = re.search(pattern, content_lower)
             if match:
                 result["total"] = float(match.group(1))
                 return result

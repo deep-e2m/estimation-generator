@@ -373,6 +373,9 @@ export function EstimationGenerationUI({
         project_context: {
           platform: project.platform,
           project_name: name,
+          ...(project.additional_instructions?.trim()
+            ? { additional_instructions: project.additional_instructions.trim() }
+            : {}),
         },
       };
 

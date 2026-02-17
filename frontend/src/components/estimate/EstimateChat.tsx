@@ -27,7 +27,11 @@ import {
 import { cn } from '@/lib/utils';
 import { quoteService } from '@/services/quote-generation.service';
 import type { Project, Quote } from '@/types';
-import type { GenerateQuoteRequest } from '@/types/quote.types';
+import type {
+  ChangeDescription,
+  GenerateQuoteRequest,
+  RefinedProjectUpdate,
+} from '@/types/quote.types';
 import { EstimationSplitView } from './EstimationSplitView';
 import { EstimationGenerationUI } from './EstimationGenerationUI';
 
@@ -82,7 +86,11 @@ const ANALYSIS_STEPS: StepConfig[] = [
 interface EstimateChatProps {
   project: Project;
   existingEstimate?: Quote | null;
-  onEstimateGenerated?: (quote: Quote) => void;
+  onEstimateGenerated?: (
+    quote: Quote,
+    changes?: ChangeDescription[],
+    updatedProject?: RefinedProjectUpdate | null
+  ) => void;
   /** Use the new full-screen generation UI instead of inline progress */
   useFullscreenUI?: boolean;
 }
@@ -176,6 +184,9 @@ export function EstimateChat({
       project_context: {
         platform: project.platform,
         project_name: project.name,
+        ...(project.additional_instructions?.trim()
+          ? { additional_instructions: project.additional_instructions.trim() }
+          : {}),
       },
     };
 

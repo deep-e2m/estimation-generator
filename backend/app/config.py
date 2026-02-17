@@ -189,19 +189,19 @@ class Settings(BaseSettings):
     # ==================== Knowledge Base Settings ====================
     # Path to knowledge base files (relative to project root)
     KNOWLEDGE_BASE_PATH: str = "knowledge-based"
-    # Chunk size for document embedding
+    # Chunk size for document embedding (in tokens; ~4 chars per token for English)
     KNOWLEDGE_CHUNK_SIZE: int = Field(
         default=512,
         ge=100,
         le=2000,
-        description="Character size for document chunks",
+        description="Token size for document chunks (used with tiktoken)",
     )
-    # Overlap between chunks
+    # Overlap between chunks (in tokens)
     KNOWLEDGE_CHUNK_OVERLAP: int = Field(
         default=50,
         ge=0,
         le=200,
-        description="Character overlap between document chunks",
+        description="Token overlap between document chunks",
     )
 
     _DEFAULT_SECRET_KEY = "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_IN_PRODUCTION"

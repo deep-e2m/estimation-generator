@@ -1,6 +1,7 @@
 /**
  * API Client configuration
- * Provides axios instance with interceptors for auth and error handling
+ * Provides axios instance with interceptors for auth and error handling.
+ * On 401, attempts token refresh once and retries the request so active users stay logged in.
  */
 
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
@@ -43,16 +44,24 @@ const getApiBaseUrl = (): string => {
   return 'http://localhost:8000';
 };
 
+export { LONG_REQUEST_TIMEOUT_MS } from '@/constants/api';
+
 // Create axios instance with base configuration
 export const apiClient: AxiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 seconds default timeout
+  timeout: 60000, // 60 seconds default; use LONG_REQUEST_TIMEOUT_MS for generation/refine/export
 });
 
-// Request interceptor - add auth token
+// Notify idle timeout logic that activity occurred (e.g. API request = user is active)
+const ACTIVITY_EVENT = 'user-activity';
+export function notifyActivity(): void {
+  window.dispatchEvent(new CustomEvent(ACTIVITY_EVENT));
+}
+
+// Request interceptor - add auth token and notify activity for idle timeout
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -63,6 +72,8 @@ apiClient.interceptors.request.use(
     // Generate request ID for tracing
     config.headers['X-Request-ID'] = crypto.randomUUID();
 
+    notifyActivity();
+
     return config;
   },
   (error) => {
@@ -70,23 +81,48 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor - handle common errors
+// Response interceptor - on 401 try refresh once and retry, then handle rate limiting
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<ApiError>) => {
-    // Handle authentication errors
-    if (error.response?.status === 401) {
-      // Clear tokens and redirect to login
+  async (error: AxiosError<ApiError>) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem('refresh_token');
+
+      if (refreshToken) {
+        try {
+          const baseUrl = getApiBaseUrl();
+          const refreshUrl = `${baseUrl.replace(/\/$/, '')}/api/v1/auth/refresh`;
+          const response = await axios.post<{ success: boolean; data: { access_token: string; refresh_token: string } }>(
+            refreshUrl,
+            { refresh_token: refreshToken },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+          );
+          const data = response.data?.data;
+          if (data?.access_token) {
+            localStorage.setItem('access_token', data.access_token);
+            if (data.refresh_token) {
+              localStorage.setItem('refresh_token', data.refresh_token);
+            }
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+            }
+            return apiClient(originalRequest);
+          }
+        } catch {
+          // Refresh failed; fall through to clear and redirect
+        }
+      }
+
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
-
-      // Only redirect if not already on auth pages
       if (!window.location.pathname.startsWith('/auth')) {
         window.location.href = '/auth/login';
       }
     }
 
-    // Handle rate limiting
     if (error.response?.status === 429) {
       const retryAfter = error.response.headers['retry-after'];
       console.warn(`Rate limited. Retry after ${retryAfter} seconds.`);

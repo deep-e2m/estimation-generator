@@ -22,10 +22,15 @@ import {
   GripVertical,
   Sparkles,
   Eye,
+  Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Project, Quote } from '@/types';
-import type { ChangeDescription } from '@/types/quote.types';
+import type { ChangeDescription, RefinedProjectUpdate } from '@/types/quote.types';
+import { quoteService } from '@/services/quote-generation.service';
+import { quotesRealtimeService } from '@/services/quotes-realtime.service';
+import { ensureValidAccessToken } from '@/store/authStore';
 import { EstimationChatPanel } from './EstimationChatPanel';
 import { EstimationPreviewPanel } from './EstimationPreviewPanel';
 import { QuoteDocument } from './preview/QuoteDocument';
@@ -36,7 +41,11 @@ type MobileViewType = 'chat' | 'preview';
 interface EstimationSplitViewProps {
   project: Project;
   initialQuote: Quote;
-  onQuoteUpdated?: (quote: Quote) => void;
+  onQuoteUpdated?: (
+    quote: Quote,
+    changes?: ChangeDescription[],
+    updatedProject?: RefinedProjectUpdate | null
+  ) => void;
 }
 
 export function EstimationSplitView({
@@ -48,11 +57,72 @@ export function EstimationSplitView({
   const [currentQuote, setCurrentQuote] = useState<Quote>(initialQuote);
   const [recentChanges, setRecentChanges] = useState<ChangeDescription[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('estimate');
+  const [exportingFormat, setExportingFormat] = useState<'pdf' | 'docx' | null>(null);
   const [mobileView, setMobileView] = useState<MobileViewType>('chat');
   const [splitRatio, setSplitRatio] = useState(35); // Chat 35%, rest to preview
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const quoteWsRef = useRef<WebSocket | null>(null);
+
+  const handleQuoteUpdate = useCallback(
+    (
+      updatedQuote: Quote,
+      changes: ChangeDescription[],
+      updatedProject?: RefinedProjectUpdate | null
+    ) => {
+      setCurrentQuote(updatedQuote);
+      setRecentChanges(changes);
+
+      // Clear recent changes highlight after animation
+      setTimeout(() => {
+        setRecentChanges([]);
+      }, 2500);
+
+      // Notify parent (so header can update total hours and project name/description)
+      if (onQuoteUpdated) {
+        onQuoteUpdated(updatedQuote, changes, updatedProject);
+      }
+    },
+    [onQuoteUpdated]
+  );
+
+  // Handle quote saved from the inline editor (no change descriptions)
+  const handleQuoteSaved = useCallback(
+    (updatedQuote: Quote) => {
+      // Preserve project name even if the update payload does not include it.
+      const existingProject = currentQuote?.project as { id?: string; name?: string } | undefined;
+      const updatedProject = updatedQuote.project as { id?: string; name?: string } | undefined;
+
+      const mergedProjectName =
+        updatedProject?.name ||
+        (updatedQuote as Quote & { project_name?: string }).project_name ||
+        existingProject?.name ||
+        project.name;
+
+      const mergedProject =
+        updatedProject || existingProject
+          ? {
+              ...(existingProject || {}),
+              ...(updatedProject || {}),
+              id: updatedProject?.id ?? existingProject?.id ?? project.id,
+              name: mergedProjectName,
+            }
+          : { id: project.id, name: mergedProjectName };
+
+      const mergedQuote: Quote = {
+        ...currentQuote,
+        ...updatedQuote,
+        project: mergedProject as Quote['project'],
+      };
+
+      setCurrentQuote(mergedQuote);
+      if (onQuoteUpdated) {
+        onQuoteUpdated(mergedQuote, [], undefined);
+      }
+    },
+    [currentQuote, onQuoteUpdated, project.id, project.name]
+  );
 
   // Handle responsive layout
   useEffect(() => {
@@ -65,33 +135,105 @@ export function EstimationSplitView({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const handleQuoteUpdate = useCallback(
-    (updatedQuote: Quote, changes: ChangeDescription[]) => {
-      setCurrentQuote(updatedQuote);
-      setRecentChanges(changes);
+  // Subscribe to realtime quote updates (multi-tab / multi-user)
+  useEffect(() => {
+    if (!currentQuote?.id) return;
 
-      // Clear recent changes highlight after animation
-      setTimeout(() => {
-        setRecentChanges([]);
-      }, 2500);
+    let cancelled = false;
 
-      // Notify parent
-      if (onQuoteUpdated) {
-        onQuoteUpdated(updatedQuote);
+    const setupWebSocket = async () => {
+      // Ensure we have a fresh, non-expired access token before opening the WebSocket.
+      const token = await ensureValidAccessToken();
+      if (!token || cancelled) {
+        return;
+      }
+
+      // Close any existing connection before opening a new one
+      if (quoteWsRef.current) {
+        try {
+          if (
+            quoteWsRef.current.readyState === WebSocket.OPEN ||
+            quoteWsRef.current.readyState === WebSocket.CLOSING
+          ) {
+            quoteWsRef.current.close();
+          }
+        } catch {
+          // Ignore errors during cleanup
+        }
+        quoteWsRef.current = null;
+      }
+
+      const ws = quotesRealtimeService.connect(currentQuote.id, {
+        onSync: (quote) => {
+          // Initial snapshot when a new subscriber connects
+          handleQuoteSaved(quote);
+        },
+        onQuoteUpdated: (quote) => {
+          // Another tab/user edited the quote
+          handleQuoteSaved(quote);
+        },
+        onStatusChanged: (quote) => {
+          handleQuoteSaved(quote);
+        },
+        onDeleted: (quoteId) => {
+          if (quoteId === currentQuote.id) {
+            toast.info('This estimate was deleted in another session.');
+            // Navigate back to project detail if possible
+            navigate(`/projects/${project.id}`);
+          }
+        },
+        onError: (error) => {
+          console.error('Quote realtime error:', error);
+        },
+      });
+
+      quoteWsRef.current = ws;
+    };
+
+    void setupWebSocket();
+
+    return () => {
+      cancelled = true;
+      if (quoteWsRef.current) {
+        try {
+          if (
+            quoteWsRef.current.readyState === WebSocket.OPEN ||
+            quoteWsRef.current.readyState === WebSocket.CLOSING
+          ) {
+            quoteWsRef.current.close();
+          }
+        } catch {
+          // Ignore errors during cleanup
+        } finally {
+          quoteWsRef.current = null;
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuote?.id, project.id, navigate, handleQuoteSaved]);
+
+  // Direct export (PDF or DOCX) via backend; triggers download
+  const handleExportDirect = useCallback(
+    async (format: 'pdf' | 'docx') => {
+      if (!project?.id || !currentQuote?.id) return;
+      setExportingFormat(format);
+      try {
+        const blob = await quoteService.exportQuote(project.id, currentQuote.id, format);
+        const quoteNumber =
+          currentQuote.quote_number || `EST-${String(currentQuote.id).slice(0, 8).toUpperCase()}`;
+        const name = (currentQuote.project as { name?: string })?.name || project.name || 'estimate';
+        const safeName = name.replace(/[^a-zA-Z0-9]/g, '-');
+        quoteService.triggerDownload(blob, `${quoteNumber}-${safeName}.${format}`);
+        toast.success(`${format.toUpperCase()} export downloaded`);
+      } catch (error) {
+        toast.error(`Failed to export as ${format.toUpperCase()}`, {
+          description: error instanceof Error ? error.message : 'Please try again.',
+        });
+      } finally {
+        setExportingFormat(null);
       }
     },
-    [onQuoteUpdated]
-  );
-
-  // Handle quote saved from the inline editor (no change descriptions)
-  const handleQuoteSaved = useCallback(
-    (updatedQuote: Quote) => {
-      setCurrentQuote(updatedQuote);
-      if (onQuoteUpdated) {
-        onQuoteUpdated(updatedQuote);
-      }
-    },
-    [onQuoteUpdated]
+    [project?.id, project?.name, currentQuote?.id, currentQuote?.quote_number, currentQuote?.project]
   );
 
   // Handle resize drag
@@ -286,11 +428,37 @@ export function EstimationSplitView({
               </div>
               <div className="estimation-export-options">
                 <button
+                  type="button"
                   className="estimation-export-option"
-                  onClick={() => navigate(`/projects/${project.id}/quotes/${currentQuote.id}/export?format=docx`)}
+                  onClick={() => handleExportDirect('pdf')}
+                  disabled={exportingFormat !== null}
+                >
+                  <div className="estimation-export-icon pdf">
+                    {exportingFormat === 'pdf' ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileText className="h-6 w-6" />
+                    )}
+                  </div>
+                  <div className="estimation-export-info">
+                    <h4>Export as PDF</h4>
+                    <p>Professional PDF document for sharing</p>
+                  </div>
+                  <Download className="h-5 w-5 text-gray-400" />
+                </button>
+
+                <button
+                  type="button"
+                  className="estimation-export-option"
+                  onClick={() => handleExportDirect('docx')}
+                  disabled={exportingFormat !== null}
                 >
                   <div className="estimation-export-icon docx">
-                    <FileText className="h-6 w-6" />
+                    {exportingFormat === 'docx' ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileText className="h-6 w-6" />
+                    )}
                   </div>
                   <div className="estimation-export-info">
                     <h4>Export as DOCX</h4>
@@ -300,6 +468,7 @@ export function EstimationSplitView({
                 </button>
 
                 <button
+                  type="button"
                   className="estimation-export-option"
                   onClick={() => {
                     const data = JSON.stringify(currentQuote, null, 2);
@@ -309,6 +478,7 @@ export function EstimationSplitView({
                     a.href = url;
                     a.download = `estimate-${currentQuote.id}.json`;
                     a.click();
+                    URL.revokeObjectURL(url);
                   }}
                 >
                   <div className="estimation-export-icon json">

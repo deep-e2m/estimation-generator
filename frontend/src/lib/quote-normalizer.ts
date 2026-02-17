@@ -28,6 +28,8 @@ export interface ApiQuote {
   /** Present when returned from quote detail endpoint */
   project_name?: string | null;
   creator_name?: string | null;
+  /** "Prepared by" display value (default E2M Solutions from backend) */
+  prepared_by?: string | null;
 }
 
 /** Backend breakdown item structure (stored in metadata.breakdown) */
@@ -207,6 +209,11 @@ export function normalizeQuoteFromApi(
     total_hours: numeric(api.total_hours),
     total_cost: numeric(api.total_cost),
     title: api.title,
+    prepared_by:
+      api.prepared_by ??
+      (api.metadata as { prepared_by?: string } | undefined)?.prepared_by ??
+      undefined,
+    metadata: api.metadata ?? undefined,
     generation_metadata: api.metadata
       ? {
           model_used: (api.metadata.model_used as string) ?? '',

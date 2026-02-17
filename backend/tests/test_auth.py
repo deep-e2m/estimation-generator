@@ -11,12 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from app.main import app
 from app.models.base import Base
+from app.models.user import User
 from app.core.database import get_db_session
 from app.config import settings
 
 
-# Test database URL (use SQLite for testing)
+# Test database URL (use SQLite for testing; PostgreSQL-only tables like knowledge_embeddings are skipped)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# Tables safe to create on SQLite (no JSONB/Vector/pg-specific types). Auth tests only need User.
+SQLITE_SAFE_TABLES = [User.__table__]
 
 
 @pytest.fixture
@@ -28,12 +32,17 @@ async def async_engine():
     )
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # SQLite cannot create knowledge_embeddings (JSONB/Vector). Create only auth-required tables.
+        await conn.run_sync(
+            lambda c: Base.metadata.create_all(c, tables=SQLITE_SAFE_TABLES)
+        )
 
     yield engine
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(
+            lambda c: Base.metadata.drop_all(c, tables=SQLITE_SAFE_TABLES)
+        )
 
     await engine.dispose()
 

@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
+import { ensureEstimatedEffortSection } from '@/lib/quote-document-utils';
 import { isHtmlContent } from '@/lib/quote-to-html';
 import type { Quote } from '@/types';
 
@@ -22,14 +23,14 @@ interface QuoteDocumentProps {
 export function QuoteDocument({ quote }: QuoteDocumentProps) {
   const content = quote.content;
 
-  // Derive key header fields
-  // Prefer the project name for both the title and "Prepared for" line.
+  // Derive key header fields from project name (no separate client; project name is used for "Prepared for").
   const projectNameFromRef = quote.project?.name || (quote as Quote & { project_name?: string }).project_name || '';
-  const clientName = (quote as Quote & { client_name?: string }).client_name || '';
-  const fallbackName = projectNameFromRef || clientName || quote.title || '';
-  const headerProjectName = projectNameFromRef || fallbackName;
+  const headerProjectName = projectNameFromRef || quote.title || '';
   const preparedFor = headerProjectName || 'Client';
-  const preparedBy = quote.created_by?.full_name || 'Estimate AI';
+  // Default "Prepared by" is E2M Solutions; user can override via API prepared_by or metadata
+  const DEFAULT_PREPARED_BY = 'E2M Solutions';
+  const preparedBy =
+    quote.prepared_by ?? quote.metadata?.prepared_by ?? DEFAULT_PREPARED_BY;
 
   // Format date with proper validation
   const formatDate = (dateString?: string | null) => {
@@ -71,8 +72,43 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     );
   }
 
-  const body = content.executive_summary.trim();
+  let body = content.executive_summary.trim();
   const bodyIsHtml = isHtmlContent(body);
+
+  // Prefer canonical total hours from content.totals, fall back to root total_hours
+  const totalHours =
+    Number(content.totals?.total_expected_hours ?? 0) ||
+    Number(quote.total_hours ?? 0) ||
+    0;
+
+  // For markdown bodies, inject fallback "Estimated Effort & Timeline" copy
+  // when that section is present but empty.
+  if (!bodyIsHtml) {
+    body = ensureEstimatedEffortSection(body, totalHours);
+  } else if (totalHours > 0) {
+    // For HTML bodies (Tiptap-edited), ensure that we still show at least a basic
+    // effort & timeline summary somewhere in the document. If the HTML already
+    // mentions "Estimated Total Effort" we assume the author has written it.
+    const lower = body.toLowerCase();
+    const hasEffortSection =
+      lower.includes('estimated total effort') || lower.includes('estimated effort & timeline');
+
+    if (!hasEffortSection) {
+      const hours = Math.round(totalHours);
+      const weeksMin = Math.max(1, Math.ceil(hours / 40));
+      const weeksMax = Math.max(weeksMin, Math.ceil(hours / 20));
+      const weeksStr = weeksMin === weeksMax ? `${weeksMin}` : `${weeksMin}–${weeksMax}`;
+
+      const htmlFallback = `
+        <h3>Estimated Effort &amp; Timeline</h3>
+        <p><strong>Estimated Total Effort:</strong> ${hours} hours</p>
+        <p><strong>Estimated Timeline:</strong> ${weeksStr} weeks from project kickoff, subject to timely client feedback and content availability.</p>
+      `;
+
+      // Append a visible separator plus the fallback block at the end of the document.
+      body = `${body}<hr>${htmlFallback}`;
+    }
+  }
 
   return (
     <div className="doc-container">

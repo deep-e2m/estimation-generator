@@ -4,7 +4,7 @@
  */
 
 import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
-import { apiClient, getErrorMessage } from './api';
+import { apiClient, getErrorMessage, LONG_REQUEST_TIMEOUT_MS } from './api';
 import type {
   Quote,
   QuoteListItem,
@@ -83,7 +83,7 @@ class QuoteGenerationService {
         }>(
           `/api/v1/projects/${projectId}/quotes`,
           request,
-          { signal: this.abortController?.signal }
+          { signal: this.abortController?.signal, timeout: LONG_REQUEST_TIMEOUT_MS }
         );
 
         const rawQuote = response.data.data.quote;
@@ -219,7 +219,7 @@ class QuoteGenerationService {
     const response = await apiClient.post<{
       success: boolean;
       data: { quote: ApiQuote; generation_metadata?: GenMeta };
-    }>(`/api/v1/projects/${projectId}/quotes`, request);
+    }>(`/api/v1/projects/${projectId}/quotes`, request, { timeout: LONG_REQUEST_TIMEOUT_MS });
     const raw = response.data.data.quote;
     const quote = normalizeQuoteFromApi(raw, { projectName: '' });
     return { quote, generation_metadata: response.data.data.generation_metadata };
@@ -337,7 +337,8 @@ class QuoteGenerationService {
 
     const response = await apiClient.post<{ success: boolean; data: ExportJob }>(
       `/api/v1/projects/${projectId}/quotes/${quoteId}/export/pdf`,
-      { ...defaultOptions, ...options }
+      { ...defaultOptions, ...options },
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
 
     return response.data.data;
@@ -365,7 +366,8 @@ class QuoteGenerationService {
 
     const response = await apiClient.post<{ success: boolean; data: ExportJob }>(
       `/api/v1/projects/${projectId}/quotes/${quoteId}/export/docx`,
-      { ...defaultOptions, ...options }
+      { ...defaultOptions, ...options },
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
 
     return response.data.data;
@@ -420,6 +422,7 @@ class QuoteGenerationService {
   async downloadExport(exportJobId: string): Promise<Blob> {
     const response = await apiClient.get(`/api/v1/exports/${exportJobId}/download`, {
       responseType: 'blob',
+      timeout: LONG_REQUEST_TIMEOUT_MS,
     });
     return response.data;
   }
@@ -453,6 +456,7 @@ class QuoteGenerationService {
       {},
       {
         responseType: 'blob',
+        timeout: LONG_REQUEST_TIMEOUT_MS,
       }
     );
     return response.data;

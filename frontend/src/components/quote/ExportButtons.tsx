@@ -65,8 +65,8 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       try {
         const blob = await quoteService.exportQuote(projectId, quote.id, format);
 
-        const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
-        const filename = `${quote.quote_number}-${clientName}.${format}`;
+        const projectName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
+        const filename = `${quote.quote_number}-${projectName}.${format}`;
 
         quoteService.triggerDownload(blob, filename);
 
@@ -376,8 +376,8 @@ export const InlineExportButton: React.FC<InlineExportButtonProps> = ({
 
       try {
       const blob = await quoteService.exportQuote(projectId, quote.id, format);
-      const clientName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
-      const filename = `${quote.quote_number}-${clientName}.${format}`;
+      const projectName = quote.project.name.replace(/[^a-zA-Z0-9]/g, '-');
+      const filename = `${quote.quote_number}-${projectName}.${format}`;
 
       setState({ status: 'success', progress: 100, error: null });
 

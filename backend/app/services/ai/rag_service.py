@@ -21,6 +21,23 @@ from app.services.ai.openrouter_client import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
+# Lazy tiktoken encoding (cl100k_base used by OpenAI text-embedding-3-small)
+_tiktoken_encoding = None
+
+
+def _get_tiktoken_encoding():
+    """Return tiktoken encoding for cl100k_base, or None if tiktoken not installed."""
+    global _tiktoken_encoding
+    if _tiktoken_encoding is not None:
+        return _tiktoken_encoding
+    try:
+        import tiktoken
+        _tiktoken_encoding = tiktoken.get_encoding("cl100k_base")
+        return _tiktoken_encoding
+    except ImportError:
+        logger.warning("tiktoken not installed; falling back to character-based chunking")
+        return None
+
 
 class RAGService:
     """
@@ -71,8 +88,8 @@ class RAGService:
         query: str,
         platform: Optional[str] = None,
         project_type: Optional[str] = None,
-        top_k: int = 5,
-        similarity_threshold: float = 0.7,
+        top_k: Optional[int] = None,
+        similarity_threshold: Optional[float] = None,
         db_session: Optional[AsyncSession] = None,
         use_cache: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -114,6 +131,10 @@ class RAGService:
             >>> for r in results:
             ...     print(f"{r['similarity_score']:.2f}: {r['summary']}")
         """
+        top_k = top_k if top_k is not None else settings.RAG_TOP_K_RESULTS
+        similarity_threshold = (
+            similarity_threshold if similarity_threshold is not None else settings.RAG_SIMILARITY_THRESHOLD
+        )
         logger.info(
             "Searching similar quotes: query_length=%d, platform=%s, top_k=%d",
             len(query),
@@ -143,7 +164,7 @@ class RAGService:
             logger.error("Failed to generate query embedding: %s", str(e))
             return []
 
-        # Build and execute search query
+        # Build and execute search query (use settings-backed top_k and threshold)
         results = await self._execute_similarity_search(
             embedding=query_embedding,
             platform=platform,
@@ -263,8 +284,8 @@ class RAGService:
         query: str,
         platform: Optional[str] = None,
         project_type: Optional[str] = None,
-        max_context_length: int = 8000,
-        top_k: int = 5,
+        max_context_length: Optional[int] = None,
+        top_k: Optional[int] = None,
         db_session: Optional[AsyncSession] = None,
         use_cache: bool = True,
     ) -> str:
@@ -298,6 +319,10 @@ class RAGService:
             >>> if context:
             ...     print("Found relevant historical quotes")
         """
+        max_context_length = (
+            max_context_length if max_context_length is not None else settings.RAG_MAX_CONTEXT_LENGTH
+        )
+        top_k = top_k if top_k is not None else settings.RAG_TOP_K_RESULTS
         logger.debug(
             "Building RAG context: max_length=%d, top_k=%d",
             max_context_length,
@@ -546,8 +571,8 @@ class RAGService:
         source_type: str,
         source_id: str,
         metadata: Dict[str, Any],
-        chunk_size: int = 512,
-        chunk_overlap: int = 50,
+        chunk_size: Optional[int] = None,
+        chunk_overlap: Optional[int] = None,
         db_session: Optional[AsyncSession] = None,
     ) -> int:
         """
@@ -561,8 +586,8 @@ class RAGService:
             source_type: Type of source (quote, guideline, documentation).
             source_id: Unique identifier for the source.
             metadata: Additional metadata for filtering.
-            chunk_size: Size of text chunks in characters.
-            chunk_overlap: Overlap between chunks.
+            chunk_size: Size of text chunks in tokens (uses tiktoken when available).
+            chunk_overlap: Overlap between chunks in tokens.
             db_session: Database session.
 
         Returns:
@@ -577,6 +602,9 @@ class RAGService:
             ... )
             >>> print(f"Created {count} embeddings")
         """
+        chunk_size = chunk_size if chunk_size is not None else settings.KNOWLEDGE_CHUNK_SIZE
+        chunk_overlap = chunk_overlap if chunk_overlap is not None else settings.KNOWLEDGE_CHUNK_OVERLAP
+
         logger.info(
             "Ingesting document: source_type=%s, source_id=%s, length=%d",
             source_type,
@@ -584,8 +612,8 @@ class RAGService:
             len(content),
         )
 
-        # Chunk the document
-        chunks = self._chunk_text(content, chunk_size, chunk_overlap)
+        # Chunk the document (chunk_size and chunk_overlap are in tokens when tiktoken available)
+        chunks = self._chunk_text_by_tokens(content, chunk_size, chunk_overlap)
         logger.debug("Created %d chunks", len(chunks))
 
         if not chunks:
@@ -612,14 +640,8 @@ class RAGService:
             if db_session:
                 session = db_session
                 should_commit = False
-            else:
-                session_factory = get_session_factory()
-                session = session_factory()
-                should_commit = True
-
-            async with session:
+                # Do not use "async with session" — caller owns the session; we must not close it
                 for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-                    # Format embedding as PostgreSQL vector string
                     embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
                     await session.execute(
                         text(insert_query),
@@ -632,8 +654,22 @@ class RAGService:
                             "chunk_index": i,
                         },
                     )
-
-                if should_commit:
+            else:
+                session_factory = get_session_factory()
+                async with session_factory() as session:
+                    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+                        await session.execute(
+                            text(insert_query),
+                            {
+                                "chunk_text": chunk,
+                                "embedding": embedding_str,
+                                "source_type": source_type,
+                                "source_id": source_id,
+                                "extra_data": json.dumps(metadata),
+                                "chunk_index": i,
+                            },
+                        )
                     await session.commit()
 
             logger.info(
@@ -647,14 +683,69 @@ class RAGService:
             logger.error("Failed to store embeddings: %s", str(e))
             return 0
 
+    def _chunk_text_by_tokens(
+        self,
+        text: str,
+        chunk_size_tokens: int = 512,
+        overlap_tokens: int = 50,
+    ) -> List[str]:
+        """
+        Split text into overlapping chunks by token count (tiktoken cl100k_base).
+
+        Falls back to character-based chunking (~4 chars per token) if tiktoken
+        is not available.
+
+        Args:
+            text: Text to chunk.
+            chunk_size_tokens: Target chunk size in tokens.
+            overlap_tokens: Overlap between chunks in tokens.
+
+        Returns:
+            List of text chunks.
+        """
+        if not text:
+            return []
+
+        enc = _get_tiktoken_encoding()
+        if enc is not None:
+            return self._chunk_tokens_tiktoken(text, enc, chunk_size_tokens, overlap_tokens)
+        # Fallback: approximate tokens as 4 chars per token
+        char_size = chunk_size_tokens * 4
+        char_overlap = overlap_tokens * 4
+        return self._chunk_text(text, char_size, char_overlap)
+
+    def _chunk_tokens_tiktoken(
+        self,
+        text: str,
+        encoding: Any,
+        chunk_size_tokens: int,
+        overlap_tokens: int,
+    ) -> List[str]:
+        """Split text by token boundaries using tiktoken encoding."""
+        tokens = encoding.encode(text)
+        if len(tokens) <= chunk_size_tokens:
+            return [text] if text else []
+
+        step = max(1, chunk_size_tokens - overlap_tokens)
+        chunks: List[str] = []
+        start = 0
+        while start < len(tokens):
+            end = min(start + chunk_size_tokens, len(tokens))
+            chunk_tokens = tokens[start:end]
+            chunk_text = encoding.decode(chunk_tokens)
+            if chunk_text.strip():
+                chunks.append(chunk_text)
+            start += step
+        return chunks
+
     def _chunk_text(
         self,
         text: str,
-        chunk_size: int = 512,
-        overlap: int = 50,
+        chunk_size: int,
+        overlap: int,
     ) -> List[str]:
         """
-        Split text into overlapping chunks.
+        Split text into overlapping chunks by character count (fallback).
 
         Args:
             text: Text to chunk.
@@ -675,12 +766,9 @@ class RAGService:
 
             # Try to break at paragraph or sentence boundary
             if end < len(text):
-                # Look for paragraph break
                 newline_pos = text.rfind("\n\n", start, end)
                 if newline_pos > start + chunk_size // 2:
                     end = newline_pos
-
-                # Look for sentence break
                 elif "." in text[start:end]:
                     period_pos = text.rfind(". ", start, end)
                     if period_pos > start + chunk_size // 2:

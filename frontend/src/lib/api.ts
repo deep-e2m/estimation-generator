@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { LONG_REQUEST_TIMEOUT_MS } from '@/constants/api';
 import { normalizeQuoteFromApi, type ApiQuote } from '@/lib/quote-normalizer';
 import type {
   ApiResponse,
@@ -25,7 +26,7 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 60000,
 });
 
 // Request interceptor for auth token
@@ -233,7 +234,8 @@ export const exportApi = {
   ): Promise<ExportJob> => {
     const response = await apiClient.post<ApiResponse<ExportJob>>(
       `/projects/${projectId}/quotes/${quoteId}/export/pdf`,
-      options || {}
+      options || {},
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     return response.data.data;
   },
@@ -249,7 +251,8 @@ export const exportApi = {
   ): Promise<ExportJob> => {
     const response = await apiClient.post<ApiResponse<ExportJob>>(
       `/projects/${projectId}/quotes/${quoteId}/export/docx`,
-      options || {}
+      options || {},
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     return response.data.data;
   },
@@ -277,7 +280,8 @@ export const exportApi = {
   // Get download URL
   getDownloadUrl: async (exportJobId: string): Promise<string> => {
     const response = await apiClient.get<ApiResponse<{ download_url: string }>>(
-      `/exports/${exportJobId}/download`
+      `/exports/${exportJobId}/download`,
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     return response.data.data.download_url;
   },

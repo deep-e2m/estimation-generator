@@ -42,6 +42,7 @@ const CLIENT_TYPES = [
 interface FormData {
   name: string
   description: string
+  additionalInputs: string
   platform: Platform
   clientType: 'new' | 'existing'
   files: File[]
@@ -76,6 +77,7 @@ export function NewProjectPage() {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
+    additionalInputs: '',
     platform: 'wordpress',
     clientType: 'new',
     files: [],
@@ -172,6 +174,7 @@ export function NewProjectPage() {
           name: formData.name.trim(),
           description: formData.description.trim(),
           platform: formData.platform,
+          ...(formData.additionalInputs.trim() ? { additional_instructions: formData.additionalInputs.trim() } : {}),
         }
 
         const project = await projectsService.create(projectData)
@@ -333,6 +336,26 @@ export function NewProjectPage() {
               )}
               <p className="new-project-form-hint">
                 This will be used to generate your AI-powered estimate.
+              </p>
+            </div>
+
+            {/* Additional inputs (optional) */}
+            <div className="new-project-form-group">
+              <Label className="new-project-form-label">
+                Additional inputs{' '}
+                <span className="new-project-form-optional">(Optional)</span>
+              </Label>
+              <textarea
+                className="input"
+                value={formData.additionalInputs}
+                onChange={handleChange('additionalInputs')}
+                placeholder="Any extra details for the estimate: constraints, preferences, must-haves..."
+                rows={3}
+                disabled={isSubmitting}
+                style={{ resize: 'vertical', minHeight: '80px' }}
+              />
+              <p className="new-project-form-hint">
+                Optional. These will be used during estimation if provided.
               </p>
             </div>
 

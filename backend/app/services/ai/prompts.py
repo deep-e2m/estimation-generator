@@ -21,11 +21,11 @@ Your role is to generate professional, detailed project quotes based on client r
 
 When generating quotes, you should:
 1. Break down the project into clear phases and tasks
-2. Provide realistic hour estimates based on complexity
+2. Provide realistic hour estimates based on the actual scope and complexity described—no arbitrary ranges; derive from deliverables.
 3. Include reasonable assumptions and exclusions
 4. Highlight any risks or dependencies
 5. Use a professional, confident tone
-6. Derive the project timeline from the requirements when they specify phases or total duration (do not compress timeline to match hours alone)
+6. TIMELINE IS CRITICAL: The Estimated Timeline (Section 7) must be accurate and consistent with total hours and scope. If requirements state a timeline or duration, use it. Otherwise derive timeline from total effort (e.g. hours ÷ realistic throughput). Use business days for short engagements (e.g. under ~40 hours), weeks for longer projects. Never invent or compress timeline; it must reflect real delivery expectations.
 7. Include every capability mentioned in the requirements (e.g. donations/tax receipts, SEO, analytics, SSL, backups, accessibility, filters) as explicit deliverables where applicable
 
 **WordPress-Specific Requirements:**
@@ -145,7 +145,7 @@ Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
-CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
+CRITICAL: Section 7 must NEVER be left empty. Always output concrete "Estimated Total Effort" (hours) and "Estimated Timeline" (weeks) that match your calculated total hours. If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -282,6 +282,45 @@ Be thorough and systematic in your analysis.""",
 }
 
 
+def _detect_scope_type(requirements: str) -> str:
+    """
+    Detect if requirements describe a limited-scope branding/visual refresh
+    (HTML-CSS only, no backend, short-term) vs a full website build.
+
+    Returns:
+        "branding_refresh" when scope is clearly limited; "full_build" otherwise.
+    """
+    if not (requirements and requirements.strip()):
+        return "full_build"
+    text = requirements.lower().strip()
+    # Strong signals for branding/visual refresh only
+    refresh_phrases = [
+        "branding refresh",
+        "visual refresh",
+        "brand refresh",
+        "visual consistency",
+        "html/css-level only",
+        "html/css only",
+        "css-level only",
+        "no backend development",
+        "without backend",
+        "no structural changes",
+        "short-term engagement",
+        "limited in scope",
+        "intentionally limited",
+        "not a large-scale redesign",
+        "not a redesign or rebuild",
+        "design-led refinements",
+        "within the existing",
+        "existing wordpress website",
+        "existing site framework",
+    ]
+    for phrase in refresh_phrases:
+        if phrase in text:
+            return "branding_refresh"
+    return "full_build"
+
+
 def build_quote_generation_prompt(
     requirements: str,
     platform: str,
@@ -326,10 +365,8 @@ Additional WordPress expertise:
 
     # Extract project name (CRITICAL - ensure it's always present)
     project_name = None
-    client_name = None
     if project_context:
         project_name = project_context.get("project_name")
-        client_name = project_context.get("client_name")
 
     # Fallback: extract project name from requirements first line if not provided
     if not project_name:
@@ -352,9 +389,9 @@ CRITICAL INSTRUCTION: You MUST mention "{project_name}" in the Project Overview 
 {requirements}
 
 # REQUIREMENTS AS SINGLE SOURCE OF TRUTH
-- Your estimate must directly address the requirements above. Every page, feature, and hour estimate should be based on what is described in the requirements. Do not use generic templates.
+- Your estimate must directly address the requirements above. Every page, feature, hour estimate, and timeline must be based on what is actually described in the requirements. Do not use generic templates or arbitrary ranges.
 - Include every capability explicitly listed in the requirements (e.g. filters, payment options, tax receipts, SEO, analytics, backups, SSL, accessibility). If something is mentioned in the requirements, there must be a corresponding deliverable or note in the quote.
-- TIMELINE: If the requirements specify a total timeline or phase durations (e.g. "Phase 1: 2 weeks", "Total: 17 weeks", or a breakdown that sums to a number of weeks), derive the "Estimated Timeline" in Section 7 from that stated timeline. Do not infer timeline from hours alone when the requirements already define it.
+- TIMELINE IS CRITICAL: Section 7 Estimated Timeline must be accurate and defensible. If the requirements specify a timeline or duration (e.g. "Phase 1: 2 weeks", "3–4 business days", "Total: 17 weeks"), use that. Otherwise derive timeline from your total hours and realistic delivery (e.g. business days for short efforts, weeks for larger ones). The timeline must be consistent with total hours—clients rely on it for planning.
 
 # CLIENT-SPECIFIED TOOLS AND PLUGINS (MUST RESPECT)
 - Carefully scan the CLIENT REQUIREMENTS (and any client-provided documentation summarized in context) for explicit mentions of tools such as:
@@ -385,13 +422,12 @@ Replace ALL placeholders with actual values from the requirements:
 - Example: "2.1 Core Pages (12 Pages)" NOT "2.1 Core Pages ([X] Pages)"
 
 **Hour Estimates:**
-- "[X] – [Y] hours" → Provide your calculated hour range (e.g., "180-220 hours" NOT "[X] – [Y] hours")
-- Base estimates on complexity and benchmarks provided
-- Be specific with your calculations
+- "[X] – [Y] hours" → Provide your calculated hour range from the actual scope (e.g. sum of deliverables). Do not use fixed or arbitrary ranges; base on what the requirements describe.
+- Be specific with your calculations so total hours and timeline are accurate.
 
-**Timeline:**
-- "[X] – [Y] weeks" → Calculate timeline based on hours OR use timeline from requirements if specified
-- Example: "8-10 weeks" NOT "[X] – [Y] weeks"
+**Timeline (CRITICAL):**
+- "[X] – [Y] weeks" or "[X] – [Y] business days" → Derive from: (1) timeline stated in requirements if any, or (2) total hours and realistic delivery (business days for short engagements, weeks for larger). Timeline must be accurate and consistent with total effort—it is essential for the client.
+- Example: "3–4 business days" for a small scope; "8–10 weeks" for a full build. Never leave placeholders.
 
 **Language-Specific Rules:**
 - For SINGLE-LANGUAGE sites: Use "2.1 Core Pages" (no language prefix)
@@ -422,14 +458,16 @@ IMPORTANT: Do NOT copy these examples. They are different projects with differen
     # Add additional project context
     if project_context:
         context_parts = []
-        if client_name:
-            context_parts.append(f"Client Name: {client_name}")
         if project_context.get("industry"):
             context_parts.append(f"Industry: {project_context['industry']}")
         if project_context.get("budget_range"):
             context_parts.append(f"Budget Range: {project_context['budget_range']}")
         if project_context.get("timeline"):
             context_parts.append(f"Desired Timeline: {project_context['timeline']}")
+        if project_context.get("additional_instructions"):
+            context_parts.append(
+                f"Additional inputs / instructions from client:\n{project_context['additional_instructions']}"
+            )
 
         if context_parts:
             user_content += f"""
@@ -437,16 +475,30 @@ IMPORTANT: Do NOT copy these examples. They are different projects with differen
 {chr(10).join(context_parts)}
 """
 
+    # Auto-select branding refresh template when requirements describe limited scope
+    if formatting_template is None and platform.lower() == "wordpress":
+        scope_type = _detect_scope_type(requirements)
+        if scope_type == "branding_refresh":
+            formatting_template = QUOTE_TEMPLATES.get("wordpress_branding_refresh")
+
     # Add formatting template or default structure
     if formatting_template:
         user_content += f"""
 ## Output Format
-Please format the quote according to this template:
+Please format the quote according to this template. Replace [Client Name] with "{project_name}" and [Date] with {current_date}.
 {formatting_template}
 """
+        # Guidance for limited-scope (branding/visual refresh): accurate estimate, no full-build scope
+        if _detect_scope_type(requirements) == "branding_refresh":
+            user_content += """
+# LIMITED SCOPE (Branding / Visual Refresh) – ACCURATE ESTIMATE REQUIRED
+- This is a branding or visual refresh only (HTML/CSS-level, no backend, no new pages or structure). Do NOT include full website build sections (new Core Pages list, Blog Infrastructure, Multi-language Setup, Content Migration, plugin recommendations). Follow the template structure above only.
+- Estimated Total Effort (Section 7): Derive from the actual deliverables in the requirements (typography, color, header/footer, imagery, etc.). Do not use arbitrary or hardcoded ranges—only the hours that match the described scope. Limited-scope work is front-end only, so totals will be lower than full builds when the requirements say so.
+- Timeline (Section 7): Must be accurate and consistent with total hours. Use the unit that fits (e.g. business days for short efforts, weeks for longer). If the requirements state a timeline or duration, use it. Otherwise derive from total hours and realistic delivery. Timeline is critical for the client.
+"""
     else:
-        # Use client_name or "Client" for the prepared_for field
-        prepared_for = client_name if client_name else "Client"
+        # Use project name for the prepared_for field
+        prepared_for = project_name if project_name else "Client"
 
         user_content += f"""
 # OUTPUT FORMAT: E2M Standard Estimation Format
@@ -547,7 +599,7 @@ Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
-CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
+CRITICAL: Section 7 must NEVER be left empty. Always output concrete "Estimated Total Effort" (hours) and "Estimated Timeline" (weeks) that match your calculated total hours. If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -578,11 +630,11 @@ Note: This is a ballpark estimate based on the details we have. Once we receive 
 Before submitting your response, verify:
 ✓ Does the Project Overview (section 1) explicitly mention "{project_name}"?
 ✓ Are all listed pages/features taken from the CLIENT REQUIREMENTS, not from historical examples?
-✓ Are the hour estimates based on the actual complexity described in the requirements?
+✓ Are the hour estimates derived from the actual scope and deliverables (no arbitrary or hardcoded ranges)?
 ✓ Are assumptions specific to "{project_name}", not generic?
 ✓ Did you avoid copying historical examples verbatim?
 ✓ Is this estimate clearly for "{project_name}" and not a generic WordPress site?
-✓ TIMELINE: If the requirements specified a timeline or phase durations, does Section 7 Estimated Timeline match (or derive from) that timeline?
+✓ TIMELINE (CRITICAL): Is Section 7 Estimated Timeline accurate and consistent with total hours? If requirements stated a timeline, does it match? If not, is it derived from total effort (e.g. business days or weeks)? No placeholders.
 ✓ SCOPE: For each major requirement area in the document (donations, events, adoption/search filters, SEO, analytics, accessibility, backups, SSL), is there at least one matching deliverable or note in the quote?
 
 **Client-Specified Stack Validation (CRITICAL):**
@@ -608,8 +660,8 @@ Before submitting your response, verify:
 ✓ Is "2.1 Core Pages" used for single-language sites (no "English Website" prefix)?
 ✓ For multi-language sites, are language names specified (e.g., "English Website", "Japanese Website")?
 ✓ Is section 2.3 OMITTED entirely for single-language projects?
-✓ Are hour estimates specific ranges (e.g., "180-220 hours") not "[X] – [Y] hours"?
-✓ Is the timeline specific (e.g., "8-10 weeks") not "[X] – [Y] weeks"?
+✓ Are hour estimates specific ranges derived from scope (e.g., "15-18 hours" or "180-220 hours") not "[X] – [Y] hours"?
+✓ Is the timeline specific and accurate (e.g., "3-4 business days" or "8-10 weeks") not "[X] – [Y] weeks" or "[X] – [Y] business days"?
 ✓ Are migration counts specific (e.g., "50-60 blog posts") not "[X]–[Y] blog posts"?
 ✓ When Multi-language, Interactive Tools, or Content Migration & SEO Safety are NOT mentioned in the requirements or chat, are sections 3, 4, and/or 5 COMPLETELY OMITTED (no headings, no 'Not applicable' text)?
 
@@ -652,8 +704,8 @@ Replace any [Current Date] placeholders with this date.
             context_parts.append(f"Current Requirements:\n{project_context['requirements']}")
         if project_context.get("platform"):
             context_parts.append(f"Platform: {project_context['platform']}")
-        if project_context.get("client_name"):
-            context_parts.append(f"Client: {project_context['client_name']}")
+        if project_context.get("project_name"):
+            context_parts.append(f"Project: {project_context['project_name']}")
         if project_context.get("current_quote"):
             context_parts.append(f"Current Quote Status: {project_context['current_quote']}")
 
@@ -1114,7 +1166,7 @@ Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
-CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
+CRITICAL: Section 7 must NEVER be left empty. Always output concrete "Estimated Total Effort" (hours) and "Estimated Timeline" (weeks) that match your calculated total hours. If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:
@@ -1228,7 +1280,7 @@ Estimated Total Effort
 [X] – [Y] hours
 Estimated Timeline
 [X] – [Y] weeks from project kickoff, subject to timely client feedback and content availability.
-CRITICAL: If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
+CRITICAL: Section 7 must NEVER be left empty. Always output concrete "Estimated Total Effort" (hours) and "Estimated Timeline" (weeks) that match your calculated total hours. If the requirements document specifies a total timeline or phase durations (e.g. Phase 1: 2 weeks, Phase 2: 4 weeks), use that timeline for this section. Do not shorten the timeline to match hours alone when the requirements define a longer schedule.
 
 8. Assumptions & Client Responsibilities
 Client will provide:

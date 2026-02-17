@@ -54,7 +54,6 @@ export interface Project {
   name: string;
   description?: string;
   platform?: Platform;
-  client_name?: string;
   client_email?: string;
   target_completion_date?: string;
   status: ProjectStatus;
@@ -86,7 +85,6 @@ export interface QuoteSummary {
     id: string;
     name: string;
   };
-  client_name?: string;
   platform?: Platform;
   totals: {
     total_expected_hours: number;
@@ -173,6 +171,10 @@ export interface Quote extends QuoteSummary {
   total_hours?: number;
   total_cost?: number;
   title?: string;
+  /** Name shown as "Prepared by" (default E2M Solutions; editable by user). From API prepared_by or metadata.prepared_by. */
+  prepared_by?: string;
+  /** API returns quote metadata (extra_data); may include prepared_by if user edited. */
+  metadata?: { prepared_by?: string; [key: string]: unknown };
   generation_metadata?: {
     model_used: string;
     knowledge_docs_used: string[];

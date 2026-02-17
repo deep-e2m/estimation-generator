@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EstimateChat } from '@/components/estimate/EstimateChat';
 import type { Project, ProjectStatus } from '@/types';
-import type { Quote } from '@/types/quote.types';
+import type { ChangeDescription, Quote, RefinedProjectUpdate } from '@/types/quote.types';
 
 // Status badge variants
 function getStatusBadgeVariant(status: ProjectStatus): 'active' | 'success' | 'secondary' {
@@ -123,14 +123,33 @@ export function ProjectDetailPage() {
     setIsDescriptionOverflowing(el.scrollHeight > el.clientHeight + 1);
   }, [project?.description]);
 
-  // Handle estimate generated callback
-  const handleEstimateGenerated = useCallback((newQuote: Quote) => {
-    setQuote(newQuote);
-    // Remove the tab=chat param from URL after generation starts
-    if (shouldAutoStartChat) {
-      navigate(`/projects/${id}`, { replace: true });
-    }
-  }, [id, navigate, shouldAutoStartChat]);
+  // Handle estimate generated / refined callback (refine can also return updated project name/description)
+  const handleEstimateGenerated = useCallback(
+    (
+      newQuote: Quote,
+      _changes?: ChangeDescription[],
+      updatedProject?: RefinedProjectUpdate | null
+    ) => {
+      setQuote(newQuote);
+      if (updatedProject && project) {
+        setProject((prev) => {
+          if (!prev) return prev;
+          const next = { ...prev };
+          if (updatedProject.name !== undefined && updatedProject.name !== null) {
+            next.name = updatedProject.name;
+          }
+          if (updatedProject.description !== undefined) {
+            next.description = updatedProject.description ?? undefined;
+          }
+          return next;
+        });
+      }
+      if (shouldAutoStartChat) {
+        navigate(`/projects/${id}`, { replace: true });
+      }
+    },
+    [id, navigate, project, shouldAutoStartChat]
+  );
 
   // Calculate stats: use API values first, then parse from quote content so cards stay in sync with the document
   const totalHoursFromApi = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;

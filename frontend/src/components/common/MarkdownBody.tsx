@@ -87,7 +87,9 @@ function getLineType(line: string, trimmed: string): {
     trimmed.includes('Scope and Commercial Estimate') ||
     trimmed.includes('Commercial Estimate')
   ) {
-    return { type: 'doc-title', content: stripBold(trimmed) };
+    // Strip leading markdown heading markers (e.g. "# " or "## ")
+    const withoutHashes = trimmed.replace(/^#{1,6}\s*/, '');
+    return { type: 'doc-title', content: stripBold(withoutHashes) };
   }
 
   // Markdown section header: ### 1. Title or ### N. Title

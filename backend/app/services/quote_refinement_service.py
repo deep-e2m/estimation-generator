@@ -2,12 +2,12 @@
 Quote refinement service for conversational quote updates.
 
 This service handles natural language requests to modify quotes,
-parsing user intent and applying structural changes.
+parsing user intent and applying structural changes. Can also update
+total hours and project name/description when the user requests it.
 """
 
 import json
 import logging
-from decimal import Decimal
 from typing import Any, Optional
 
 from app.models.quote import Quote
@@ -15,6 +15,25 @@ from app.schemas.quote import ChangeDescription
 from app.services.ai.llm_service import LLMService, get_llm_service
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_number(value: Any) -> Optional[float]:
+    """Parse a number from LLM output; return None if invalid."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            v = float(value)
+            return v if v >= 0 else None
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, str):
+        try:
+            v = float(value.strip())
+            return v if v >= 0 else None
+        except ValueError:
+            return None
+    return None
 
 
 class QuoteRefinementService:
@@ -28,31 +47,37 @@ class QuoteRefinementService:
         self,
         quote: Quote,
         user_message: str,
-    ) -> tuple[str, str, list[ChangeDescription]]:
+        project_name: Optional[str] = None,
+        project_description: Optional[str] = None,
+    ) -> tuple[str, str, list[ChangeDescription], Optional[float], Optional[dict[str, Optional[str]]]]:
         """
-        Process a natural language request to modify a quote.
+        Process a natural language request to modify a quote (and optionally project).
 
         Args:
             quote: The quote to modify.
             user_message: Natural language request from the user.
+            project_name: Current project name (so LLM can return project_updates if user asks).
+            project_description: Current project description (same).
 
         Returns:
-            Tuple of (updated_content, ai_explanation, changes_list)
+            Tuple of (updated_content, ai_explanation, changes_list, new_total_hours, project_updates).
+            new_total_hours: set when user asks to change total hours (e.g. increase by 20).
+            project_updates: optional dict with keys "name" and/or "description" (only if user asked to change them).
         """
         logger.info("Processing quote refinement request: quote_id=%s", quote.id)
 
-        # Build the refinement prompt
         system_prompt = self._build_system_prompt()
-        user_prompt = self._build_user_prompt(quote, user_message)
+        user_prompt = self._build_user_prompt(
+            quote, user_message, project_name=project_name, project_description=project_description
+        )
 
-        # Call LLM to parse intent and generate updated content
         try:
             response = await self.llm_service.client.chat_completion(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.3,  # Lower temperature for more consistent structural changes
+                temperature=0.3,
                 response_format={"type": "json_object"},
             )
 
@@ -62,7 +87,6 @@ class QuoteRefinementService:
             ai_message = result.get("explanation", "Quote updated successfully.")
             changes_raw = result.get("changes", [])
 
-            # Parse changes
             changes = [
                 ChangeDescription(
                     section=change.get("section", "unknown"),
@@ -73,25 +97,43 @@ class QuoteRefinementService:
                 for change in changes_raw
             ]
 
+            new_total_hours = _parse_number(result.get("new_total_hours"))
+            project_updates_raw = result.get("project_updates")
+            project_updates: Optional[dict[str, Optional[str]]] = None
+            if isinstance(project_updates_raw, dict) and project_updates_raw:
+                project_updates = {}
+                if "name" in project_updates_raw and project_updates_raw["name"] is not None:
+                    project_updates["name"] = str(project_updates_raw["name"]).strip() or None
+                if "description" in project_updates_raw:
+                    project_updates["description"] = (
+                        str(project_updates_raw["description"]).strip()
+                        if project_updates_raw["description"] is not None
+                        else None
+                    )
+                if not project_updates:
+                    project_updates = None
+
             logger.info(
-                "Quote refinement completed: quote_id=%s, changes=%d",
+                "Quote refinement completed: quote_id=%s, changes=%d, new_total_hours=%s, project_updates=%s",
                 quote.id,
                 len(changes),
+                new_total_hours,
+                bool(project_updates),
             )
 
-            return updated_content, ai_message, changes
+            return updated_content, ai_message, changes, new_total_hours, project_updates
 
         except Exception as e:
             logger.error("Quote refinement failed: %s", str(e))
-            raise Exception(f"Failed to process refinement request: {str(e)}")
+            raise Exception(f"Failed to process refinement request: {str(e)}") from e
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt for quote refinement."""
         return """You are a helpful assistant that modifies project estimates/quotes based on natural language requests.
 
 Your task is to:
-1. Understand the user's request (modify hours, add/remove deliverables, update text, etc.)
-2. Apply the changes to the quote content
+1. Understand the user's request (modify hours, add/remove deliverables, update text, change project name/description, etc.)
+2. Apply the changes to the quote content (and optionally report project or total-hours updates)
 3. Return the updated content with an explanation
 
 The quote content is in markdown format with sections like:
@@ -104,7 +146,8 @@ The quote content is in markdown format with sections like:
 When modifying hours:
 - Look for tables or lists showing hours estimates
 - Update the specific item requested
-- Recalculate totals if needed
+- Recalculate totals in the document text
+- If the user asks to change total hours (e.g. "increase estimation by 20 hrs" or "set total to 150"), you MUST also set "new_total_hours" in your JSON to the new numeric total so the system can update the stored total.
 
 When adding deliverables:
 - Add them in the appropriate section
@@ -112,6 +155,9 @@ When adding deliverables:
 
 When modifying text:
 - Make the changes while maintaining the overall structure and tone
+
+When the user asks to change the PROJECT name or PROJECT description (e.g. "rename the project to X", "update project description to Y"):
+- Include "project_updates" in your JSON with only the keys that changed: "name" and/or "description". Use the new value the user requested. Omit project_updates entirely if the user did not ask to change project name or description.
 
 Respond with JSON in this format:
 {
@@ -124,23 +170,44 @@ Respond with JSON in this format:
       "description": "Human-readable description",
       "field_path": "optional.json.path"
     }
-  ]
-}"""
+  ],
+  "new_total_hours": 155,
+  "project_updates": { "name": "New Project Name", "description": "New description or null" }
+}
 
-    def _build_user_prompt(self, quote: Quote, user_message: str) -> str:
-        """Build the user prompt with quote context."""
-        return f"""Here is the current quote content:
+Rules:
+- Omit "new_total_hours" if the user did not ask to change total/estimation hours; include it (as a number) whenever you changed the total in the document.
+- Omit "project_updates" entirely if the user did not ask to change project name or description; include only "name" and/or "description" keys that the user asked to change."""
 
----
-{quote.content}
----
-
-Total Hours: {quote.total_hours}
-Platform: {quote.platform}
-
-User request: {user_message}
-
-Please apply this change to the quote and return the updated content."""
+    def _build_user_prompt(
+        self,
+        quote: Quote,
+        user_message: str,
+        project_name: Optional[str] = None,
+        project_description: Optional[str] = None,
+    ) -> str:
+        """Build the user prompt with quote and project context."""
+        lines = [
+            "Here is the current quote content:",
+            "---",
+            str(quote.content or ""),
+            "---",
+            "",
+            f"Total Hours: {quote.total_hours}",
+            f"Platform: {quote.platform}",
+            "",
+        ]
+        if project_name is not None or project_description is not None:
+            lines.append("Current project context (user may ask to change these):")
+            if project_name is not None:
+                lines.append(f"Project name: {project_name}")
+            if project_description is not None:
+                lines.append(f"Project description: {project_description or '(none)'}")
+            lines.append("")
+        lines.append(f"User request: {user_message}")
+        lines.append("")
+        lines.append("Apply the change to the quote and return the updated content. If they asked to change total hours or project name/description, include new_total_hours and/or project_updates in your JSON as described.")
+        return "\n".join(lines)
 
 
 # Singleton instance

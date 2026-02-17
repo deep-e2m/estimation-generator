@@ -5,18 +5,17 @@ This module defines the KnowledgeEmbedding model that stores vector
 embeddings of text chunks for similarity search using pgvector.
 """
 
-import uuid
 from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDMixin
 
 # pgvector Vector type import
-# Note: requires pgvector extension and sqlalchemy-pgvector package
+# Note: requires pgvector extension and pgvector package (backend/requirements.txt)
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:
@@ -39,7 +38,7 @@ class KnowledgeEmbedding(Base, UUIDMixin):
     Attributes:
         id: Unique identifier (UUID).
         source_type: Type of source document (quote, requirement, guideline).
-        source_id: UUID reference to the source document.
+        source_id: Source document identifier (e.g. 'quote-<uuid>', 'training-<stem>').
         chunk_text: Original text content of the chunk.
         chunk_index: Position of this chunk within the source document.
         embedding: Vector embedding (1536 dimensions for OpenAI ada-002).
@@ -57,11 +56,11 @@ class KnowledgeEmbedding(Base, UUIDMixin):
         doc="Type of source: quote, requirement, or guideline",
     )
 
-    source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    source_id: Mapped[str] = mapped_column(
+        String(255),
         nullable=False,
         index=True,
-        doc="UUID reference to the source document",
+        doc="Source document ID (e.g. quote-<uuid>, training-<filename-stem>)",
     )
 
     # Text content

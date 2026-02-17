@@ -12,6 +12,7 @@ import {
   User,
   LogOut,
 } from 'lucide-react';
+import { useUser } from '@/store/authStore';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -24,9 +25,18 @@ const navigation = [
  * Note: DashboardLayout is the primary layout used in the app
  */
 export function AppLayout() {
+  const user = useUser();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
+
+  const displayName = user?.full_name || 'User';
+  const initials = displayName
+    .split(/\s+/)
+    .map((s) => s[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -70,13 +80,13 @@ export function AppLayout() {
             </Link>
           </div>
 
-          {/* User Section */}
+          {/* User Section - from auth store (DB) */}
           <div style={{ padding: 'var(--space-4)', borderTop: '1px solid var(--color-gray-200)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <div className="avatar avatar-md">JD</div>
+              <div className="avatar avatar-md">{initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="truncate text-sm font-medium text-gray-900">John Doe</p>
-                <p className="truncate text-xs text-gray-500">john@example.com</p>
+                <p className="truncate text-sm font-medium text-gray-900">{displayName}</p>
+                <p className="truncate text-xs text-gray-500">{user?.email ?? ''}</p>
               </div>
             </div>
           </div>
@@ -105,7 +115,7 @@ export function AppLayout() {
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="avatar avatar-sm"
           >
-            JD
+            {initials}
           </button>
 
           {/* User Dropdown */}

@@ -9,7 +9,7 @@
  * - Main content area
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -29,8 +29,14 @@ import {
 } from 'lucide-react'
 
 import { useAuthStore, useUser } from '@/store/authStore'
+import { useIdleTimeout } from '@/hooks'
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+
+/** Idle timeout: logout after this many minutes with no activity. */
+const IDLE_TIMEOUT_MINUTES = 60
+/** Proactively refresh access token every N minutes so active users don't hit 401. */
+const PROACTIVE_REFRESH_MINUTES = 25
 
 // Navigation items
 const mainNavItems = [
@@ -224,6 +230,28 @@ export default function DashboardLayout() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState('')
   const location = useLocation()
   const navigate = useNavigate()
+  const logout = useAuthStore((state) => state.logout)
+  const refreshToken = useAuthStore((state) => state.refreshToken)
+
+  // Idle timeout: after 1 hour with no activity (clicks, keys, API requests), logout
+  useIdleTimeout({
+    timeoutMinutes: IDLE_TIMEOUT_MINUTES,
+    onIdle: () => {
+      logout()
+      navigate('/auth/login', { replace: true })
+    },
+    enabled: true,
+  })
+
+  // Proactive token refresh so active users don't hit 401 when access token expires (~30 min)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (useAuthStore.getState().isAuthenticated) {
+        refreshToken()
+      }
+    }, PROACTIVE_REFRESH_MINUTES * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [refreshToken])
 
   // Sidebar is expanded when pinned OR hovered
   const isExpanded = isPinned || isHovered

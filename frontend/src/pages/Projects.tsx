@@ -51,7 +51,6 @@ const STATUS_TABS = [
 type ProjectEditForm = {
   name: string
   description: string
-  client_name: string
 }
 
 // Folder icon colors - matching Stitch design
@@ -353,7 +352,7 @@ export default function Projects() {
   const handleProjectAction = async (action: string, project: ProjectSummary) => {
     switch (action) {
       case 'edit':
-        navigate(`/projects/${project.id}/edit`)
+        handleOpenDialog(project)
         break
       case 'archive':
         try {
@@ -379,7 +378,6 @@ export default function Projects() {
     setEditForm({
       name: project.name,
       description: project.description || '',
-      client_name: project.client_name || '',
     })
     setSaveError(null)
     setDialogOpen(true)
@@ -408,7 +406,6 @@ export default function Projects() {
     const payload: ProjectUpdate = {
       name: trimmedName,
       description: editForm.description.trim() || undefined,
-      client_name: editForm.client_name.trim() || undefined,
     }
 
     setSaveError(null)
@@ -637,19 +634,6 @@ export default function Projects() {
                   type="text"
                   value={editForm.name}
                   onChange={(e) => handleEditFieldChange('name', e.target.value)}
-                />
-              </div>
-
-              <div className="projects-detail-dialog-field">
-                <label className="projects-detail-dialog-label" htmlFor="client-name-input">
-                  Client name (optional)
-                </label>
-                <input
-                  id="client-name-input"
-                  className="projects-detail-dialog-input"
-                  type="text"
-                  value={editForm.client_name}
-                  onChange={(e) => handleEditFieldChange('client_name', e.target.value)}
                 />
               </div>
 
