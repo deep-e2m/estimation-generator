@@ -50,6 +50,7 @@ export type Platform = 'wordpress';
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 
 export interface Project {
+  additional_instructions: any;
   id: string;
   name: string;
   description?: string;

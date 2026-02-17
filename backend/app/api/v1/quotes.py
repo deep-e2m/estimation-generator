@@ -50,6 +50,7 @@ from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
 from app.services.export.html_utils import is_html_content, sanitize_html
 from app.services.quote_refinement_service import get_refinement_service
+from app.services.structured_quote_service import build_structured_content
 
 logger = logging.getLogger(__name__)
 
@@ -611,6 +612,12 @@ async def generate_quote(
                 "interactive_tools": analysis_metadata.has_interactive_tools,
                 "seo": analysis_metadata.has_seo,
             },
+            # Deep JSON representation of the estimate for JSON+HTML workflows.
+            "structured_content": build_structured_content(
+                content=result.content,
+                breakdown=result.breakdown or [],
+                total_hours=float(result.total_hours or 0),
+            ).model_dump(mode="json"),
         },
     )
 
@@ -1280,6 +1287,12 @@ async def regenerate_quote(
                 "interactive_tools": analysis_metadata.has_interactive_tools,
                 "seo": analysis_metadata.has_seo,
             },
+            # Refresh structured_content snapshot after regeneration.
+            "structured_content": build_structured_content(
+                content=result.content,
+                breakdown=result.breakdown or [],
+                total_hours=float(result.total_hours or quote.total_hours or 0),
+            ).model_dump(mode="json"),
         }
     )
     quote.extra_data = existing_metadata

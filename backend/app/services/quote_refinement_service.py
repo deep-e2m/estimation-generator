@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from app.models.quote import Quote
+from app.models.quote import ContentFormat, Quote
 from app.schemas.quote import ChangeDescription
 from app.services.ai.llm_service import LLMService, get_llm_service
 
@@ -66,9 +66,18 @@ class QuoteRefinementService:
         """
         logger.info("Processing quote refinement request: quote_id=%s", quote.id)
 
-        system_prompt = self._build_system_prompt()
+        # Detect when the quote content is HTML so we can keep the refinement
+        # operation surgical (only adjust numeric hours) and avoid disturbing
+        # the carefully formatted layout produced by the inline editor.
+        is_html = getattr(quote, "content_format", None) == ContentFormat.HTML
+
+        system_prompt = self._build_system_prompt(is_html=is_html)
         user_prompt = self._build_user_prompt(
-            quote, user_message, project_name=project_name, project_description=project_description
+            quote,
+            user_message,
+            project_name=project_name,
+            project_description=project_description,
+            is_html=is_html,
         )
 
         try:
@@ -127,8 +136,59 @@ class QuoteRefinementService:
             logger.error("Quote refinement failed: %s", str(e))
             raise Exception(f"Failed to process refinement request: {str(e)}") from e
 
-    def _build_system_prompt(self) -> str:
-        """Build the system prompt for quote refinement."""
+    def _build_system_prompt(self, *, is_html: bool) -> str:
+        """Build the system prompt for quote refinement.
+
+        When is_html=True, the assistant MUST treat the content as literal HTML
+        and only adjust numeric hour values, preserving headings/structure.
+        """
+        if is_html:
+            return """You are a careful assistant that edits HTML project estimates based on natural language requests.
+
+The quote content you receive is FULL HTML produced by a rich-text editor.
+
+Your task:
+1. Understand the user's request (e.g. change specific hour values, add/remove small items).
+2. Apply ONLY the requested numeric hour changes within the existing HTML.
+3. Return the COMPLETE updated HTML as "updated_content" while preserving:
+   - All headings and section order
+   - All tags and attributes
+   - All non‑numeric text
+
+STRICT RULES FOR HTML MODE:
+- TREAT THE INPUT AS LITERAL HTML CODE.
+- DO NOT add or remove sections, headings, paragraphs, lists, or <hr> elements.
+- DO NOT reformat, pretty‑print, or normalize the HTML.
+- DO NOT change any wording except where a numeric hour value must change to satisfy the request.
+- The output HTML should be byte‑for‑byte identical to the input except for the specific numbers you were asked to adjust.
+
+When the user asks to change total hours (e.g. "increase estimation by 20 hrs" or "set total to 150"), you MUST:
+- Update the relevant numeric values inside the HTML, AND
+- Set "new_total_hours" in your JSON to the new numeric total.
+
+If the user explicitly asks to change the PROJECT name or PROJECT description (e.g. "rename the project to X"), you may also include "project_updates" as described below, but DO NOT attempt to change any HTML structure for that.
+
+Respond with JSON in this format:
+{
+  "updated_content": "<the complete updated HTML>",
+  "explanation": "A brief explanation of what you changed",
+  "changes": [
+    {
+      "section": "deliverables|hours|content|etc",
+      "change_type": "added|updated|removed",
+      "description": "Human-readable description",
+      "field_path": "optional.json.path"
+    }
+  ],
+  "new_total_hours": 155,
+  "project_updates": { "name": "New Project Name", "description": "New description or null" }
+}
+
+Rules:
+- Omit "new_total_hours" if the user did not ask to change total/estimation hours; include it (as a number) whenever you changed the total in the document.
+- Omit "project_updates" entirely if the user did not ask to change project name or description; include only "name" and/or "description" keys that the user asked to change."""
+
+        # Markdown / plain-text mode (existing behavior)
         return """You are a helpful assistant that modifies project estimates/quotes based on natural language requests.
 
 Your task is to:
@@ -185,10 +245,21 @@ Rules:
         user_message: str,
         project_name: Optional[str] = None,
         project_description: Optional[str] = None,
+        is_html: bool = False,
     ) -> str:
         """Build the user prompt with quote and project context."""
+        header_lines: list[str] = []
+        if is_html:
+            header_lines.append(
+                "The quote content below is FULL HTML from a rich-text editor. "
+                "Treat it as literal HTML code. Only adjust numeric hour values requested by the user; "
+                "do not change headings, tags, or overall structure."
+            )
+        else:
+            header_lines.append("Here is the current quote content (markdown/text):")
+
         lines = [
-            "Here is the current quote content:",
+            *header_lines,
             "---",
             str(quote.content or ""),
             "---",

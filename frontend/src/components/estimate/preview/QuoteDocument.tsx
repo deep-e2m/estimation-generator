@@ -82,32 +82,11 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     0;
 
   // For markdown bodies, inject fallback "Estimated Effort & Timeline" copy
-  // when that section is present but empty.
+  // when that section is present but empty. For HTML bodies we now respect the
+  // original layout entirely and do NOT auto-inject any extra sections, to
+  // avoid disturbing carefully formatted estimate documents.
   if (!bodyIsHtml) {
     body = ensureEstimatedEffortSection(body, totalHours);
-  } else if (totalHours > 0) {
-    // For HTML bodies (Tiptap-edited), ensure that we still show at least a basic
-    // effort & timeline summary somewhere in the document. If the HTML already
-    // mentions "Estimated Total Effort" we assume the author has written it.
-    const lower = body.toLowerCase();
-    const hasEffortSection =
-      lower.includes('estimated total effort') || lower.includes('estimated effort & timeline');
-
-    if (!hasEffortSection) {
-      const hours = Math.round(totalHours);
-      const weeksMin = Math.max(1, Math.ceil(hours / 40));
-      const weeksMax = Math.max(weeksMin, Math.ceil(hours / 20));
-      const weeksStr = weeksMin === weeksMax ? `${weeksMin}` : `${weeksMin}–${weeksMax}`;
-
-      const htmlFallback = `
-        <h3>Estimated Effort &amp; Timeline</h3>
-        <p><strong>Estimated Total Effort:</strong> ${hours} hours</p>
-        <p><strong>Estimated Timeline:</strong> ${weeksStr} weeks from project kickoff, subject to timely client feedback and content availability.</p>
-      `;
-
-      // Append a visible separator plus the fallback block at the end of the document.
-      body = `${body}<hr>${htmlFallback}`;
-    }
   }
 
   return (
