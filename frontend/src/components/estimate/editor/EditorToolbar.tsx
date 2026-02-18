@@ -5,15 +5,10 @@
  * Google Docs. Uses dedicated CSS classes from inline-editor.css for a clean,
  * spacious layout with clear visual grouping.
  *
- * Controls provided:
- * - Edit/Preview mode toggle (prominent, clearly separated)
- * - Undo / Redo
- * - Heading buttons (H1, H2, H3)
- * - Bold, Italic, Strikethrough
- * - Bullet list / Numbered list
- * - Underline, Highlight
- * - Text alignment (Left, Center, Right)
- * - Horizontal Rule, Link, Table insert
+ * When using TipTap: Undo/Redo, Headings, Bold/Italic/Strike, Lists,
+ * Underline/Highlight, Alignment, Link, Table.
+ * When using BlockNote: persistent format bar (bold, italic, underline,
+ * alignment, etc.) to the right of Preview/Edit via BlockNote context.
  */
 
 import React from 'react';
@@ -38,6 +33,17 @@ import {
   Save,
   Loader2,
 } from 'lucide-react';
+import {
+  BasicTextStyleButton,
+  BlockTypeSelect,
+  ColorStyleButton,
+  CreateLinkButton,
+  FormattingToolbar,
+  NestBlockButton,
+  TextAlignButton,
+  UnnestBlockButton,
+  useBlockNoteContext,
+} from '@blocknote/react';
 import { cn } from '@/lib/utils';
 import type { Editor } from '@tiptap/react';
 
@@ -128,6 +134,40 @@ function Divider({ tall }: { tall?: boolean }) {
   );
 }
 
+/**
+ * BlockNote format bar: bold, italic, underline, alignment, etc.
+ * Renders only when inside BlockNoteContext (edit mode with BlockNote).
+ * Styled to match the existing toolbar (editor-toolbar__controls).
+ */
+function BlockNoteFormatBar() {
+  const blockNoteContext = useBlockNoteContext();
+  const editor = blockNoteContext?.editor;
+
+  if (!editor?.isEditable) {
+    return null;
+  }
+
+  return (
+    <div className="editor-toolbar__controls editor-toolbar__controls--blocknote">
+      <FormattingToolbar>
+        <BlockTypeSelect key="blockTypeSelect" />
+        <BasicTextStyleButton basicTextStyle="bold" key="bold" />
+        <BasicTextStyleButton basicTextStyle="italic" key="italic" />
+        <BasicTextStyleButton basicTextStyle="underline" key="underline" />
+        <BasicTextStyleButton basicTextStyle="strike" key="strike" />
+        <BasicTextStyleButton basicTextStyle="code" key="code" />
+        <TextAlignButton textAlignment="left" key="align-left" />
+        <TextAlignButton textAlignment="center" key="align-center" />
+        <TextAlignButton textAlignment="right" key="align-right" />
+        <ColorStyleButton key="color" />
+        <NestBlockButton key="nest" />
+        <UnnestBlockButton key="unnest" />
+        <CreateLinkButton key="link" />
+      </FormattingToolbar>
+    </div>
+  );
+}
+
 export function EditorToolbar({
   mode,
   onModeChange,
@@ -196,7 +236,7 @@ export function EditorToolbar({
         </div>
       )}
 
-      {/* Formatting controls: visible only in edit mode with an active editor */}
+      {/* Formatting controls: visible only in edit mode with an active editor (TipTap) */}
       {mode === 'edit' && editor && (
         <div className="editor-toolbar__controls">
           {/* Undo / Redo */}
@@ -340,6 +380,9 @@ export function EditorToolbar({
           </div>
         </div>
       )}
+
+      {/* BlockNote format bar: visible in edit mode when using BlockNote (context provides editor) */}
+      {mode === 'edit' && !editor && <BlockNoteFormatBar />}
     </div>
   );
 }

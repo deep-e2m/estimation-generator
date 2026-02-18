@@ -121,7 +121,12 @@ export interface Milestone {
   target_date: string;
 }
 
+/** Key-value sections from structured estimation output. Each key is a section id, value is section text. */
+export type EstimationOutcomes = Record<string, string>;
+
 export interface QuoteContent {
+  /** When present, quote body is stored as key-value sections (one block per key in editor). */
+  estimation_outcomes?: EstimationOutcomes;
   executive_summary: string;
   scope: {
     included: string[];

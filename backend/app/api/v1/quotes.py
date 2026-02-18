@@ -5,6 +5,7 @@ This module provides endpoints for quote management including
 generation, CRUD operations, status management, and regeneration.
 """
 
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -1162,6 +1163,58 @@ async def delete_quote(
 # =============================================================================
 
 
+def _flatten_quote_content_for_ai(content: str) -> str:
+    """
+    Flatten quote content for use in AI refinement/regeneration.
+
+    - If content is estimation_outcomes JSON (dict of string values), flatten to
+      "key: value" lines so the LLM sees readable text.
+    - If content is other JSON (e.g., BlockNote document), extract human-
+      readable text segments and join them.
+    - Otherwise return content as-is (markdown/plain/HTML).
+    """
+    if not content:
+        return content
+
+    try:
+        parsed = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+
+    if isinstance(parsed, dict):
+        # Estimation outcomes: all string values, keys are section ids
+        if parsed and all(isinstance(v, str) for v in parsed.values()):
+            parts = [f"{k}:\n{v.strip()}" for k, v in parsed.items() if (v or "").strip()]
+            if parts:
+                flattened = "\n\n".join(parts)
+                logger.debug(
+                    "Flattened estimation_outcomes for AI (keys=%d)",
+                    len(parsed),
+                )
+                return flattened
+        # BlockNote or other nested JSON: walk for text/content/title
+        texts: list[str] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if isinstance(value, str) and key in {"text", "content", "title"}:
+                        stripped = value.strip()
+                        if stripped:
+                            texts.append(stripped)
+                    else:
+                        _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+
+        _walk(parsed)
+        if texts:
+            return "\n\n".join(texts)
+
+    return content
+
+
 @router.post(
     "/quotes/{quote_id}/regenerate",
     response_model=QuoteGenerateDataResponse,
@@ -1232,9 +1285,12 @@ async def regenerate_quote(
         llm_service = get_llm_service()
 
         if request.feedback:
-            # Refine with feedback
+            # Refine with feedback. The quote content may be stored as
+            # JSON (e.g., BlockNote document), so we flatten it into a
+            # markdown-like string before sending to the LLM.
+            original_text = _flatten_quote_content_for_ai(quote.content)
             result = await llm_service.refine_quote(
-                original_quote=quote.content,
+                original_quote=original_text,
                 feedback=request.feedback,
                 requirements=quote.requirements,
             )

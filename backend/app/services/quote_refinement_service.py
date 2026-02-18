@@ -248,6 +248,7 @@ Rules:
         is_html: bool = False,
     ) -> str:
         """Build the user prompt with quote and project context."""
+        content = self._flatten_quote_content(quote.content)
         header_lines: list[str] = []
         if is_html:
             header_lines.append(
@@ -261,7 +262,7 @@ Rules:
         lines = [
             *header_lines,
             "---",
-            str(quote.content or ""),
+            content,
             "---",
             "",
             f"Total Hours: {quote.total_hours}",
@@ -279,6 +280,54 @@ Rules:
         lines.append("")
         lines.append("Apply the change to the quote and return the updated content. If they asked to change total hours or project name/description, include new_total_hours and/or project_updates in your JSON as described.")
         return "\n".join(lines)
+
+    def _flatten_quote_content(self, content: str) -> str:
+        """
+        Flatten quote content for use in LLM prompts.
+
+        Quote content may be stored as:
+        - estimation_outcomes JSON (dict of section keys to string values)
+        - markdown/plain text (legacy)
+        - HTML (from the Tiptap editor)
+        - JSON (e.g., BlockNote document)
+
+        For estimation_outcomes we output "key: value" per section.
+        For other JSON we extract human-readable text segments.
+        """
+        if not content:
+            return content
+
+        try:
+            parsed = json.loads(content)
+        except (TypeError, ValueError):
+            return content
+
+        if isinstance(parsed, dict) and parsed and all(
+            isinstance(v, str) for v in parsed.values()
+        ):
+            parts = [f"{k}:\n{v.strip()}" for k, v in parsed.items() if (v or "").strip()]
+            if parts:
+                return "\n\n".join(parts)
+
+        texts: list[str] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if isinstance(value, str) and key in {"text", "content", "title"}:
+                        stripped = value.strip()
+                        if stripped:
+                            texts.append(stripped)
+                    else:
+                        _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+
+        _walk(parsed)
+        if texts:
+            return "\n\n".join(texts)
+        return content
 
 
 # Singleton instance

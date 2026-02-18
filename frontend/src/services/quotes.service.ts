@@ -234,6 +234,29 @@ export const quotesService = {
   },
 
   /**
+   * Refine a quote conversationally using AI.
+   * Backend route: POST /projects/{project_id}/quotes/{quote_id}/refine
+   */
+  refine: async (
+    projectId: string,
+    quoteId: string,
+    message: string
+  ): Promise<Quote> => {
+    const response = await apiClient.post<
+      ApiResponse<{
+        updated_quote: ApiQuote;
+        ai_message: string;
+        changes_applied: unknown[];
+      }>
+    >(`/api/v1/projects/${projectId}/quotes/${quoteId}/refine`, {
+      message,
+    });
+
+    const apiQuote = response.data.data.updated_quote;
+    return normalizeQuoteFromApi(apiQuote, { projectName: '' });
+  },
+
+  /**
    * Delete a quote
    */
   delete: async (quoteId: string): Promise<void> => {

@@ -1,33 +1,27 @@
 /**
  * EstimationPreviewPanel Component
- * Right panel of the split view - supports both read-only preview and
- * inline Tiptap editing with auto-save and export capabilities.
- *
- * Modes:
- * - Preview: renders the existing QuoteDocument (read-only)
- * - Edit: renders the InlineQuoteEditor with formatting toolbar
+ * Right panel of the split view - direct editing of the estimation with
+ * auto-save and export capabilities.
  *
  * Features:
- * - Toggle between preview and edit modes
+ * - Direct editing in the estimation (no preview/edit toggle)
  * - Auto-save with 3-second debounce
  * - Manual save via Ctrl+S
  * - Unsaved changes indicator and beforeunload warning
  * - Export to PDF/DOCX using existing quoteService
  * - Error handling with toast notifications
- * - Document header shown above editor in edit mode to match preview
+ * - Document header shown above editor
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import { QuoteDocument } from './preview/QuoteDocument';
 import { InlineQuoteEditor } from './editor/InlineQuoteEditor';
-import { EditorToolbar } from './editor/EditorToolbar';
-import type { EditorMode } from './editor/EditorToolbar';
+import { BlockNoteQuoteEditor } from './editor/BlockNoteQuoteEditor';
+import { EstimationOutcomesEditor } from './editor/EstimationOutcomesEditor';
 import { quoteService } from '@/services/quote-generation.service';
 import { quotesService } from '@/services/quotes.service';
 import type { Quote, Project } from '@/types';
 import type { ChangeDescription } from '@/types/quote.types';
-import type { Editor } from '@tiptap/react';
 
 interface EstimationPreviewPanelProps {
   quote: Quote;
@@ -69,8 +63,8 @@ export function EstimationPreviewPanel({
   recentChanges,
   onQuoteSaved,
 }: EstimationPreviewPanelProps) {
-  // Mode state: preview (read-only) or edit (Tiptap editor)
-  const [mode, setMode] = useState<EditorMode>('preview');
+  // Feature flag to toggle BlockNote inline editor.
+  const USE_BLOCKNOTE_INLINE_EDITOR = true;
 
   // Save state
   const [isSaving, setIsSaving] = useState(false);
@@ -80,11 +74,17 @@ export function EstimationPreviewPanel({
   // Export state
   const [isExporting, setIsExporting] = useState(false);
 
-  // Editor state -- using React state (not ref) so the parent re-renders
-  // when the editor instance becomes available. This is critical: refs do
-  // not trigger re-renders, so the toolbar would never see the editor.
-  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
+
+  // When quote has key-value estimation_outcomes (and we're not using BlockNote), keep editorContent in sync for save
+  useEffect(() => {
+    if (!USE_BLOCKNOTE_INLINE_EDITOR) {
+      const outcomes = quote.content?.estimation_outcomes;
+      if (outcomes && typeof outcomes === 'object') {
+        setEditorContent(JSON.stringify(outcomes));
+      }
+    }
+  }, [quote.id, quote.content?.estimation_outcomes]);
 
   // Auto-save timer ref
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,12 +94,6 @@ export function EstimationPreviewPanel({
 
   // Determine if the quote is editable (only draft status)
   const isQuoteEditable = quote.status === 'draft';
-
-  // ------- Editor Ready Callback -------
-
-  const handleEditorReady = useCallback((editor: Editor | null) => {
-    setEditorInstance(editor);
-  }, []);
 
   // ------- Save Logic -------
 
@@ -188,33 +182,6 @@ export function EstimationPreviewPanel({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  // ------- Mode Toggle -------
-
-  const handleModeChange = useCallback(
-    (newMode: EditorMode) => {
-      if (newMode === mode) return;
-
-      // Switching from edit to preview with unsaved changes
-      if (mode === 'edit' && newMode === 'preview' && hasUnsavedChanges) {
-        const shouldSave = window.confirm(
-          'You have unsaved changes. Save before switching to preview?'
-        );
-        if (shouldSave) {
-          // Save first, then switch mode
-          handleSave().then(() => {
-            setMode(newMode);
-          });
-          return;
-        }
-        // User chose to discard changes
-        setHasUnsavedChanges(false);
-      }
-
-      setMode(newMode);
-    },
-    [mode, hasUnsavedChanges, handleSave]
-  );
-
   // ------- Export Logic -------
 
   const handleExport = useCallback(
@@ -224,7 +191,7 @@ export function EstimationPreviewPanel({
       setIsExporting(true);
       try {
         // If there are unsaved changes, save first before exporting
-        if (hasUnsavedChanges && mode === 'edit') {
+        if (hasUnsavedChanges) {
           await handleSave();
         }
 
@@ -252,7 +219,7 @@ export function EstimationPreviewPanel({
         setIsExporting(false);
       }
     },
-    [project.id, quote.id, quote.quote_number, hasUnsavedChanges, mode, handleSave]
+    [project.id, quote.id, quote.quote_number, hasUnsavedChanges, handleSave]
   );
 
   // ------- Editor Save Handler (for Ctrl+S) -------
@@ -271,69 +238,59 @@ export function EstimationPreviewPanel({
 
   return (
     <div className="estimation-preview-panel flex flex-col h-full">
-      {/* Toolbar */}
-      <EditorToolbar
-        mode={mode}
-        onModeChange={handleModeChange}
-        isQuoteEditable={isQuoteEditable}
-        editor={editorInstance}
-        hasUnsavedChanges={hasUnsavedChanges}
-        isSaving={isSaving}
-        onSave={
-          editorInstance
-            ? () => handleEditorSave(editorInstance.getHTML())
-            : undefined
-        }
-      />
-
-      {/* Content area */}
-      <div className="estimation-preview-content flex-1 overflow-auto px-4">
-        {mode === 'preview' ? (
-          <QuoteDocument quote={quote} />
-        ) : (
-          <div className="doc-container">
-            {/* Non-editable document header -- matches QuoteDocument exactly */}
-            <div className="doc-header">
-              <h1 className="doc-title">
-                {(quote.project?.name || project.name)
-                  ? `Proposal for ${quote.project?.name || project.name}`
-                  : 'Project Proposal'}
-              </h1>
-              <div className="doc-metadata">
-                <div className="doc-metadata-item">
-                  <span className="doc-metadata-label">Date</span>
-                  <span className="doc-metadata-value">
-                    {formatDate(quote.created_at)}
-                  </span>
-                </div>
-                {(quote.project?.name || project.name) ? (
-                  <div className="doc-metadata-item">
-                    <span className="doc-metadata-label">Prepared for</span>
-                    <span className="doc-metadata-value">
-                      {quote.project?.name || project.name}
-                    </span>
-                  </div>
-                ) : null}
-                <div className="doc-metadata-item">
-                  <span className="doc-metadata-label">Prepared by</span>
-                  <span className="doc-metadata-value">
-                    {quote.prepared_by ??
-                      quote.metadata?.prepared_by ??
-                      'E2M Solutions'}
-                  </span>
-                </div>
+      {/* Content area: direct editing, no top bar */}
+      <div className="estimation-preview-content flex-1 min-h-0 overflow-auto overflow-y-auto px-4">
+        <div className="doc-container">
+          {/* Document header */}
+          <div className="doc-header">
+            <h1 className="doc-title">
+              Proposal for {quote.project?.name || quote.project_name || project.name || 'Project'}
+            </h1>
+            <div className="doc-metadata">
+              <div className="doc-metadata-item doc-metadata-col-1">
+                <span className="doc-metadata-label">Prepared for</span>
+                <span className="doc-metadata-value">
+                  {quote.project?.name || quote.project_name || project.name || '—'}
+                </span>
+              </div>
+              <div className="doc-metadata-item doc-metadata-col-2">
+                <span className="doc-metadata-label">Date</span>
+                <span className="doc-metadata-value">
+                  {formatDate(quote.created_at)}
+                </span>
+              </div>
+              <div className="doc-metadata-item doc-metadata-col-3">
+                <span className="doc-metadata-label">Prepared by</span>
+                <span className="doc-metadata-value">E2M Solutions</span>
               </div>
             </div>
+          </div>
 
-            {/* Editable content */}
+          {/* Editable content: BlockNote when enabled, else section editor or Tiptap */}
+          {USE_BLOCKNOTE_INLINE_EDITOR ? (
+            <BlockNoteQuoteEditor
+              key={`${quote.id}-${quote.updated_at}`}
+              quote={quote}
+              onContentChange={handleContentChange}
+              onSave={handleEditorSave}
+              readOnly={!isQuoteEditable}
+            />
+          ) : quote.content?.estimation_outcomes ? (
+            <EstimationOutcomesEditor
+              key={`${quote.id}-${quote.updated_at}`}
+              quote={quote}
+              onContentChange={handleContentChange}
+              onSave={handleEditorSave}
+              readOnly={!isQuoteEditable}
+            />
+          ) : (
             <InlineQuoteEditor
               quote={quote}
               onContentChange={handleContentChange}
               onSave={handleEditorSave}
-              onEditorReady={handleEditorReady}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

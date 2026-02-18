@@ -673,6 +673,108 @@ If any answer is NO, revise your response before submitting.
     return messages
 
 
+# Keys for structured estimation output (key-value per section)
+ESTIMATION_JSON_KEYS = [
+    "prepared_for",
+    "project_overview",
+    "website_structure",
+    "development_approach",
+    "estimated_effort_timeline",
+    "assumptions",
+    "exclusions",
+]
+
+
+def build_quote_generation_prompt_json(
+    requirements: str,
+    platform: str,
+    rag_context: Optional[str] = None,
+    project_context: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build the prompt for quote generation with JSON output (key-value sections).
+
+    Returns messages that ask the LLM to respond with a JSON object containing
+    estimation_outcomes (object with section keys and string values) and
+    total_hours (number).
+    """
+    messages: List[Dict[str, str]] = []
+    system_content = SYSTEM_PROMPTS["quote_generator"]
+
+    platform_expertise = {
+        "wordpress": """
+Additional WordPress expertise:
+- Page builders: Elementor, Bricks, Gutenberg, Divi
+- E-commerce: WooCommerce, product configurators
+- Multi-language: WPML, Polylang
+- Performance: Caching, CDN, optimization
+- Custom development: Custom themes, plugins, ACF
+""",
+    }
+    if platform.lower() in platform_expertise:
+        system_content += platform_expertise[platform.lower()]
+
+    messages.append({"role": "system", "content": system_content})
+
+    keys_desc = ", ".join(ESTIMATION_JSON_KEYS)
+    user_content = f"""Generate a professional project quote based on the following requirements.
+
+## Client Requirements
+{requirements}
+
+## Platform
+{platform}
+"""
+
+    if rag_context:
+        user_content += f"""
+## Reference: Similar Historical Projects
+{rag_context}
+"""
+
+    if project_context:
+        context_parts = []
+        if project_context.get("client_name"):
+            context_parts.append(f"Client: {project_context['client_name']}")
+        if project_context.get("industry"):
+            context_parts.append(f"Industry: {project_context['industry']}")
+        if project_context.get("budget_range"):
+            context_parts.append(f"Budget Range: {project_context['budget_range']}")
+        if project_context.get("timeline"):
+            context_parts.append(f"Timeline: {project_context['timeline']}")
+        if context_parts:
+            user_content += f"""
+## Project Context
+{chr(10).join(context_parts)}
+"""
+
+    user_content += f"""
+## Output Format (JSON only)
+You MUST respond with a single JSON object (no markdown, no code fence) with this exact structure:
+
+{{
+  "estimation_outcomes": {{
+    "prepared_for": "Client Name or Client",
+    "project_overview": "2-4 sentence summary of the project, key features, and goal.",
+    "website_structure": "Full section 2 content: Website Structure & Page Scope (list pages, features, blog, etc.).",
+    "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA.",
+    "estimated_effort_timeline": "Full section 7: Estimated Total Effort (X–Y hours), Estimated Timeline (X–Y weeks).",
+    "assumptions": "Full section 8: Assumptions & Client Responsibilities (what client provides, plugins, etc.).",
+    "exclusions": "Full section 10: Exclusions (copywriting, animations, integrations, maintenance, etc.)."
+  }},
+  "total_hours": <number>
+}}
+
+Rules:
+- Every key in estimation_outcomes must be present; use empty string "" if a section does not apply.
+- Use plain text inside each value (no markdown tables, no emojis). Use newlines for lists.
+- total_hours must be a number (e.g. 120 or 150). Derive from your estimate (use the midpoint of your range if you think in ranges).
+- Be specific with hours (tight ranges in the text like "180–200 hours").
+"""
+    messages.append({"role": "user", "content": user_content})
+    return messages
+
+
 def build_chat_response_prompt(
     messages: List[Dict[str, str]],
     project_context: Optional[Dict[str, Any]] = None,

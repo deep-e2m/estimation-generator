@@ -19,6 +19,7 @@ from app.services.ai.prompts import (
     build_chat_response_prompt,
     build_clarification_prompt,
     build_quote_generation_prompt,
+    build_quote_generation_prompt_json,
     build_quote_refinement_prompt,
     build_requirement_analysis_prompt,
     build_vision_analysis_prompt,
@@ -173,78 +174,115 @@ class LLMService:
         )
 
         # Build prompt
-        messages = build_quote_generation_prompt(
+        messages = build_quote_generation_prompt_json(
             requirements=requirements,
             platform=platform,
             rag_context=rag_context,
-            formatting_template=formatting_template,
             project_context=project_context,
         )
 
-        # Call LLM
+        # Call LLM with JSON response format
         try:
             response = await self.client.chat_completion(
                 messages=messages,
                 model=model or "generation",
                 temperature=temperature,
                 max_tokens=4096,
+                response_format={"type": "json_object"},
             )
         except OpenRouterError as e:
             logger.error("Quote generation failed: %s", str(e))
             raise
 
-        # Parse response
-        content = response.content
-        hours_data = self._extract_hours(content)
-        assumptions = self._extract_section(content, "assumptions")
-        exclusions = self._extract_section(content, ["exclusions", "out of scope"])
-        breakdown = self._extract_breakdown(content)
+        # Parse JSON response (estimation_outcomes + total_hours)
+        try:
+            parsed = json.loads(response.content)
+        except (TypeError, ValueError) as e:
+            logger.warning("Quote response was not valid JSON, falling back to text: %s", e)
+            content = response.content
+            hours_data = self._extract_hours(content)
+            assumptions = self._extract_section(content, "assumptions")
+            exclusions = self._extract_section(content, ["exclusions", "out of scope"])
+            breakdown = self._extract_breakdown(content)
+            total_cost = None
+            if hourly_rate and hours_data.get("total"):
+                total_cost = hours_data["total"] * hourly_rate
+            result = QuoteGenerationResult(
+                content=content,
+                total_hours=hours_data.get("total"),
+                total_hours_min=hours_data.get("min"),
+                total_hours_max=hours_data.get("max"),
+                total_cost=total_cost,
+                breakdown=breakdown,
+                assumptions=assumptions,
+                exclusions=exclusions,
+                model_used=response.model,
+                tokens_used=response.usage.total_tokens,
+                generation_cost=response.usage.total_cost,
+            )
+            return result
 
-        # VALIDATION: Check if project name appears in output
-        project_name = None
-        if project_context:
-            project_name = project_context.get("project_name")
+        estimation_outcomes = parsed.get("estimation_outcomes") or {}
+        if not isinstance(estimation_outcomes, dict):
+            estimation_outcomes = {}
+        # Ensure all values are strings
+        estimation_outcomes = {k: (v if isinstance(v, str) else str(v)) for k, v in estimation_outcomes.items()}
+        content = json.dumps(estimation_outcomes)
+        total_hours_val = parsed.get("total_hours")
+        if total_hours_val is not None and isinstance(total_hours_val, (int, float)):
+            total_hours_num = float(total_hours_val)
+        else:
+            # Fallback: try to extract from estimated_effort_timeline text
+            timeline_text = estimation_outcomes.get("estimated_effort_timeline", "") or ""
+            hours_data = self._extract_hours(timeline_text)
+            total_hours_num = hours_data.get("total")
+        assumptions = self._extract_section(
+            estimation_outcomes.get("assumptions") or "", "assumptions"
+        )
+        exclusions = self._extract_section(
+            estimation_outcomes.get("exclusions") or "",
+            ["exclusions", "out of scope"],
+        )
+        breakdown = self._extract_breakdown(
+            estimation_outcomes.get("estimated_effort_timeline") or ""
+        )
 
-        if project_name:
-            # Check if project name appears in the generated content
-            if project_name.lower() not in content.lower():
-                logger.warning(
-                    "VALIDATION_WARNING: Project name '%s' not found in generated quote. "
-                    "Content length: %d chars. This may indicate the model generated a generic estimate.",
-                    project_name,
-                    len(content),
-                )
-            else:
-                logger.info(
-                    "VALIDATION_PASS: Project name '%s' found in generated quote.",
-                    project_name,
-                )
+        # VALIDATION: Check if project name appears in output (use flattened text)
+        validation_text = "\n".join(estimation_outcomes.values())
+        project_name = project_context.get("project_name") if project_context else None
+        if project_name and project_name.lower() not in validation_text.lower():
+            logger.warning(
+                "VALIDATION_WARNING: Project name '%s' not found in generated quote. "
+                "Content length: %d chars. This may indicate the model generated a generic estimate.",
+                project_name,
+                len(validation_text),
+            )
+        elif project_name:
+            logger.info(
+                "VALIDATION_PASS: Project name '%s' found in generated quote.",
+                project_name,
+            )
 
         # VALIDATION: Check requirements overlap
-        # Calculate word overlap between requirements and output
         if requirements and len(requirements) > 50:
-            # Extract meaningful words (>3 chars, not common stopwords)
             stopwords = {
                 'the', 'and', 'for', 'with', 'this', 'that', 'from', 'will', 'are', 'has', 'have',
                 'been', 'was', 'were', 'but', 'not', 'can', 'all', 'about', 'into', 'through',
                 'our', 'your', 'their', 'which', 'when', 'where', 'who', 'what', 'how', 'should',
                 'would', 'could', 'may', 'might', 'must', 'shall', 'need', 'want', 'like', 'also'
             }
-
             requirements_words = {
                 word.lower() for word in requirements.split()
                 if len(word) > 3 and word.lower() not in stopwords
             }
             content_words = {
-                word.lower() for word in content.split()
+                word.lower() for word in validation_text.split()
                 if len(word) > 3 and word.lower() not in stopwords
             }
-
             if requirements_words:
                 common_words = requirements_words & content_words
                 overlap_ratio = len(common_words) / len(requirements_words)
-
-                if overlap_ratio < 0.15:  # Less than 15% overlap
+                if overlap_ratio < 0.15:
                     logger.warning(
                         "VALIDATION_WARNING: Low overlap between requirements and output. "
                         "Overlap ratio: %.1f%%. This may indicate the model didn't address the requirements. "
@@ -260,16 +298,15 @@ class LLMService:
                         len(common_words),
                     )
 
-        # Calculate cost if hourly rate provided
         total_cost = None
-        if hourly_rate and hours_data.get("total"):
-            total_cost = hours_data["total"] * hourly_rate
+        if hourly_rate and total_hours_num:
+            total_cost = total_hours_num * hourly_rate
 
         result = QuoteGenerationResult(
             content=content,
-            total_hours=hours_data.get("total"),
-            total_hours_min=hours_data.get("min"),
-            total_hours_max=hours_data.get("max"),
+            total_hours=total_hours_num,
+            total_hours_min=None,
+            total_hours_max=None,
             total_cost=total_cost,
             breakdown=breakdown,
             assumptions=assumptions,

@@ -3,7 +3,7 @@
  * Backend sends content as markdown string; frontend UI expects QuoteContent (or renderable markdown).
  */
 
-import type { Quote, QuoteContent, QuoteSummary, Deliverable } from '@/types';
+import type { Quote, QuoteContent, QuoteSummary, Deliverable, EstimationOutcomes } from '@/types';
 
 /** Backend quote response shape (content and requirements are strings) */
 export interface ApiQuote {
@@ -149,9 +149,30 @@ function buildContent(api: ApiQuote): QuoteContent {
     };
   }
 
+  // Structured estimation output: JSON object with section keys and string values
+  let estimation_outcomes: EstimationOutcomes | undefined;
+  let executive_summary = api.content;
+  try {
+    const parsed = JSON.parse(api.content) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      Object.values(parsed).every((v) => typeof v === 'string')
+    ) {
+      estimation_outcomes = parsed as EstimationOutcomes;
+      executive_summary = Object.entries(estimation_outcomes)
+        .map(([k, v]) => `${k}:\n${(v || '').trim()}`)
+        .join('\n\n');
+    }
+  } catch {
+    // Not JSON, use api.content as executive_summary
+  }
+
   return {
     ...emptyQuoteContent,
-    executive_summary: api.content,
+    ...(estimation_outcomes && { estimation_outcomes }),
+    executive_summary,
     deliverables,
     assumptions,
     scope: {
