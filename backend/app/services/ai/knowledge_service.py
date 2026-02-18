@@ -19,6 +19,7 @@ from app.core.database import get_session_factory
 from app.core.redis import knowledge_cache
 from app.services.ai.openrouter_client import OpenRouterClient
 from app.services.ai.rag_service import RAGService
+from app.services.ai.static_knowledge import BUILTIN_KNOWLEDGE_DOCUMENTS, KnowledgeDocument
 
 logger = logging.getLogger(__name__)
 
@@ -485,11 +486,84 @@ class KnowledgeService:
 
         logger.info("Ingesting guidelines from: %s", folder_path)
 
+        # For backwards compatibility, allow ingesting any additional guideline
+        # markdown files from disk, but the primary guidelines (including
+        # estimation rules and WordPress stack) are embedded in
+        # BUILTIN_KNOWLEDGE_DOCUMENTS and ingested via ingest_builtin_knowledge.
         return await self.ingest_training_files(
             folder_path=folder_path,
             file_pattern="*.md",
             db_session=db_session,
         )
+
+    async def ingest_builtin_knowledge(
+        self,
+        db_session: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
+        """
+        Ingest all built-in knowledge documents defined in code.
+
+        This is the primary source of RAG knowledge in environments where
+        the /knowledge-based folder is not available (e.g. production
+        deployments where those markdown files are not shipped).
+        """
+        logger.info("Ingesting %d built-in knowledge documents", len(BUILTIN_KNOWLEDGE_DOCUMENTS))
+
+        stats: Dict[str, Any] = {
+            "documents": 0,
+            "total_embeddings": 0,
+            "errors": [],
+        }
+
+        for doc in BUILTIN_KNOWLEDGE_DOCUMENTS:
+            try:
+                stats["total_embeddings"] += await self._ingest_builtin_document(
+                    document=doc,
+                    db_session=db_session,
+                )
+                stats["documents"] += 1
+            except Exception as e:
+                error_msg = f"{doc.source_id}: {str(e)}"
+                stats["errors"].append(error_msg)
+                logger.error("Failed to ingest builtin knowledge %s: %s", doc.source_id, str(e))
+
+        logger.info(
+            "Builtin knowledge ingestion complete: %d documents, %d embeddings",
+            stats["documents"],
+            stats["total_embeddings"],
+        )
+
+        return stats
+
+    async def _ingest_builtin_document(
+        self,
+        document: KnowledgeDocument,
+        db_session: Optional[AsyncSession] = None,
+    ) -> int:
+        """
+        Ingest a single built-in knowledge document into the vector store.
+
+        This mirrors _ingest_training_file, but operates on in-memory
+        content instead of reading from disk.
+        """
+        # Delete existing embeddings for this source_id
+        await self.rag_service.delete_document_embeddings(
+            source_id=document.source_id,
+            db_session=db_session,
+        )
+
+        # Ingest document (token-based chunking from settings)
+        count = await self.rag_service.ingest_document(
+            content=document.content,
+            source_type=document.source_type,
+            source_id=document.source_id,
+            metadata=document.metadata,
+            chunk_size=settings.KNOWLEDGE_CHUNK_SIZE,
+            chunk_overlap=settings.KNOWLEDGE_CHUNK_OVERLAP,
+            db_session=db_session,
+        )
+
+        return count
 
     async def ingest_all_knowledge(
         self,
@@ -510,6 +584,7 @@ class KnowledgeService:
         logger.info("Starting full knowledge base ingestion")
 
         results: Dict[str, Any] = {
+            "builtin": {},
             "training_quotes": {},
             "guidelines": {},
             "root_quotes": {},
@@ -518,7 +593,15 @@ class KnowledgeService:
             "total_errors": [],
         }
 
-        # Ingest training quotes
+        # Ingest built-in (code-embedded) knowledge first. This ensures that
+        # production deployments have a baseline knowledge base even when the
+        # /knowledge-based folder is not present.
+        results["builtin"] = await self.ingest_builtin_knowledge(
+            db_session=db_session,
+        )
+        results["total_embeddings"] += results["builtin"]["total_embeddings"]
+
+        # Ingest training quotes from disk (optional; used mainly in dev).
         results["training_quotes"] = await self.ingest_training_files(
             folder_path=self.TRAINING_QUOTES_PATH,
             db_session=db_session,
@@ -526,7 +609,7 @@ class KnowledgeService:
         results["total_embeddings"] += results["training_quotes"]["total_embeddings"]
         results["total_files"] += results["training_quotes"]["files_processed"]
 
-        # Ingest guidelines
+        # Ingest guidelines from disk (optional, for additional org-specific docs).
         results["guidelines"] = await self.ingest_guidelines(
             db_session=db_session,
         )
@@ -543,7 +626,7 @@ class KnowledgeService:
         results["total_files"] += results["root_quotes"]["files_processed"]
 
         # Collect all errors
-        for key in ["training_quotes", "guidelines", "root_quotes"]:
+        for key in ["builtin", "training_quotes", "guidelines", "root_quotes"]:
             results["total_errors"].extend(results[key].get("errors", []))
 
         logger.info(

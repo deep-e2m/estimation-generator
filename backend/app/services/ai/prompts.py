@@ -41,6 +41,7 @@ When generating quotes, you should:
     - Do NOT replace or contradict client-specified tools unless the requirements explicitly ask for recommendations instead of a fixed stack.
     - You may suggest alternatives, but clearly label them as "Alternative (optional)" and do NOT imply the primary stack will change.
     - Reflect client-specified tools consistently in Development Approach, Plugins & Functionality, and WordPress Technical Stack sections.
+17. For every plugin, theme, or page builder that you mention anywhere in the estimate, include its official URL inline in the text using this pattern: "Name (URL: https://example.com)".
 
 Your estimates should be thorough but concise, focusing on deliverables the client cares about.""",
 
@@ -713,7 +714,6 @@ Additional WordPress expertise:
 
     messages.append({"role": "system", "content": system_content})
 
-    keys_desc = ", ".join(ESTIMATION_JSON_KEYS)
     user_content = f"""Generate a professional project quote based on the following requirements.
 
 ## Client Requirements
@@ -729,6 +729,7 @@ Additional WordPress expertise:
 {rag_context}
 """
 
+    wordpress_stack = None
     if project_context:
         context_parts = []
         if project_context.get("client_name"):
@@ -745,21 +746,110 @@ Additional WordPress expertise:
 {chr(10).join(context_parts)}
 """
 
-    user_content += f"""
+        # Optional deep WordPress stack context with locked-in and recommended tools.
+        wordpress_stack = project_context.get("wordpress_stack")
+
+    if wordpress_stack:
+        locked_plugins = wordpress_stack.get("locked", {}).get("plugins") or []
+        locked_themes = wordpress_stack.get("locked", {}).get("themes") or []
+        locked_builders = wordpress_stack.get("locked", {}).get("page_builders") or []
+        recommended_plugins = wordpress_stack.get("recommended", {}).get("plugins") or []
+        recommended_themes = wordpress_stack.get("recommended", {}).get("themes") or []
+
+        user_content += """
+## WordPress Stack (LOCKED-IN CLIENT TOOLS + RESEARCHED RECOMMENDATIONS)
+
+The following stack has been pre-computed for you. You MUST respect it when writing the estimate:
+
+1) Locked-in tools from the client (MUST NOT be replaced):
+- Plugins (client-specified – use exactly these names; do not swap them out):
+"""
+        for p in locked_plugins:
+            name = p.get("name") or ""
+            url = p.get("url") or ""
+            if name:
+                user_content += f"- {name}"
+                if url:
+                    user_content += f" (URL: {url})"
+                user_content += "\n"
+
+        user_content += "\n- Themes (client-specified – do not replace):\n"
+        for t in locked_themes:
+            name = t.get("name") or ""
+            url = t.get("url") or ""
+            if name:
+                user_content += f"- {name}"
+                if url:
+                    user_content += f" (URL: {url})"
+                user_content += "\n"
+
+        user_content += "\n- Page builders (client-specified – do not replace):\n"
+        for b in locked_builders:
+            name = b.get("name") or ""
+            url = b.get("url") or ""
+            if name:
+                user_content += f"- {name}"
+                if url:
+                    user_content += f" (URL: {url})"
+                user_content += "\n"
+
+        user_content += """
+2) Recommended tools for missing capabilities (you may use these where they make sense):
+- Plugins:
+"""
+        for p in recommended_plugins:
+            name = p.get("name") or ""
+            url = p.get("url") or ""
+            purpose = p.get("purpose") or ""
+            price = p.get("price") or ""
+            if name:
+                line = f"- {name}"
+                if url:
+                    line += f" (URL: {url})"
+                details = []
+                if purpose:
+                    details.append(purpose)
+                if price:
+                    details.append(price)
+                if details:
+                    line += " – " + "; ".join(details)
+                user_content += line + "\n"
+
+        user_content += "\n- Themes:\n"
+        for t in recommended_themes:
+            name = t.get("name") or ""
+            url = t.get("url") or ""
+            notes = t.get("notes") or ""
+            if name:
+                line = f"- {name}"
+                if url:
+                    line += f" (URL: {url})"
+                if notes:
+                    line += f" – {notes}"
+                user_content += line + "\n"
+
+        user_content += """
+When writing the estimate:
+- ALWAYS use the client-locked tools above when they exist (do not replace them).
+- You MAY add recommended tools from this list where they make sense for the scope.
+- For EVERY plugin, theme, or page builder you mention anywhere in the estimate text, include its official URL inline using the pattern "Name (URL: https://example.com)".
+"""
+
+    user_content += """
 ## Output Format (JSON only)
 You MUST respond with a single JSON object (no markdown, no code fence) with this exact structure:
 
-{{
-  "estimation_outcomes": {{
+{
+  "estimation_outcomes": {
     "project_overview": "2-4 sentence summary of the project, key features, and goal.",
     "website_structure": "Full section 2 content: Website Structure & Page Scope (list pages, features, blog, etc.).",
     "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA.",
     "estimated_effort_timeline": "Full section 7: Estimated Total Effort (X–Y hours), Estimated Timeline (X–Y weeks).",
     "assumptions": "Full section 8: Assumptions & Client Responsibilities (what client provides, plugins, etc.).",
     "exclusions": "Full section 10: Exclusions (copywriting, animations, integrations, maintenance, etc.)."
-  }},
+  },
   "total_hours": <number>
-}}
+}
 
 Rules:
 - Every key in estimation_outcomes must be present; use empty string "" if a section does not apply.
@@ -767,9 +857,130 @@ Rules:
 - Structure each value for readability: separate paragraphs with a blank line. For lists, put each item on its own line and start the line with "- " (e.g. "- Item one"). Do not put multiple list items on the same line.
 - total_hours must be a number (e.g. 120 or 150). Derive from your estimate (use the midpoint of your range if you think in ranges).
 - Be specific with hours (tight ranges in the text like "180–200 hours").
+- For every plugin, theme, or page builder you mention in any section, always include its official URL inline using the pattern "Name (URL: https://example.com)".
 """
     messages.append({"role": "user", "content": user_content})
     return messages
+
+
+def build_wordpress_stack_research_prompt(
+    requirements: str,
+    project_context: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build prompt for researching an appropriate WordPress theme/plugins stack.
+
+    The research model:
+    - Detects plugins/themes/page builders explicitly mentioned by the client in
+      requirements or project context and treats them as locked-in.
+    - Finds official URLs for those locked-in tools.
+    - Suggests additional plugins/themes (with URLs) ONLY for missing capabilities.
+
+    The model MUST respond with a strict JSON object (no markdown) that the
+    backend can safely parse.
+    """
+    system_content = """You are a senior WordPress solution architect with live web access.
+
+Your task is to help build an accurate implementation stack for estimation:
+- Identify tools (plugins, themes, page builders) the client has ALREADY chosen.
+- Find their correct official URLs.
+- Recommend additional tools ONLY where the requirements clearly imply missing capabilities.
+
+CRITICAL BEHAVIOR RULES:
+- If the client mentions a plugin, theme, or page builder by name in the requirements
+  or project context (e.g. "we use Gravity Forms", "site is on Astra", "Elementor Pro"),
+  treat that tool as LOCKED-IN:
+  - DO NOT replace it with an alternative.
+  - DO NOT say another plugin is preferred instead.
+  - Only fetch its correct official URL and categorize it as locked.
+- You MAY recommend extra plugins/themes to cover missing capabilities (SEO, caching,
+  security, backups, forms, e-commerce extensions, etc.) but they must not contradict
+  the locked-in stack.
+- All URLs must point to the canonical official source (wordpress.org listing or vendor site).
+
+Output ONLY a single JSON object, no markdown, no comments."""
+
+    # Build user content with raw text inputs
+    ctx_lines: List[str] = [
+        "Analyze this WordPress project description and build a stack.",
+        "",
+        "## Client Requirements (primary source)",
+        requirements or "(none provided)",
+    ]
+
+    if project_context:
+        extra_ctx: List[str] = []
+        name = project_context.get("project_name")
+        desc = project_context.get("description")
+        addl = project_context.get("additional_instructions")
+        if name:
+            extra_ctx.append(f"Project name: {name}")
+        if desc:
+            extra_ctx.append(f"Project description:\n{desc}")
+        if addl:
+            extra_ctx.append(f"Additional inputs:\n{addl}")
+        if extra_ctx:
+            ctx_lines.append("")
+            ctx_lines.append("## Additional Project Context")
+            ctx_lines.extend(extra_ctx)
+
+    ctx_lines.append(
+        """
+## Output Format (JSON ONLY)
+Return ONLY a JSON object of this shape (no markdown, no code fences):
+
+{
+  "locked": {
+    "plugins": [
+      {"name": "WooCommerce", "url": "https://wordpress.org/plugins/woocommerce/"},
+      {"name": "Elementor Pro", "url": "https://elementor.com/"}
+    ],
+    "themes": [
+      {"name": "Astra Pro", "url": "https://wpastra.com/"}
+    ],
+    "page_builders": [
+      {"name": "Elementor Pro", "url": "https://elementor.com/"}
+    ]
+  },
+  "recommended": {
+    "plugins": [
+      {
+        "name": "Rank Math SEO",
+        "url": "https://wordpress.org/plugins/seo-by-rank-math/",
+        "purpose": "SEO",
+        "category": "seo",
+        "price": "free"
+      }
+    ],
+    "themes": [
+      {
+        "name": "GeneratePress",
+        "url": "https://generatepress.com/",
+        "notes": "Lightweight, performance-focused theme; use when client has not locked in a theme."
+      }
+    ]
+  }
+}
+
+Validation rules:
+- locked.plugins / locked.themes / locked.page_builders:
+  - include ONLY tools explicitly named by the client.
+  - each item MUST have at least a 'name' and 'url' string.
+- recommended.plugins / recommended.themes:
+  - include tools that are a good fit for the described project when the client
+    did NOT already specify a tool for that capability.
+  - each item MUST have 'name' and 'url'; plugins SHOULD also include 'purpose'
+    and 'price' ("free", "paid", or "freemium").
+- If a list is empty, return [] (do NOT omit keys).
+"""
+    )
+
+    user_content = "\n".join(ctx_lines)
+
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def build_chat_response_prompt(

@@ -49,7 +49,11 @@ from app.schemas.quote import (
 from app.services.ai.knowledge_service import get_knowledge_service
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
-from app.services.blocknote import blocknote_json_to_html, is_blocknote_json
+from app.services.blocknote import (
+    blocknote_json_to_html,
+    is_blocknote_json,
+    update_blocknote_total_hours,
+)
 from app.services.export.html_utils import is_html_content, sanitize_html
 from app.services.quote_refinement_service import get_refinement_service
 from app.services.structured_quote_service import build_structured_content
@@ -1475,7 +1479,35 @@ async def refine_quote(
             f"Cannot refine quote with status '{quote.status.value}'",
         )
 
-    # Process refinement request (pass project context for project_updates / new_total_hours)
+    # Build project context for refinement (used for project_updates and WordPress stack).
+    project_context: dict[str, Any] = {
+        "project_name": project.name,
+        "description": project.description,
+        "platform": quote.platform,
+    }
+    # Carry over any additional instructions stored in metadata (if present).
+    extra = quote.extra_data or {}
+    if "additional_instructions" in extra:
+        project_context["additional_instructions"] = extra.get("additional_instructions")
+
+    # Optionally enrich refinement with researched WordPress stack (plugins/themes + URLs),
+    # reusing the same research pipeline as initial quote generation.
+    llm_service = get_llm_service()
+    if (quote.platform or "").lower() == "wordpress":
+        try:
+            wordpress_stack = await llm_service._build_wordpress_stack(  # type: ignore[attr-defined]
+                requirements=quote.requirements,
+                project_context=project_context or None,
+            )
+            if wordpress_stack:
+                project_context["wordpress_stack"] = wordpress_stack
+        except Exception as e:  # pragma: no cover - best-effort enrichment
+            logger.warning("WordPress stack research for refinement failed; continuing without it: %s", e)
+
+    # Process refinement request (pass project context for project_updates / hours behavior)
+    # Detect BlockNote-backed quotes so we can keep the editor layout stable.
+    is_blocknote = is_blocknote_json(quote.content)
+
     try:
         refinement_service = get_refinement_service()
         (
@@ -1484,11 +1516,14 @@ async def refine_quote(
             changes,
             new_total_hours,
             project_updates,
+            proposed_new_total_hours,
+            needs_hour_confirmation,
         ) = await refinement_service.refine_quote_conversational(
             quote=quote,
             user_message=request.message,
             project_name=project.name,
             project_description=project.description,
+            project_context=project_context,
         )
     except Exception as e:
         logger.error("Quote refinement failed: %s", str(e))
@@ -1500,8 +1535,17 @@ async def refine_quote(
             },
         )
 
-    # Update quote in database
-    quote.content = updated_content
+    # Update quote content in database.
+    #
+    # For BlockNote-backed quotes, we keep the existing JSON layout and only
+    # update the numeric "Total Hours" text when the user asks to change the
+    # estimation time. This avoids the LLM rewriting the entire document into
+    # plain markdown and breaking the editor layout.
+    if is_blocknote:
+        if new_total_hours is not None:
+            quote.content = update_blocknote_total_hours(quote.content, float(new_total_hours))
+    else:
+        quote.content = updated_content
 
     # Apply new total hours when user asked to change estimation time (e.g. "increase by 20 hrs")
     if new_total_hours is not None:
@@ -1594,6 +1638,12 @@ async def refine_quote(
             ai_message=ai_message,
             changes_applied=changes,
             updated_project=updated_project_response,
+            proposed_new_total_hours=(
+                Decimal(str(proposed_new_total_hours))
+                if proposed_new_total_hours is not None
+                else None
+            ),
+            needs_hour_confirmation=bool(needs_hour_confirmation),
         ),
     )
 
@@ -1719,6 +1769,7 @@ async def export_quote_docx(
         requirements=quote.requirements,
         content=content_for_export,
         total_hours=quote.total_hours,
+        total_cost=quote.total_cost,
         platform=quote.platform,
         complexity=quote.complexity.value,
         created_at=quote.created_at,
@@ -1747,8 +1798,8 @@ async def export_quote_docx(
     # Generate filename
     safe_title = "".join(
         c if c.isalnum() or c in (" ", "-", "_") else "_"
-        for c in quote.title[:50]
-    ).strip()
+        for c in (quote.title or "Project Estimate")[:50]
+    ).strip() or "Proposal"
     filename = f"Proposal_{safe_title}_{quote.created_at.strftime('%Y%m%d')}.docx"
 
     logger.info("DOCX export completed: quote_id=%s, filename=%s", quote_id, filename)

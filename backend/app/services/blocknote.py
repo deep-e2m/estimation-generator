@@ -213,3 +213,98 @@ def blocknote_json_to_html(content: str) -> str:
             i += 1
 
     return "\n".join(html_parts)
+
+
+def update_blocknote_total_hours(content: str, new_total_hours: float) -> str:
+    """
+    Update the "Total Hours" text inside a BlockNote JSON document.
+
+    This is used when conversational refinement changes the numeric
+    estimation time (e.g. from 180h to 210h) so that we can keep the
+    BlockNote layout exactly as-is and only adjust the numbers.
+
+    The function:
+    - Detects when content is valid BlockNote JSON
+    - Locates the "Estimated Effort & Timeline" section
+    - Rewrites any inline "Total Hours: X" occurrences to the new value
+    - ALSO normalizes lines like "Estimated Total Effort: 180-200 hours"
+      so they reflect the new total hours
+    """
+    if not is_blocknote_json(content):
+        return content
+
+    try:
+        blocks = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+
+    if not isinstance(blocks, list):
+        return content
+
+    target_heading = BLOCKNOTE_SECTION_LABELS.get("estimated_effort_timeline", "").strip()
+    if not target_heading:
+        return content
+
+    total_hours_re = re.compile(r"(Total Hours\s*:\s*)([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+    # Match any "X hours" / "X-YYY hours" style phrase so that both
+    # "Estimated Total Effort: 180-200 hours" and "50 hours. Estimated Timeline..."
+    # get synchronized with the numeric total.
+    hours_phrase_re = re.compile(
+        r"([0-9]+(?:\.[0-9]+)?(?:\s*[-–]\s*[0-9]+(?:\.[0-9]+)?)?)\s*(hours?|hrs?)\b",
+        re.IGNORECASE,
+    )
+
+    # Use a clean string (no trailing zeros) for human-facing text
+    numeric = float(new_total_hours)
+    new_value = f"{numeric:.2f}"
+    new_effort_value = (
+        str(int(numeric)) if numeric.is_integer() else f"{numeric:.2f}".rstrip("0").rstrip(".")
+    )
+
+    in_estimated_section = False
+
+    for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+
+        # Track when we are inside the "Estimated Effort & Timeline" section
+        if blk.get("type") == "heading":
+            heading_text_parts = []
+            for item in blk.get("content") or []:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    heading_text_parts.append(str(item.get("text") or ""))
+            heading_text = " ".join(heading_text_parts).strip()
+            in_estimated_section = heading_text.lower() == target_heading.lower()
+            continue
+
+        if not in_estimated_section:
+            continue
+
+        # Within the section: rewrite any "Total Hours: X" occurrences
+        content_items = blk.get("content")
+        if not isinstance(content_items, list):
+            continue
+
+        for item in content_items:
+            if not isinstance(item, dict) or item.get("type") != "text":
+                continue
+            text = str(item.get("text") or "")
+            updated_text = total_hours_re.sub(rf"\1{new_value}", text)
+
+            # Also normalize any "X hours" / "X-YYY hours" style phrases so that
+            # when users change the estimation time via chat, the narrative
+            # sentence (e.g. "50 hours. Estimated Timeline: 6–8 weeks.") stays
+            # in sync with the updated total hours shown in the header/top bar.
+            updated_text = hours_phrase_re.sub(
+                rf"{new_effort_value} \2",
+                updated_text,
+                count=1,  # only first hours phrase per line to avoid over-updating
+            )
+
+            if updated_text != text:
+                item["text"] = updated_text
+
+    try:
+        return json.dumps(blocks)
+    except TypeError:
+        return content

@@ -282,9 +282,11 @@ export function EstimationPreviewPanel({
             </div>
           </div>
 
-          {/* Editable content: BlockNote editor (content is always BlockNote JSON or legacy text) */}
+          {/* Editable content: BlockNote editor (content is always BlockNote JSON or legacy text).
+              Key on quote.id only so that typing (which updates updated_at) does NOT remount
+              the editor and steal focus on every change. */}
           <BlockNoteQuoteEditor
-            key={`${quote.id}-${quote.updated_at}`}
+            key={quote.id}
             quote={quote}
             onContentChange={handleContentChange}
             onSave={handleEditorSave}

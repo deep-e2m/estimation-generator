@@ -204,10 +204,16 @@ async def test_conversational_refinement():
         )
 
         service = QuoteRefinementService()
-        updated_content, explanation, changes, new_total_hours, project_updates = (
-            await service.refine_quote_conversational(
-                quote, "Add 2 hours to the total."
-            )
+        (
+            updated_content,
+            explanation,
+            changes,
+            new_total_hours,
+            project_updates,
+            proposed_new_total_hours,
+            needs_hour_confirmation,
+        ) = await service.refine_quote_conversational(
+            quote, "Add 2 hours to the total."
         )
 
         assert isinstance(updated_content, str), "updated_content should be str"
@@ -218,6 +224,9 @@ async def test_conversational_refinement():
         print(f"   - Updated content length: {len(updated_content)} chars")
         print(f"   - Explanation: {explanation[:80]}...")
         print(f"   - Changes count: {len(changes)}")
+        print(f"   - new_total_hours: {new_total_hours}")
+        print(f"   - proposed_new_total_hours: {proposed_new_total_hours}")
+        print(f"   - needs_hour_confirmation: {needs_hour_confirmation}")
         return True
 
     except Exception as e:

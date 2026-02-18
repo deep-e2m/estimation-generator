@@ -296,6 +296,22 @@ class RefineQuoteResponse(BaseModel):
     changes_applied: list[ChangeDescription] = Field(
         ..., description="List of changes that were applied"
     )
+    proposed_new_total_hours: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Proposed new total hours based on the latest refinement. "
+            "This value is NOT applied automatically; the UI should "
+            "ask the user to confirm before updating stored total_hours."
+        ),
+    )
+    needs_hour_confirmation: bool = Field(
+        default=False,
+        description=(
+            "True when the assistant believes total hours should change and "
+            "proposed_new_total_hours is set, but the system should confirm "
+            "with the user before applying it."
+        ),
+    )
     updated_project: Optional[RefinedProjectUpdate] = Field(
         None,
         description="Project name/description if updated via chat; absent otherwise",

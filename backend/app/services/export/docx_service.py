@@ -1077,6 +1077,54 @@ class DocxExportService:
     # Timeline
     # =========================================================================
 
+    def _extract_timeline_from_content(self, content: str) -> Optional[str]:
+        """
+        Best-effort extraction of the AI-written timeline text from quote content.
+
+        The estimation format always includes a section like:
+
+            7. Estimated Effort & Timeline
+            Estimated Total Effort
+            220–240 hours
+            Estimated Timeline
+            6–7 weeks from project kickoff, subject to timely client feedback...
+
+        For HTML content (Tiptap), we strip tags first and then scan lines.
+        For markdown/plain text we use it as-is. We intentionally keep this
+        logic permissive so legacy quotes still yield something reasonable.
+        """
+        if not content:
+            return None
+
+        # Normalize to plain text first so the same logic works for HTML and markdown.
+        text = strip_html_tags(content) if is_html_content(content) else content
+        lines = [ln.strip() for ln in text.splitlines()]
+
+        # Find the line that contains "Estimated Timeline" and capture following
+        # non-empty lines until the next numbered top-level section or a blank gap.
+        for idx, line in enumerate(lines):
+            if "estimated timeline" in line.lower():
+                collected: list[str] = []
+                # Include the line itself if it already has the full sentence.
+                if line:
+                    collected.append(line)
+
+                # Include subsequent lines until we hit a blank line or a new
+                # numbered section like "8. Assumptions & Client Responsibilities".
+                for j in range(idx + 1, len(lines)):
+                    next_line = lines[j]
+                    if not next_line:
+                        break
+                    if re.match(r"^\d+\.\s", next_line):
+                        break
+                    collected.append(next_line)
+
+                # Join into a single human-readable sentence/paragraph.
+                timeline_text = " ".join(collected).strip()
+                return timeline_text or None
+
+        return None
+
     def _add_timeline(self, data: QuoteExportData) -> None:
         """Add project timeline section."""
         if self._document is None:
@@ -1084,16 +1132,25 @@ class DocxExportService:
 
         self._document.add_heading("Timeline", level=1)
 
-        # Calculate estimated duration
-        hours = float(data.total_hours)
-
-        # Assume 6 productive hours per day, 5 days per week
-        days = hours / 6
-        weeks = days / 5
-
         timeline_para = self._document.add_paragraph()
-        timeline_para.add_run("Estimated Project Duration: ").font.bold = True
-        timeline_para.add_run(f"{weeks:.1f} weeks ({days:.0f} working days)")
+        label_run = timeline_para.add_run("Estimated Project Duration: ")
+        label_run.font.bold = True
+
+        # Prefer the AI-authored timeline from the quote content so that the
+        # DOCX export matches what the estimator actually told the client.
+        ai_timeline = self._extract_timeline_from_content(data.content)
+
+        if ai_timeline:
+            timeline_para.add_run(ai_timeline)
+        else:
+            # Fallback: retain the legacy deterministic calculation for older
+            # quotes that may not follow the standard estimation format.
+            hours = float(data.total_hours)
+
+            # Assume 6 productive hours per day, 5 days per week
+            days = hours / 6 if hours > 0 else 0
+            weeks = days / 5 if days > 0 else 0
+            timeline_para.add_run(f"{weeks:.1f} weeks ({days:.0f} working days)")
 
         # Add timeline notes
         notes_para = self._document.add_paragraph()

@@ -24,6 +24,7 @@ from app.services.ai.prompts import (
     build_quote_refinement_prompt,
     build_requirement_analysis_prompt,
     build_vision_analysis_prompt,
+    build_wordpress_stack_research_prompt,
     format_rag_context,
 )
 from app.services.blocknote import outcomes_dict_to_blocknote_json
@@ -175,12 +176,31 @@ class LLMService:
             len(requirements),
         )
 
+        # Optionally enrich WordPress projects with a researched stack (plugins/themes + URLs),
+        # while strictly respecting any client-specified tools.
+        enriched_project_context = dict(project_context or {})
+        if platform.lower() == "wordpress":
+            try:
+                wordpress_stack = await self._build_wordpress_stack(
+                    requirements=requirements,
+                    project_context=enriched_project_context or None,
+                )
+                if wordpress_stack:
+                    enriched_project_context["wordpress_stack"] = wordpress_stack
+                    logger.info(
+                        "WordPress stack research completed: locked_plugins=%d, recommended_plugins=%d",
+                        len(wordpress_stack.get("locked", {}).get("plugins") or []),
+                        len(wordpress_stack.get("recommended", {}).get("plugins") or []),
+                    )
+            except Exception as e:  # pragma: no cover - best-effort enrichment
+                logger.warning("WordPress stack research failed; continuing without it: %s", e)
+
         # Build prompt
         messages = build_quote_generation_prompt_json(
             requirements=requirements,
             platform=platform,
             rag_context=rag_context,
-            project_context=project_context,
+            project_context=enriched_project_context,
         )
 
         # Call LLM with JSON response format
@@ -766,6 +786,73 @@ Focus on practical, actionable information relevant to project estimation."""
             "model_used": response.model,
             "tokens_used": response.usage.total_tokens,
         }
+
+    async def _build_wordpress_stack(
+        self,
+        requirements: str,
+        project_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Build a WordPress plugins/themes/page builders stack using the web-enabled
+        research model.
+
+        Behavior:
+        - Detects client-specified tools (plugins/themes/page builders) from requirements
+          and project_context and treats them as locked-in.
+        - Fetches official URLs for those tools.
+        - Recommends additional tools ONLY where requirements imply missing capabilities.
+
+        Returns:
+            Dict with "locked" and "recommended" keys, or None on failure.
+        """
+        logger.info("Building WordPress stack via research model")
+
+        messages = build_wordpress_stack_research_prompt(
+            requirements=requirements,
+            project_context=project_context,
+        )
+
+        try:
+            response = await self.client.chat_completion(
+                messages=messages,
+                model="research",
+                temperature=0.1,
+                max_tokens=1500,
+            )
+        except OpenRouterError as e:
+            logger.warning("WordPress stack research call failed: %s", e)
+            return None
+
+        raw = response.content or ""
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError) as e:
+            logger.warning("WordPress stack research did not return valid JSON: %s", e)
+            return None
+
+        if not isinstance(parsed, dict):
+            logger.warning("WordPress stack research returned non-object JSON; ignoring")
+            return None
+
+        # Best-effort normalization: ensure keys exist with list defaults
+        locked = parsed.get("locked") or {}
+        recommended = parsed.get("recommended") or {}
+
+        def _ensure_list(obj: Any) -> list:
+            return obj if isinstance(obj, list) else []
+
+        locked["plugins"] = _ensure_list(locked.get("plugins"))
+        locked["themes"] = _ensure_list(locked.get("themes"))
+        locked["page_builders"] = _ensure_list(locked.get("page_builders"))
+        recommended["plugins"] = _ensure_list(recommended.get("plugins"))
+        recommended["themes"] = _ensure_list(recommended.get("themes"))
+
+        stack = {
+            "locked": locked,
+            "recommended": recommended,
+        }
+
+        return stack
 
     # ==================== Private Helper Methods ====================
 
