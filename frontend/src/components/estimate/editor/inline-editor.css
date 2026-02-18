@@ -27,7 +27,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: #f3f4f6; /* light gray app background, matches preview */
+  background: transparent;
 }
 
 .inline-quote-editor-content {
@@ -57,9 +57,7 @@
 /* Center the editor content within the doc container */
 .doc-container .inline-quote-editor {
   max-width: 840px;
-  margin: 24px auto 40px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  margin: 0 auto 32px;
 }
 
 /* ============================================================================
@@ -757,6 +755,7 @@
   gap: 2px;
   flex-wrap: wrap;
 }
+
 
 /* BlockNote format bar in top toolbar: keep in one row, match toolbar height */
 .editor-toolbar__controls--blocknote {

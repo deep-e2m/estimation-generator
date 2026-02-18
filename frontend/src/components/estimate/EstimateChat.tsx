@@ -93,6 +93,8 @@ interface EstimateChatProps {
   ) => void;
   /** Use the new full-screen generation UI instead of inline progress */
   useFullscreenUI?: boolean;
+  /** Notify parent when inline editor is saving / has saved */
+  onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
 }
 
 export function EstimateChat({
@@ -100,6 +102,7 @@ export function EstimateChat({
   existingEstimate,
   onEstimateGenerated,
   useFullscreenUI = true, // Default to new fullscreen UI
+  onSaveStatusChange,
 }: EstimateChatProps) {
   const navigate = useNavigate();
 
@@ -300,6 +303,7 @@ export function EstimateChat({
         project={project}
         initialQuote={generatedEstimate}
         onQuoteUpdated={onEstimateGenerated}
+        onSaveStatusChange={onSaveStatusChange}
       />
     );
   }

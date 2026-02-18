@@ -2,19 +2,17 @@
  * QuoteDocument Component
  *
  * Single-source-of-truth document preview. Renders a professional header
- * plus a single body region derived from the canonical content string:
- * - If the body is HTML (from the Tiptap editor), render it as HTML.
- * - Otherwise, render it as markdown via MarkdownBody.
- *
- * This keeps the preview layout stable before and after edits, since both
- * the editor and the preview work from the same underlying document body.
+ * plus a body derived from quote content:
+ * - BlockNote JSON (array of blocks) → converted to HTML and rendered.
+ * - HTML (from editor) → rendered as HTML.
+ * - Otherwise → markdown via MarkdownBody.
  */
 
 import React from 'react';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
 import { ensureEstimatedEffortSection } from '@/lib/quote-document-utils';
+import { isBlockNoteJson, blocknoteJsonToHtml } from '@/lib/blocknote-to-html';
 import { isHtmlContent } from '@/lib/quote-to-html';
-import { ESTIMATION_OUTCOMES_KEYS, ESTIMATION_OUTCOMES_LABELS } from '@/constants/estimation-outcomes';
 import type { Quote } from '@/types';
 
 interface QuoteDocumentProps {
@@ -52,15 +50,26 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     );
   }
 
-  const hasEstimationOutcomes = content.estimation_outcomes && Object.keys(content.estimation_outcomes).length > 0;
   const body = (content.executive_summary || '').trim();
-  const bodyIsHtml = body ? isHtmlContent(body) : false;
+  const isBlockNote = body ? isBlockNoteJson(body) : false;
+  const bodyIsHtml = body && !isBlockNote ? isHtmlContent(body) : false;
 
   const totalHours =
     Number(content.totals?.total_expected_hours ?? 0) ||
     Number(quote.total_hours ?? 0) ||
     0;
-  const bodyWithEffort = !bodyIsHtml && body ? ensureEstimatedEffortSection(body, totalHours) : body;
+  const bodyWithEffort = !bodyIsHtml && !isBlockNote && body ? ensureEstimatedEffortSection(body, totalHours) : body;
+
+  const bodyContent = (() => {
+    if (isBlockNote && body) {
+      const html = blocknoteJsonToHtml(body);
+      return <div className="doc-editor-preview" dangerouslySetInnerHTML={{ __html: html }} />;
+    }
+    if (bodyIsHtml) {
+      return <div className="doc-editor-preview" dangerouslySetInnerHTML={{ __html: body }} />;
+    }
+    return <MarkdownBody content={bodyWithEffort ?? ''} />;
+  })();
 
   return (
     <div className="doc-container">
@@ -84,33 +93,11 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
         </div>
       </div>
 
-      {hasEstimationOutcomes ? (
-        <div className="doc-content-body">
-          {ESTIMATION_OUTCOMES_KEYS.map((key) => {
-            const value = content.estimation_outcomes![key];
-            if (value == null || value === '') return null;
-            return (
-              <div key={key} className="doc-section">
-                <h2 className="doc-section-title">
-                  {ESTIMATION_OUTCOMES_LABELS[key] ?? key}
-                </h2>
-                <div className="doc-body-text whitespace-pre-wrap">{value}</div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="doc-content-body">
-          {bodyIsHtml ? (
-            <div className="doc-editor-preview" dangerouslySetInnerHTML={{ __html: body }} />
-          ) : (
-            <MarkdownBody content={bodyWithEffort} />
-          )}
-        </div>
-      )}
+      <div className="doc-content-body">
+        {bodyContent}
+      </div>
     </div>
   );
 }
 
 export default QuoteDocument;
-

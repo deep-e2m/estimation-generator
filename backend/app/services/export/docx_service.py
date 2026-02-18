@@ -340,76 +340,97 @@ class DocxExportService:
     # =========================================================================
 
     def _add_title_page(self, data: QuoteExportData) -> None:
-        """Add title page with proposal information."""
+        """
+        Add document header matching the preview UI layout:
+        - Centered uppercase title "PROPOSAL FOR {project}"
+        - 3-column metadata row: Prepared for / Date / Prepared by
+        - Horizontal separator line
+        No separate title page — content follows directly on the same page.
+        """
         if self._document is None:
             return
 
-        # Main title
+        prepared_by_value = (data.prepared_by or self.COMPANY_NAME).strip() or self.COMPANY_NAME
+
+        # ── Main title: "PROPOSAL FOR {PROJECT}" ──────────────────────────────
         title_para = self._document.add_paragraph()
         title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_para.paragraph_format.space_before = Pt(72)
-        title_para.paragraph_format.space_after = Pt(24)
+        title_para.paragraph_format.space_before = Pt(0)
+        title_para.paragraph_format.space_after = Pt(16)
 
-        title_run = title_para.add_run("PROJECT PROPOSAL")
+        title_text = f"PROPOSAL FOR {data.client_name.upper()}"
+        title_run = title_para.add_run(title_text)
         title_run.font.name = self.FONT_NAME_HEADING
-        title_run.font.size = Pt(36)
+        title_run.font.size = Pt(28)
         title_run.font.bold = True
-        title_run.font.color.rgb = self.PRIMARY_COLOR
+        title_run.font.color.rgb = self.TEXT_COLOR
 
-        # Subtitle with client name
-        subtitle_para = self._document.add_paragraph()
-        subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        subtitle_para.paragraph_format.space_after = Pt(48)
+        # ── 3-column metadata table ────────────────────────────────────────────
+        # Columns: Prepared for | Date | Prepared by
+        meta_table = self._document.add_table(rows=2, cols=3)
+        meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        meta_table.autofit = False
+        col_width = Inches(2.1)
+        for col in meta_table.columns:
+            for cell in col.cells:
+                cell.width = col_width
 
-        subtitle_text = f"Proposal for {data.client_name}"
-        subtitle_run = subtitle_para.add_run(subtitle_text)
-        subtitle_run.font.name = self.FONT_NAME_HEADING
-        subtitle_run.font.size = Pt(24)
-        subtitle_run.font.color.rgb = self.SECONDARY_COLOR
+        labels = ["PREPARED FOR", "DATE", "PREPARED BY"]
+        values = [
+            data.client_name,
+            data.created_at.strftime("%B %d, %Y"),
+            prepared_by_value,
+        ]
+        LABEL_COLOR = RGBColor(100, 116, 139)   # slate-500 — matches .doc-metadata-label
+        VALUE_COLOR = RGBColor(15, 23, 42)       # gray-900 — matches .doc-metadata-value
 
-        # Project title
-        project_para = self._document.add_paragraph()
-        project_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        project_para.paragraph_format.space_after = Pt(48)
+        for col_idx, (label, value) in enumerate(zip(labels, values)):
+            label_cell = meta_table.cell(0, col_idx)
+            label_para = label_cell.paragraphs[0]
+            label_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            label_run = label_para.add_run(label)
+            label_run.font.name = self.FONT_NAME
+            label_run.font.size = Pt(8)
+            label_run.font.bold = False
+            label_run.font.color.rgb = LABEL_COLOR
 
-        project_run = project_para.add_run(data.title)
-        project_run.font.name = self.FONT_NAME
-        project_run.font.size = Pt(16)
-        project_run.font.italic = True
-        project_run.font.color.rgb = self.TEXT_COLOR
+            value_cell = meta_table.cell(1, col_idx)
+            value_para = value_cell.paragraphs[0]
+            value_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            value_run = value_para.add_run(value)
+            value_run.font.name = self.FONT_NAME_HEADING
+            value_run.font.size = Pt(11)
+            value_run.font.bold = True
+            value_run.font.color.rgb = VALUE_COLOR
 
-        # Prepared by section (default E2M Solutions; user can override via prepared_by)
-        prepared_para = self._document.add_paragraph()
-        prepared_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        prepared_para.paragraph_format.space_before = Pt(48)
+        # Remove table borders — metadata row should be borderless
+        for row in meta_table.rows:
+            for cell in row.cells:
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                tcBorders = parse_xml(
+                    f'<w:tcBorders {nsdecls("w")}>'
+                    '<w:top w:val="none"/>'
+                    '<w:left w:val="none"/>'
+                    '<w:bottom w:val="none"/>'
+                    '<w:right w:val="none"/>'
+                    '<w:insideH w:val="none"/>'
+                    '<w:insideV w:val="none"/>'
+                    "</w:tcBorders>"
+                )
+                tcPr.append(tcBorders)
 
-        prepared_run = prepared_para.add_run("Prepared by:")
-        prepared_run.font.name = self.FONT_NAME
-        prepared_run.font.size = Pt(12)
-        prepared_run.font.color.rgb = self.TEXT_COLOR
-
-        company_para = self._document.add_paragraph()
-        company_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        prepared_by_value = (data.prepared_by or self.COMPANY_NAME).strip() or self.COMPANY_NAME
-        company_run = company_para.add_run(prepared_by_value)
-        company_run.font.name = self.FONT_NAME_HEADING
-        company_run.font.size = Pt(16)
-        company_run.font.bold = True
-        company_run.font.color.rgb = self.PRIMARY_COLOR
-
-        # Date
-        date_para = self._document.add_paragraph()
-        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        date_para.paragraph_format.space_before = Pt(24)
-
-        date_run = date_para.add_run(data.created_at.strftime("%B %d, %Y"))
-        date_run.font.name = self.FONT_NAME
-        date_run.font.size = Pt(12)
-        date_run.font.color.rgb = self.TEXT_COLOR
-
-        # Page break
-        self._document.add_page_break()
+        # ── Horizontal separator (mirrors border-bottom: 3px solid #0f172a) ──
+        sep_para = self._document.add_paragraph()
+        sep_para.paragraph_format.space_before = Pt(14)
+        sep_para.paragraph_format.space_after = Pt(20)
+        pPr = sep_para._p.get_or_add_pPr()
+        pBdr = parse_xml(
+            f'<w:pBdr {nsdecls("w")}>'
+            '<w:bottom w:val="single" w:sz="18" w:space="1" w:color="0f172a"/>'
+            "</w:pBdr>"
+        )
+        pPr.append(pBdr)
 
     # =========================================================================
     # Project overview

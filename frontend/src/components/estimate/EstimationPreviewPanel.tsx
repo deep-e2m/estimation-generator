@@ -15,9 +15,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import { InlineQuoteEditor } from './editor/InlineQuoteEditor';
 import { BlockNoteQuoteEditor } from './editor/BlockNoteQuoteEditor';
-import { EstimationOutcomesEditor } from './editor/EstimationOutcomesEditor';
 import { quoteService } from '@/services/quote-generation.service';
 import { quotesService } from '@/services/quotes.service';
 import type { Quote, Project } from '@/types';
@@ -28,6 +26,8 @@ interface EstimationPreviewPanelProps {
   project: Project;
   recentChanges?: ChangeDescription[];
   onQuoteSaved?: (updatedQuote: Quote) => void;
+  /** Notify parent when the editor is saving or has saved */
+  onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
 }
 
 /** Debounce delay for auto-save in milliseconds */
@@ -62,10 +62,8 @@ export function EstimationPreviewPanel({
   project,
   recentChanges,
   onQuoteSaved,
+  onSaveStatusChange,
 }: EstimationPreviewPanelProps) {
-  // Feature flag to toggle BlockNote inline editor.
-  const USE_BLOCKNOTE_INLINE_EDITOR = true;
-
   // Save state
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -75,16 +73,6 @@ export function EstimationPreviewPanel({
   const [isExporting, setIsExporting] = useState(false);
 
   const [editorContent, setEditorContent] = useState<string>('');
-
-  // When quote has key-value estimation_outcomes (and we're not using BlockNote), keep editorContent in sync for save
-  useEffect(() => {
-    if (!USE_BLOCKNOTE_INLINE_EDITOR) {
-      const outcomes = quote.content?.estimation_outcomes;
-      if (outcomes && typeof outcomes === 'object') {
-        setEditorContent(JSON.stringify(outcomes));
-      }
-    }
-  }, [quote.id, quote.content?.estimation_outcomes]);
 
   // Auto-save timer ref
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,6 +108,9 @@ export function EstimationPreviewPanel({
         if (onQuoteSaved) {
           onQuoteSaved(updatedQuote);
         }
+        if (onSaveStatusChange) {
+          onSaveStatusChange('saved');
+        }
       } catch (error) {
         // Only show error if the request was not intentionally cancelled
         if ((error as Error).name !== 'AbortError') {
@@ -131,20 +122,42 @@ export function EstimationPreviewPanel({
               onClick: () => handleSave(contentToSave),
             },
           });
+          if (onSaveStatusChange) {
+            onSaveStatusChange('idle');
+          }
         }
       } finally {
         setIsSaving(false);
       }
     },
-    [editorContent, quote.id, onQuoteSaved]
+    [editorContent, quote.id, onQuoteSaved, onSaveStatusChange]
   );
 
   // ------- Auto-save with Debounce -------
 
   const handleContentChange = useCallback(
-    (html: string) => {
-      setEditorContent(html);
+    (serialized: string) => {
+      setEditorContent(serialized);
       setHasUnsavedChanges(true);
+
+      if (onSaveStatusChange) {
+        onSaveStatusChange('saving');
+      }
+
+      // Optimistically update quote content in parent so Export preview
+      // reflects formatting changes (e.g. bold bullets) immediately,
+      // even before the debounced save completes.
+      if (onQuoteSaved) {
+        const optimisticQuote: Quote = {
+          ...quote,
+          content: {
+            ...quote.content,
+            executive_summary: serialized,
+          },
+          updated_at: new Date().toISOString(),
+        };
+        onQuoteSaved(optimisticQuote);
+      }
 
       // Clear any existing auto-save timer
       if (autoSaveTimerRef.current) {
@@ -153,10 +166,10 @@ export function EstimationPreviewPanel({
 
       // Set new auto-save timer
       autoSaveTimerRef.current = setTimeout(() => {
-        handleSave(html);
+        handleSave(serialized);
       }, AUTO_SAVE_DELAY);
     },
-    [handleSave]
+    [handleSave, onQuoteSaved, onSaveStatusChange, quote]
   );
 
   // Clean up auto-save timer on unmount
@@ -231,9 +244,12 @@ export function EstimationPreviewPanel({
         clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
+       if (onSaveStatusChange) {
+         onSaveStatusChange('saving');
+       }
       await handleSave(html);
     },
-    [handleSave]
+    [handleSave, onSaveStatusChange]
   );
 
   return (
@@ -266,30 +282,14 @@ export function EstimationPreviewPanel({
             </div>
           </div>
 
-          {/* Editable content: BlockNote when enabled, else section editor or Tiptap */}
-          {USE_BLOCKNOTE_INLINE_EDITOR ? (
-            <BlockNoteQuoteEditor
-              key={`${quote.id}-${quote.updated_at}`}
-              quote={quote}
-              onContentChange={handleContentChange}
-              onSave={handleEditorSave}
-              readOnly={!isQuoteEditable}
-            />
-          ) : quote.content?.estimation_outcomes ? (
-            <EstimationOutcomesEditor
-              key={`${quote.id}-${quote.updated_at}`}
-              quote={quote}
-              onContentChange={handleContentChange}
-              onSave={handleEditorSave}
-              readOnly={!isQuoteEditable}
-            />
-          ) : (
-            <InlineQuoteEditor
-              quote={quote}
-              onContentChange={handleContentChange}
-              onSave={handleEditorSave}
-            />
-          )}
+          {/* Editable content: BlockNote editor (content is always BlockNote JSON or legacy text) */}
+          <BlockNoteQuoteEditor
+            key={`${quote.id}-${quote.updated_at}`}
+            quote={quote}
+            onContentChange={handleContentChange}
+            onSave={handleEditorSave}
+            readOnly={!isQuoteEditable}
+          />
         </div>
       </div>
     </div>

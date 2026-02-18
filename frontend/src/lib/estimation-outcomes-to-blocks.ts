@@ -12,12 +12,16 @@ import {
 } from '@/constants/estimation-outcomes';
 import type { EstimationOutcomes } from '@/types';
 
-/** BlockNote-compatible partial block (id, type, content, optional props) */
+/** Inline content item (BlockNote format) */
+const inline = (text: string) => [{ type: 'text' as const, text: text || ' ', styles: {} }];
+
+/** BlockNote-compatible block: content is array of inline items */
 export interface BlockNoteBlockLike {
   id: string;
   type: 'heading' | 'paragraph' | 'bulletListItem';
-  content: string;
-  props?: { level?: number };
+  content: Array<{ type: 'text'; text: string; styles: Record<string, unknown> }>;
+  props?: { textColor?: string; backgroundColor?: string; textAlignment?: string; level?: number };
+  children?: unknown[];
 }
 
 /** Line starts with - or * or • followed by space */
@@ -70,7 +74,9 @@ function valueToBlocks(value: string, blockIdPrefix: string): BlockNoteBlockLike
       blocks.push({
         id: `${blockIdPrefix}-p-${index}`,
         type: 'paragraph',
-        content: paraText,
+        content: inline(paraText),
+        props: { textColor: 'default', backgroundColor: 'default', textAlignment: 'left' },
+        children: [],
       });
       index += 1;
     }
@@ -78,7 +84,9 @@ function valueToBlocks(value: string, blockIdPrefix: string): BlockNoteBlockLike
       blocks.push({
         id: `${blockIdPrefix}-b-${index}`,
         type: 'bulletListItem',
-        content: item,
+        content: inline(item),
+        props: { textColor: 'default', backgroundColor: 'default', textAlignment: 'left' },
+        children: [],
       });
       index += 1;
     }
@@ -112,8 +120,9 @@ export function estimationOutcomesToBlockNoteBlocks(
     result.push({
       id: `${sectionId}-h`,
       type: 'heading',
-      content: label,
-      props: { level: 1 },
+      content: inline(label),
+      props: { textColor: 'default', backgroundColor: 'default', textAlignment: 'left', level: 1 },
+      children: [],
     });
 
     const contentBlocks = valueToBlocks(String(value).trim(), sectionId);

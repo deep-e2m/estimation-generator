@@ -10,7 +10,6 @@ import {
   useCreateBlockNote,
 } from '@blocknote/react';
 import './inline-editor.css';
-import { estimationOutcomesToBlockNoteBlocks } from '@/lib/estimation-outcomes-to-blocks';
 import { cn } from '@/lib/utils';
 import type { Quote } from '@/types';
 
@@ -44,31 +43,26 @@ export function BlockNoteQuoteEditor({
   className,
   readOnly = false,
 }: BlockNoteQuoteEditorProps) {
-  // Hydrate BlockNote from quote content. Prefer structured conversion from
-  // estimation_outcomes (key-value) so outcomes render with headings,
-  // paragraphs, and bullets. Otherwise use executive_summary (BlockNote JSON
-  // or legacy line-by-line).
+  // Hydrate BlockNote from quote content: executive_summary is BlockNote JSON
+  // (array of blocks) or legacy line-by-line text.
   const initialContent = useMemo(() => {
-    const outcomes = quote.content?.estimation_outcomes;
-    if (outcomes && typeof outcomes === 'object' && Object.keys(outcomes).length > 0) {
-      const blocks = estimationOutcomesToBlockNoteBlocks(outcomes);
-      if (blocks.length > 0) return JSON.parse(JSON.stringify(blocks)) as unknown[];
-    }
-
     const summary = quote.content?.executive_summary;
     if (!summary) return undefined;
     try {
       const parsed = JSON.parse(summary) as unknown;
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return JSON.parse(JSON.stringify(parsed)) as unknown[];
       }
     } catch {
       const trimmed = summary.trim();
       if (trimmed.length > 0) {
-        const blocks: Array<{ type: 'paragraph'; content: string }> = [];
+        const blocks: Array<{ type: 'paragraph'; content: Array<{ type: 'text'; text: string; styles: object }> }> = [];
         for (const line of trimmed.split(/\n/)) {
           const t = line.trimEnd();
-          blocks.push({ type: 'paragraph', content: t.length > 0 ? t : ' ' });
+          blocks.push({
+            type: 'paragraph',
+            content: [{ type: 'text', text: t.length > 0 ? t : ' ', styles: {} }],
+          });
         }
         if (blocks.length > 0) return blocks as unknown[];
       }
@@ -151,16 +145,15 @@ export function BlockNoteQuoteEditor({
   }
 
   return (
-    <div className={cn('inline-quote-editor bg-white rounded-md shadow-sm', className)}>
+    <div className={cn('inline-quote-editor', className)}>
       <div className="inline-quote-editor-content">
         <BlockNoteView
           editor={editor}
           editable={!readOnly}
           theme="light"
-          formattingToolbar={false}
           slashMenu={false}
         >
-          {/* Slash ("/") menu for block types (headings, lists, etc.) — no top/floating formatting bar */}
+          {/* Slash ("/") menu for block types (headings, lists, etc.); formatting toolbar shows on text selection (bold, italic, etc.) */}
           <SuggestionMenuController
             triggerCharacter="/"
             getItems={async (query) =>

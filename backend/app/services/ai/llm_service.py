@@ -26,6 +26,7 @@ from app.services.ai.prompts import (
     build_vision_analysis_prompt,
     format_rag_context,
 )
+from app.services.blocknote import outcomes_dict_to_blocknote_json
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +227,9 @@ class LLMService:
         estimation_outcomes = parsed.get("estimation_outcomes") or {}
         if not isinstance(estimation_outcomes, dict):
             estimation_outcomes = {}
-        # Ensure all values are strings
+        # Ensure all values are strings, then convert to BlockNote JSON for storage
         estimation_outcomes = {k: (v if isinstance(v, str) else str(v)) for k, v in estimation_outcomes.items()}
-        content = json.dumps(estimation_outcomes)
+        content = outcomes_dict_to_blocknote_json(estimation_outcomes)
         total_hours_val = parsed.get("total_hours")
         if total_hours_val is not None and isinstance(total_hours_val, (int, float)):
             total_hours_num = float(total_hours_val)

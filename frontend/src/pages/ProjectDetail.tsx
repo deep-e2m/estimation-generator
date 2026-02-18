@@ -18,6 +18,7 @@ import {
   Edit2,
   Clock,
   FileText,
+  CheckCircle2,
   Calendar,
   ListChecks,
 } from 'lucide-react';
@@ -64,11 +65,13 @@ export function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isQuoteLoading, setIsQuoteLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   // Description expand/collapse state
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const saveStatusResetTimeoutRef = useRef<number | null>(null);
 
   // Load project data
   useEffect(() => {
@@ -151,6 +154,23 @@ export function ProjectDetailPage() {
     [id, navigate, project, shouldAutoStartChat]
   );
 
+  // Handle save status changes coming from the estimation editor (autosave)
+  const handleSaveStatusChange = useCallback((status: 'idle' | 'saving' | 'saved') => {
+    setSaveStatus(status);
+
+    // When a save has just completed, briefly show the green tick before
+    // returning to the normal "x minutes ago" relative time.
+    if (status === 'saved') {
+      if (saveStatusResetTimeoutRef.current) {
+        window.clearTimeout(saveStatusResetTimeoutRef.current);
+      }
+      saveStatusResetTimeoutRef.current = window.setTimeout(() => {
+        setSaveStatus('idle');
+        saveStatusResetTimeoutRef.current = null;
+      }, 2000);
+    }
+  }, []);
+
   // Calculate stats: use API values first, then parse from quote content so cards stay in sync with the document
   const totalHoursFromApi = quote?.total_hours ?? quote?.content?.totals?.total_expected_hours ?? 0;
   const totalHoursParsed = parseTotalHoursFromContent(quote?.content ?? null);
@@ -164,6 +184,23 @@ export function ProjectDetailPage() {
 
   // Prepare stat cards data for EstimateChat (display hours as integer when whole number)
   const totalHoursDisplay = totalHours > 0 ? (Number.isInteger(totalHours) ? `${totalHours}h` : `${Math.round(totalHours)}h`) : '—';
+  const isSaving = saveStatus === 'saving';
+  const isSaved = saveStatus === 'saved';
+
+  const lastUpdatedLabel = isSaving
+    ? 'Syncing...'
+    : isSaved
+    ? 'Saved'
+    : formatRelativeTime(lastUpdated);
+
+  const lastUpdatedIcon = isSaving ? (
+    <Loader2 style={{ width: 14, height: 14, color: '#f97316' }} className="animate-spin" />
+  ) : isSaved ? (
+    <CheckCircle2 style={{ width: 14, height: 14, color: '#16a34a' }} />
+  ) : (
+    <FileText style={{ width: 14, height: 14 }} />
+  );
+
   const statCardsData = [
     {
       label: 'Total Hours',
@@ -180,8 +217,8 @@ export function ProjectDetailPage() {
     },
     {
       label: 'Last Updated',
-      value: formatRelativeTime(lastUpdated),
-      icon: <FileText style={{ width: 14, height: 14 }} />,
+      value: lastUpdatedLabel,
+      icon: lastUpdatedIcon,
       iconClass: 'updated',
     },
   ];
@@ -362,6 +399,7 @@ export function ProjectDetailPage() {
             project={project}
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
+            onSaveStatusChange={handleSaveStatusChange}
           />
         )}
       </div>

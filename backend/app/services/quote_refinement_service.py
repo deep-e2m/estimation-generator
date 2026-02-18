@@ -286,13 +286,13 @@ Rules:
         Flatten quote content for use in LLM prompts.
 
         Quote content may be stored as:
-        - estimation_outcomes JSON (dict of section keys to string values)
-        - markdown/plain text (legacy)
-        - HTML (from the Tiptap editor)
-        - JSON (e.g., BlockNote document)
+        - BlockNote JSON (array of blocks)
+        - markdown/plain text
+        - HTML (from the editor)
+        - legacy flat dict (key-value sections)
 
-        For estimation_outcomes we output "key: value" per section.
-        For other JSON we extract human-readable text segments.
+        For flat dict we output "key: value" per section.
+        For BlockNote/other JSON we extract human-readable text segments.
         """
         if not content:
             return content

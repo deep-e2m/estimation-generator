@@ -46,12 +46,15 @@ interface EstimationSplitViewProps {
     changes?: ChangeDescription[],
     updatedProject?: RefinedProjectUpdate | null
   ) => void;
+  /** Notify parent when inline editor is saving / has saved */
+  onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
 }
 
 export function EstimationSplitView({
   project,
   initialQuote,
   onQuoteUpdated,
+  onSaveStatusChange,
 }: EstimationSplitViewProps) {
   const navigate = useNavigate();
   const [currentQuote, setCurrentQuote] = useState<Quote>(initialQuote);
@@ -120,8 +123,13 @@ export function EstimationSplitView({
       if (onQuoteUpdated) {
         onQuoteUpdated(mergedQuote, [], undefined);
       }
+      // Inline editor finished saving; let parent show the "Saved" tick.
+      // The parent (ProjectDetailPage) is responsible for resetting back to "idle".
+      if (typeof onSaveStatusChange === 'function') {
+        onSaveStatusChange('saved');
+      }
     },
-    [currentQuote, onQuoteUpdated, project.id, project.name]
+    [currentQuote, onQuoteUpdated, onSaveStatusChange, project.id, project.name]
   );
 
   // Handle responsive layout
@@ -373,6 +381,7 @@ export function EstimationSplitView({
                   project={project}
                   recentChanges={recentChanges}
                   onQuoteSaved={handleQuoteSaved}
+                  onSaveStatusChange={onSaveStatusChange}
                 />
               </div>
             </div>
@@ -467,29 +476,6 @@ export function EstimationSplitView({
                   <Download className="h-5 w-5 text-gray-400" />
                 </button>
 
-                <button
-                  type="button"
-                  className="estimation-export-option"
-                  onClick={() => {
-                    const data = JSON.stringify(currentQuote, null, 2);
-                    const blob = new Blob([data], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `estimate-${currentQuote.id}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  <div className="estimation-export-icon json">
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <div className="estimation-export-info">
-                    <h4>Export as JSON</h4>
-                    <p>Raw data for integration or backup</p>
-                  </div>
-                  <Download className="h-5 w-5 text-gray-400" />
-                </button>
               </div>
 
               <div className="estimation-export-preview">
@@ -534,6 +520,7 @@ export function EstimationSplitView({
                   project={project}
                   recentChanges={recentChanges}
                   onQuoteSaved={handleQuoteSaved}
+                  onSaveStatusChange={onSaveStatusChange}
                 />
               </motion.div>
             )}

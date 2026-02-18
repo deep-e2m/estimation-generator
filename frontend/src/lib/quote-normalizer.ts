@@ -3,7 +3,8 @@
  * Backend sends content as markdown string; frontend UI expects QuoteContent (or renderable markdown).
  */
 
-import type { Quote, QuoteContent, QuoteSummary, Deliverable, EstimationOutcomes } from '@/types';
+import { estimationOutcomesToBlockNoteBlocks } from '@/lib/estimation-outcomes-to-blocks';
+import type { Quote, QuoteContent, QuoteSummary, Deliverable } from '@/types';
 
 /** Backend quote response shape (content and requirements are strings) */
 export interface ApiQuote {
@@ -149,21 +150,21 @@ function buildContent(api: ApiQuote): QuoteContent {
     };
   }
 
-  // Structured estimation output: JSON object with section keys and string values
-  let estimation_outcomes: EstimationOutcomes | undefined;
+  // Content: BlockNote JSON (array), legacy key-value (object with string values), or plain text
   let executive_summary = api.content;
   try {
     const parsed = JSON.parse(api.content) as unknown;
-    if (
+    if (Array.isArray(parsed)) {
+      // BlockNote document – use as-is
+      executive_summary = api.content;
+    } else if (
       typeof parsed === 'object' &&
       parsed !== null &&
-      !Array.isArray(parsed) &&
       Object.values(parsed).every((v) => typeof v === 'string')
     ) {
-      estimation_outcomes = parsed as EstimationOutcomes;
-      executive_summary = Object.entries(estimation_outcomes)
-        .map(([k, v]) => `${k}:\n${(v || '').trim()}`)
-        .join('\n\n');
+      // Legacy key-value: convert to BlockNote JSON so editor and preview use same format
+      const blocks = estimationOutcomesToBlockNoteBlocks(parsed as Record<string, string>);
+      executive_summary = blocks.length > 0 ? JSON.stringify(blocks) : api.content;
     }
   } catch {
     // Not JSON, use api.content as executive_summary
@@ -171,7 +172,6 @@ function buildContent(api: ApiQuote): QuoteContent {
 
   return {
     ...emptyQuoteContent,
-    ...(estimation_outcomes && { estimation_outcomes }),
     executive_summary,
     deliverables,
     assumptions,

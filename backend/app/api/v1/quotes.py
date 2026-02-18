@@ -49,6 +49,7 @@ from app.schemas.quote import (
 from app.services.ai.knowledge_service import get_knowledge_service
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
+from app.services.blocknote import blocknote_json_to_html, is_blocknote_json
 from app.services.export.html_utils import is_html_content, sanitize_html
 from app.services.quote_refinement_service import get_refinement_service
 from app.services.structured_quote_service import build_structured_content
@@ -1167,10 +1168,9 @@ def _flatten_quote_content_for_ai(content: str) -> str:
     """
     Flatten quote content for use in AI refinement/regeneration.
 
-    - If content is estimation_outcomes JSON (dict of string values), flatten to
-      "key: value" lines so the LLM sees readable text.
-    - If content is other JSON (e.g., BlockNote document), extract human-
-      readable text segments and join them.
+    - If content is BlockNote JSON (array of blocks), extract human-readable
+      text from block content and join them.
+    - If content is a flat dict (e.g. legacy key-value), flatten to "key: value" lines.
     - Otherwise return content as-is (markdown/plain/HTML).
     """
     if not content:
@@ -1181,34 +1181,35 @@ def _flatten_quote_content_for_ai(content: str) -> str:
     except (TypeError, ValueError):
         return content
 
+    def _walk(node: Any, out: list[str]) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if isinstance(value, str) and key in {"text", "content", "title"}:
+                    if value.strip():
+                        out.append(value.strip())
+                else:
+                    _walk(value, out)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item, out)
+
+    if isinstance(parsed, list):
+        # BlockNote document: extract text from blocks
+        texts: list[str] = []
+        _walk(parsed, texts)
+        if texts:
+            return "\n\n".join(texts)
+        return content
+
     if isinstance(parsed, dict):
-        # Estimation outcomes: all string values, keys are section ids
+        # Flat dict (legacy): flatten to "key: value" for LLM
         if parsed and all(isinstance(v, str) for v in parsed.values()):
             parts = [f"{k}:\n{v.strip()}" for k, v in parsed.items() if (v or "").strip()]
             if parts:
-                flattened = "\n\n".join(parts)
-                logger.debug(
-                    "Flattened estimation_outcomes for AI (keys=%d)",
-                    len(parsed),
-                )
-                return flattened
-        # BlockNote or other nested JSON: walk for text/content/title
-        texts: list[str] = []
-
-        def _walk(node: Any) -> None:
-            if isinstance(node, dict):
-                for key, value in node.items():
-                    if isinstance(value, str) and key in {"text", "content", "title"}:
-                        stripped = value.strip()
-                        if stripped:
-                            texts.append(stripped)
-                    else:
-                        _walk(value)
-            elif isinstance(node, list):
-                for item in node:
-                    _walk(item)
-
-        _walk(parsed)
+                return "\n\n".join(parts)
+        # Nested JSON: walk for text/content/title
+        texts = []
+        _walk(parsed, texts)
         if texts:
             return "\n\n".join(texts)
 
@@ -1704,13 +1705,19 @@ async def export_quote_docx(
     assumptions = metadata.get("assumptions", [])
     exclusions = metadata.get("exclusions", [])
 
+    # Convert BlockNote JSON to HTML for DOCX; otherwise pass content as-is
+    content_for_export = (
+        blocknote_json_to_html(quote.content)
+        if quote.content and is_blocknote_json(quote.content)
+        else (quote.content or "")
+    )
     # "Prepared for" uses project name only (client_name removed from system)
     export_data = QuoteExportData(
         title=quote.title,
         client_name=project.name,
         project_name=project.name,
         requirements=quote.requirements,
-        content=quote.content,
+        content=content_for_export,
         total_hours=quote.total_hours,
         platform=quote.platform,
         complexity=quote.complexity.value,
@@ -1841,7 +1848,9 @@ async def export_quote_pdf(
 
     # Determine body HTML (ensure str: content is Text but can be None in edge cases)
     raw_content = str(quote.content) if quote.content is not None else ""
-    if is_html_content(raw_content):
+    if is_blocknote_json(raw_content):
+        body_html = blocknote_json_to_html(raw_content)
+    elif is_html_content(raw_content):
         body_html = raw_content
     else:
         # Simple markdown/plain-text to HTML: paragraphs split by blank lines
@@ -1863,12 +1872,6 @@ async def export_quote_pdf(
 
     # Build HTML in two parts so body_html is never inside an f-string (user content
     # can contain { or } which would be interpreted as f-string expressions and cause 500).
-    meta_extra = ""
-    if prepared_for_escaped:
-        meta_extra += "&nbsp; &nbsp; <strong>Prepared for:</strong> " + prepared_for_escaped
-    if prepared_by_escaped:
-        meta_extra += "&nbsp; &nbsp; <strong>Prepared by:</strong> " + prepared_by_escaped
-
     html_header = f"""
 <!DOCTYPE html>
 <html>
@@ -1878,100 +1881,288 @@ async def export_quote_pdf(
     <style>
       @page {{
         margin: 1in;
+        size: A4;
+      }}
+      * {{
+        box-sizing: border-box;
       }}
       body {{
         font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-        color: #333333;
+        color: #334155;
+        font-size: 14px;
+        line-height: 1.75;
+        margin: 0;
+        padding: 0;
+      }}
+
+      /* ── Document header: mirrors .doc-header ── */
+      .doc-header {{
+        text-align: center;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 3px solid #0f172a;
+      }}
+      .doc-title {{
+        font-size: 28px;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0 0 16px 0;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }}
+
+      /* ── Metadata row: mirrors .doc-metadata ── */
+      .doc-metadata {{
+        display: table;
+        width: 100%;
+        border-collapse: collapse;
+      }}
+      .doc-metadata-item {{
+        display: table-cell;
+        text-align: center;
+        padding: 0 16px;
+        vertical-align: top;
+      }}
+      .doc-metadata-item + .doc-metadata-item {{
+        border-left: 1px solid #e2e8f0;
+      }}
+      .doc-metadata-label {{
+        display: block;
+        font-size: 10px;
+        font-weight: 500;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }}
+      .doc-metadata-value {{
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f172a;
+      }}
+
+      /* ── Content body: mirrors .doc-editor-preview / inline-editor.css ── */
+      .doc-body {{
+        padding-top: 16px;
+      }}
+
+      /* Headings */
+      h1 {{
+        font-size: 22px;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 28px 0 14px 0;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #cbd5e1;
+        line-height: 1.3;
+      }}
+      h1:first-child {{
+        margin-top: 0;
+      }}
+      h2 {{
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 24px 0 10px 0;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #3b82f6;
+        line-height: 1.35;
+      }}
+      h3 {{
+        font-size: 15px;
+        font-weight: 600;
+        color: #1e293b;
+        margin: 18px 0 8px 0;
+        padding-left: 10px;
+        border-left: 3px solid #60a5fa;
+        line-height: 1.4;
+      }}
+      h4, h5, h6 {{
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin: 14px 0 6px 0;
+      }}
+
+      /* Paragraphs */
+      p {{
+        font-size: 14px;
+        line-height: 1.75;
+        color: #334155;
+        margin: 0 0 12px 0;
+      }}
+
+      /* Unordered lists — blue circle bullets matching inline-editor.css */
+      ul {{
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 16px 0;
+      }}
+      ul li {{
+        position: relative;
+        padding-left: 22px;
+        margin: 6px 0;
+        font-size: 14px;
+        line-height: 1.65;
+        color: #334155;
+      }}
+      ul li::before {{
+        content: "";
+        position: absolute;
+        left: 6px;
+        top: 8px;
+        width: 6px;
+        height: 6px;
+        background: #2563eb;
+        border-radius: 50%;
+      }}
+      ul li p {{
+        margin: 0;
+      }}
+      ul li strong {{
+        color: #1e293b;
+      }}
+      /* Nested lists */
+      ul ul {{
+        margin-top: 4px;
+        margin-bottom: 4px;
+      }}
+      ul ul li::before {{
+        background: #60a5fa;
+        width: 5px;
+        height: 5px;
+      }}
+
+      /* Ordered lists */
+      ol {{
+        list-style-type: decimal;
+        padding-left: 26px;
+        margin: 8px 0 16px 0;
+      }}
+      ol li {{
+        font-size: 13px;
+        line-height: 1.65;
+        color: #334155;
+      }}
+      ol li p {{
+        margin: 0;
+      }}
+
+      /* Inline formatting */
+      strong, b {{
+        font-weight: 600;
+        color: #0f172a;
+      }}
+      em, i {{
+        font-style: italic;
+      }}
+      u {{
+        text-decoration: underline;
+      }}
+      s, del {{
+        text-decoration: line-through;
+        color: #64748b;
+      }}
+      code {{
+        background-color: #f1f5f9;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 12px;
+        color: #0f172a;
+      }}
+      pre {{
+        background-color: #0f172a;
+        color: #e2e8f0;
+        padding: 14px 16px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 14px 0;
         font-size: 12px;
         line-height: 1.5;
       }}
-      .header {{
-        border-bottom: 2px solid #005293;
-        padding-bottom: 8px;
-        margin-bottom: 18px;
+      pre code {{
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        color: inherit;
       }}
-      .company-name {{
-        font-size: 20px;
-        font-weight: 700;
-        color: #005293;
-        margin: 0;
+
+      /* Blockquote */
+      blockquote {{
+        margin: 14px 0;
+        padding: 10px 18px;
+        border-left: 4px solid #60a5fa;
+        background: #f8fafc;
+        color: #475569;
+        font-style: italic;
       }}
-      .company-tagline {{
-        font-size: 11px;
-        color: #2980b9;
-        margin: 2px 0 0 0;
+      blockquote p {{
+        margin-bottom: 6px;
       }}
-      .meta {{
-        margin-top: 8px;
-        font-size: 11px;
-        color: #555;
+      blockquote p:last-child {{
+        margin-bottom: 0;
       }}
-      .title {{
-        font-size: 20px;
-        font-weight: 600;
-        margin: 12px 0 4px 0;
-      }}
-      .subtitle {{
-        font-size: 14px;
-        color: #555;
-        margin: 0 0 12px 0;
-      }}
-      h1, h2, h3 {{
-        color: #005293;
-        margin-top: 18px;
-        margin-bottom: 8px;
-      }}
-      h1 {{
-        font-size: 18px;
-      }}
-      h2 {{
-        font-size: 15px;
-      }}
-      h3 {{
-        font-size: 13px;
-      }}
-      p {{
-        margin: 4px 0 8px 0;
-      }}
-      ul, ol {{
-        margin: 4px 0 8px 1.2em;
-      }}
+
+      /* Tables */
       table {{
         border-collapse: collapse;
         width: 100%;
-        margin: 8px 0 12px 0;
-        font-size: 11px;
+        margin: 14px 0 20px 0;
       }}
       th, td {{
-        border: 1px solid #ddd;
-        padding: 4px 6px;
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 13px;
       }}
       th {{
-        background-color: #005293;
-        color: #ffffff;
+        background-color: #f8fafc;
         font-weight: 600;
-        text-align: left;
+        color: #0f172a;
+      }}
+      tr:nth-child(even) td {{
+        background-color: #f8fafc;
+      }}
+
+      /* Horizontal rule */
+      hr {{
+        border: none;
+        height: 1px;
+        background: #e2e8f0;
+        margin: 20px 0;
+      }}
+
+      /* Links */
+      a {{
+        color: #2563eb;
+        text-decoration: underline;
       }}
     </style>
   </head>
   <body>
-    <div class="header">
-      <p class="company-name">E2M Solutions</p>
-      <p class="company-tagline">Digital Excellence Delivered</p>
-      <p class="meta">
-        <strong>Date:</strong> {created_str}
-        {meta_extra}
-      </p>
+    <div class="doc-header">
+      <h1 class="doc-title">Proposal for {prepared_for_escaped}</h1>
+      <div class="doc-metadata">
+        <div class="doc-metadata-item">
+          <span class="doc-metadata-label">Prepared for</span>
+          <span class="doc-metadata-value">{prepared_for_escaped}</span>
+        </div>
+        <div class="doc-metadata-item">
+          <span class="doc-metadata-label">Date</span>
+          <span class="doc-metadata-value">{created_str}</span>
+        </div>
+        <div class="doc-metadata-item">
+          <span class="doc-metadata-label">Prepared by</span>
+          <span class="doc-metadata-value">{prepared_by_escaped}</span>
+        </div>
+      </div>
     </div>
 
-    <div>
-      <p class="title">Project Proposal</p>
-      <p class="subtitle">{title_escaped}</p>
-    </div>
-
-    <h1>Executive Summary & Scope</h1>
+    <div class="doc-body">
 """
-    html_string = (html_header.strip() + "\n" + body_html + "\n  </body>\n</html>")
+    html_string = (html_header.strip() + "\n" + body_html + "\n    </div>\n  </body>\n</html>")
 
     try:
         pdf_bytes = HTML(string=html_string).write_pdf()
