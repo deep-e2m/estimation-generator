@@ -12,7 +12,10 @@
 
 import React from 'react';
 import { MarkdownBody } from '@/components/common/MarkdownBody';
-import { ensureEstimatedEffortSection } from '@/lib/quote-document-utils';
+import {
+  ensureEstimatedEffortSection,
+  ensureEstimatedEffortSectionHtml,
+} from '@/lib/quote-document-utils';
 import { isHtmlContent } from '@/lib/quote-to-html';
 import type { Quote } from '@/types';
 
@@ -81,12 +84,14 @@ export function QuoteDocument({ quote }: QuoteDocumentProps) {
     Number(quote.total_hours ?? 0) ||
     0;
 
-  // For markdown bodies, inject fallback "Estimated Effort & Timeline" copy
-  // when that section is present but empty. For HTML bodies we now respect the
-  // original layout entirely and do NOT auto-inject any extra sections, to
-  // avoid disturbing carefully formatted estimate documents.
-  if (!bodyIsHtml) {
-    body = ensureEstimatedEffortSection(body, totalHours);
+  // When "Estimated Effort & Timeline" exists but is empty, inject fallback
+  // so the document shows total hours and timeline (top bar already shows total).
+  if (totalHours > 0) {
+    if (bodyIsHtml) {
+      body = ensureEstimatedEffortSectionHtml(body, totalHours);
+    } else {
+      body = ensureEstimatedEffortSection(body, totalHours);
+    }
   }
 
   return (
