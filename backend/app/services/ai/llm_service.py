@@ -18,6 +18,7 @@ from app.services.ai.openrouter_client import (
 from app.services.ai.prompts import (
     build_chat_response_prompt,
     build_clarification_prompt,
+    build_content_quality_prompt,
     build_quote_generation_prompt,
     build_quote_generation_prompt_json,
     build_quote_refinement_prompt,
@@ -528,6 +529,80 @@ class LLMService:
 
         logger.debug("Generated %d clarification questions", len(questions))
         return questions
+
+    async def check_content_quality(
+        self,
+        project_name: str,
+        description: str,
+        additional_instructions: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Check if project name, description, and optional additional instructions
+        are sufficient for accurate estimation (detect gibberish, too short, vague).
+
+        Args:
+            project_name: Project name.
+            description: Project description (used as requirements for quote).
+            additional_instructions: Optional extra instructions.
+
+        Returns:
+            Dict with: overall_sufficient (bool), score (int 0-100), feedback (dict
+            with project_name, description, additional_instructions as list[str]),
+            suggested_improvements (str).
+        """
+        logger.debug("Checking content quality: name_len=%d, desc_len=%d", len(project_name or ""), len(description or ""))
+
+        messages = build_content_quality_prompt(
+            project_name=project_name or "",
+            description=description or "",
+            additional_instructions=additional_instructions or None,
+        )
+
+        response = await self.client.chat_completion(
+            messages=messages,
+            model="fast",
+            temperature=0.2,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+        )
+
+        try:
+            parsed = json.loads(response.content)
+        except (TypeError, ValueError) as e:
+            logger.warning("Content quality response was not valid JSON: %s", e)
+            return {
+                "overall_sufficient": len((description or "").strip()) >= 50,
+                "score": 50,
+                "feedback": {
+                    "project_name": [],
+                    "description": ["Unable to verify content quality. Please add a clear description."],
+                    "additional_instructions": [],
+                },
+                "suggested_improvements": "Add a few sentences describing your project goals, pages, or features.",
+            }
+
+        overall_sufficient = bool(parsed.get("overall_sufficient", False))
+        score = int(parsed.get("score", 0))
+        if not (0 <= score <= 100):
+            score = max(0, min(100, score))
+        feedback = parsed.get("feedback") or {}
+        if not isinstance(feedback, dict):
+            feedback = {}
+        for key in ("project_name", "description", "additional_instructions"):
+            if key not in feedback:
+                feedback[key] = []
+            elif not isinstance(feedback[key], list):
+                feedback[key] = [str(feedback[key])] if feedback[key] else []
+            else:
+                feedback[key] = [str(x) for x in feedback[key]]
+        suggested_improvements = str(parsed.get("suggested_improvements") or "").strip()
+
+        return {
+            "overall_sufficient": overall_sufficient,
+            "score": score,
+            "feedback": feedback,
+            "suggested_improvements": suggested_improvements,
+        }
 
     async def refine_quote(
         self,

@@ -497,16 +497,13 @@ Please format the quote according to this template. Replace [Client Name] with "
 - Timeline (Section 7): Must be accurate and consistent with total hours. Use the unit that fits (e.g. business days for short efforts, weeks for longer). If the requirements state a timeline or duration, use it. Otherwise derive from total hours and realistic delivery. Timeline is critical for the client.
 """
     else:
-        # Use project name for the prepared_for field
-        prepared_for = project_name if project_name else "Client"
-
+        # Prepared for / project name is shown in the document header only; do not repeat in body.
         user_content += f"""
 # OUTPUT FORMAT: E2M Standard Estimation Format
 Structure your quote EXACTLY as follows using plain text (no markdown tables, no emojis):
 
 ---
 
-Prepared for: {prepared_for}
 Prepared by: E2M Solutions
 Date: {current_date}
 Website Development Scope & Commercial Estimate
@@ -673,9 +670,9 @@ If any answer is NO, revise your response before submitting.
     return messages
 
 
-# Keys for structured estimation output (key-value per section)
+# Keys for structured estimation output (key-value per section).
+# prepared_for is omitted: it is the project name and shown in the document header only.
 ESTIMATION_JSON_KEYS = [
-    "prepared_for",
     "project_overview",
     "website_structure",
     "development_approach",
@@ -754,7 +751,6 @@ You MUST respond with a single JSON object (no markdown, no code fence) with thi
 
 {{
   "estimation_outcomes": {{
-    "prepared_for": "Client Name or Client",
     "project_overview": "2-4 sentence summary of the project, key features, and goal.",
     "website_structure": "Full section 2 content: Website Structure & Page Scope (list pages, features, blog, etc.).",
     "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA.",
@@ -767,7 +763,8 @@ You MUST respond with a single JSON object (no markdown, no code fence) with thi
 
 Rules:
 - Every key in estimation_outcomes must be present; use empty string "" if a section does not apply.
-- Use plain text inside each value (no markdown tables, no emojis). Use newlines for lists.
+- Use plain text inside each value (no markdown tables, no emojis).
+- Structure each value for readability: separate paragraphs with a blank line. For lists, put each item on its own line and start the line with "- " (e.g. "- Item one"). Do not put multiple list items on the same line.
 - total_hours must be a number (e.g. 120 or 150). Derive from your estimate (use the midpoint of your range if you think in ranges).
 - Be specific with hours (tight ranges in the text like "180–200 hours").
 """
@@ -952,6 +949,74 @@ Focus on questions that will most reduce estimation uncertainty."""
 
     messages.append({"role": "user", "content": user_content})
 
+    return messages
+
+
+def build_content_quality_prompt(
+    project_name: str,
+    description: str,
+    additional_instructions: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build prompt for checking project content quality (name, description, additional inputs).
+
+    Used at project creation to detect vague, gibberish, or insufficient input
+    so the user can improve it before generating estimates.
+
+    Returns:
+        List of message dicts. LLM must respond with JSON: overall_sufficient (bool),
+        score (0-100), feedback (dict with project_name, description, additional_instructions
+        as list of strings), suggested_improvements (string).
+    """
+    messages: List[Dict[str, str]] = []
+
+    system_content = """You are an expert at assessing whether project briefs contain enough information for accurate software estimates.
+
+Your task: evaluate the project name, description, and optional additional instructions. Decide if this content is SUFFICIENT for an estimator to produce an accurate quote.
+
+Consider:
+1. **Project name**: Is it meaningful (e.g. "Acme Corp website") or unclear/gibberish (e.g. "gfnx", "asdf")? Very short or random strings are insufficient.
+2. **Description**: This is the main "requirements" for the estimate. It must describe scope: pages, features, goals, or at least a clear purpose. Single characters, placeholder text ("weghfsgnnnfnbfbn"), or fewer than ~20 meaningful words are insufficient. Vague one-liners ("a website") are low quality.
+3. **Additional instructions** (if provided): Should add useful context; if present but nonsensical, note it.
+
+Output ONLY valid JSON with this exact structure (no markdown, no code fence):
+{
+  "overall_sufficient": true or false,
+  "score": number from 0 to 100,
+  "feedback": {
+    "project_name": ["list of short improvement messages or empty []"],
+    "description": ["list of short improvement messages or empty []"],
+    "additional_instructions": ["list of short improvement messages or empty []"]
+  },
+  "suggested_improvements": "One or two sentences telling the user how to improve the content for better estimates."
+}
+
+- overall_sufficient: true only if both name and description are meaningful and description gives real scope (pages, features, or clear goal). Otherwise false.
+- score: 0-100. 0-30 = gibberish/placeholder/too short; 31-60 = vague but readable; 61-100 = sufficient for estimation.
+- feedback: per-field list of short, actionable messages (e.g. "Description is too short; add pages or features."). Empty list if that field is fine.
+- suggested_improvements: single string, user-facing. Empty string if overall_sufficient is true."""
+
+    messages.append({"role": "system", "content": system_content})
+
+    desc_block = description.strip() if description else "(empty)"
+    extra_block = (additional_instructions or "").strip()
+    if not extra_block:
+        extra_block = "(none provided)"
+
+    user_content = f"""Evaluate this project content for estimation quality.
+
+## Project name
+{project_name or "(empty)"}
+
+## Description (used as requirements for the estimate)
+{desc_block}
+
+## Additional instructions
+{extra_block}
+
+Respond with a single JSON object only (no other text). Keys: overall_sufficient, score, feedback (object with project_name, description, additional_instructions arrays), suggested_improvements (string)."""
+
+    messages.append({"role": "user", "content": user_content})
     return messages
 
 

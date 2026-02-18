@@ -7,8 +7,8 @@ render one block per key and update sections independently.
 """
 
 # Keys for the estimation document. Order is display order.
+# prepared_for omitted: project name is shown in document header only, not in body.
 ESTIMATION_OUTCOMES_KEYS = [
-    "prepared_for",
     "project_overview",
     "website_structure",
     "development_approach",
@@ -19,7 +19,6 @@ ESTIMATION_OUTCOMES_KEYS = [
 
 # Human-readable labels for editor display (optional; frontend can derive from key)
 ESTIMATION_OUTCOMES_LABELS = {
-    "prepared_for": "Prepared for",
     "project_overview": "Project Overview",
     "website_structure": "Website Structure & Page Scope",
     "development_approach": "Development Approach",

@@ -226,3 +226,73 @@ class ProjectDeleteResponse(APIResponse):
         default={"message": "Project deleted successfully"},
         description="Deletion confirmation",
     )
+
+
+# =============================================================================
+# Content Quality Check (pre-project creation)
+# =============================================================================
+
+
+class CheckContentQualityRequest(BaseModel):
+    """Request body for checking project content quality before creation."""
+
+    project_name: str = Field(
+        ...,
+        min_length=0,
+        max_length=500,
+        description="Project name",
+    )
+    description: str = Field(
+        ...,
+        min_length=0,
+        max_length=50000,
+        description="Project description (used as requirements for estimate)",
+    )
+    additional_instructions: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="Optional additional instructions",
+    )
+
+
+class ContentQualityFeedback(BaseModel):
+    """Per-field feedback from content quality check."""
+
+    project_name: list[str] = Field(default_factory=list, description="Messages for project name")
+    description: list[str] = Field(default_factory=list, description="Messages for description")
+    additional_instructions: list[str] = Field(
+        default_factory=list,
+        description="Messages for additional instructions",
+    )
+
+
+class CheckContentQualityData(BaseModel):
+    """Response data for content quality check."""
+
+    overall_sufficient: bool = Field(
+        ...,
+        description="Whether the content is sufficient for accurate estimation",
+    )
+    score: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Quality score 0-100",
+    )
+    feedback: ContentQualityFeedback = Field(
+        ...,
+        description="Per-field improvement messages",
+    )
+    suggested_improvements: str = Field(
+        default="",
+        description="User-facing suggestion on how to improve",
+    )
+
+
+class CheckContentQualityResponse(APIResponse):
+    """Response schema for check-content-quality endpoint."""
+
+    data: CheckContentQualityData = Field(
+        ...,
+        description="Content quality result",
+    )

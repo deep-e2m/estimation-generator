@@ -2,7 +2,7 @@
 Project API endpoints.
 
 This module provides endpoints for project management including
-CRUD operations and listing with pagination.
+CRUD operations, listing with pagination, and content quality check.
 """
 
 import logging
@@ -10,7 +10,7 @@ from math import ceil
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +19,10 @@ from app.models.client import Client
 from app.models.project import Platform, Project, ProjectStatus
 from app.models.quote import Quote
 from app.schemas.project import (
+    CheckContentQualityData,
+    CheckContentQualityRequest,
+    CheckContentQualityResponse,
+    ContentQualityFeedback,
     PaginationMeta,
     ProjectCreate,
     ProjectDataResponse,
@@ -31,10 +35,63 @@ from app.schemas.project import (
     ProjectResponse,
     ProjectUpdate,
 )
+from app.services.ai.llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post(
+    "/check-content-quality",
+    response_model=CheckContentQualityResponse,
+    summary="Check project content quality",
+    description="Evaluates project name, description, and optional additional instructions for estimation readiness. Use before creating a project to warn when content is vague, gibberish, or too short.",
+    responses={
+        200: {"description": "Content quality result"},
+        401: {"description": "Not authenticated"},
+        500: {"description": "Quality check failed"},
+    },
+)
+async def check_content_quality(
+    request: CheckContentQualityRequest,
+    current_user: ActiveUser,
+) -> CheckContentQualityResponse:
+    """
+    Run AI check on project name, description, and additional instructions.
+
+    Returns overall_sufficient, score (0-100), per-field feedback, and
+    suggested_improvements. No project is created; this is for validation only.
+    """
+    try:
+        llm_service = get_llm_service()
+        result = await llm_service.check_content_quality(
+            project_name=request.project_name,
+            description=request.description,
+            additional_instructions=request.additional_instructions,
+        )
+    except Exception as e:
+        logger.exception("Content quality check failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "CONTENT_QUALITY_CHECK_FAILED",
+                "message": "Unable to check content quality. Please try again.",
+            },
+        ) from e
+
+    feedback = ContentQualityFeedback(
+        project_name=result.get("feedback", {}).get("project_name", []),
+        description=result.get("feedback", {}).get("description", []),
+        additional_instructions=result.get("feedback", {}).get("additional_instructions", []),
+    )
+    data = CheckContentQualityData(
+        overall_sufficient=result.get("overall_sufficient", False),
+        score=result.get("score", 0),
+        feedback=feedback,
+        suggested_improvements=result.get("suggested_improvements", ""),
+    )
+    return CheckContentQualityResponse(success=True, data=data)
 
 
 @router.post(

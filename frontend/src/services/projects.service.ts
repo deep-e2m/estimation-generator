@@ -3,7 +3,7 @@
  * Handles all project-related API calls
  */
 
-import { apiClient } from './api';
+import { apiClient, LONG_REQUEST_TIMEOUT_MS } from './api';
 import type {
   ApiResponse,
   Project,
@@ -11,6 +11,8 @@ import type {
   ProjectUpdate,
   ProjectListResponse,
   ProjectFilters,
+  CheckContentQualityRequest,
+  CheckContentQualityResponse,
 } from '@/types';
 
 // Build query params from filters (page-based pagination)
@@ -54,6 +56,21 @@ export const projectsService = {
   get: async (projectId: string): Promise<Project> => {
     const response = await apiClient.get<ApiResponse<Project>>(
       `/api/v1/projects/${projectId}`
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Check project content quality (name, description, additional instructions)
+   * before creation. Returns whether content is sufficient for estimation and per-field feedback.
+   */
+  checkContentQuality: async (
+    data: CheckContentQualityRequest
+  ): Promise<CheckContentQualityResponse['data']> => {
+    const response = await apiClient.post<ApiResponse<CheckContentQualityResponse['data']>>(
+      '/api/v1/projects/check-content-quality',
+      data,
+      { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
     return response.data.data;
   },

@@ -23,7 +23,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { EstimationGenerationUI } from '@/components/estimate'
-import type { ProjectCreate, Project, Quote } from '@/types'
+import type {
+  ProjectCreate,
+  Project,
+  Quote,
+  CheckContentQualityData,
+} from '@/types'
 
 // Platform type
 type Platform = 'wordpress'
@@ -86,7 +91,11 @@ export function NewProjectPage() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  
+
+  // Content quality check (AI) – show warning when content is vague/gibberish
+  const [qualityResult, setQualityResult] = useState<CheckContentQualityData | null>(null)
+  const [isCheckingQuality, setIsCheckingQuality] = useState(false)
+
   // Estimation generation state
   const [createdProject, setCreatedProject] = useState<Project | null>(null)
   const [showEstimationUI, setShowEstimationUI] = useState(false)
@@ -159,7 +168,27 @@ export function NewProjectPage() {
     }))
   }, [])
 
-  // Handle form submission
+  // Create project (shared logic after quality check or "submit anyway")
+  const createProjectAndContinue = useCallback(async () => {
+    const projectData: ProjectCreate = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      platform: formData.platform,
+      ...(formData.additionalInputs.trim() ? { additional_instructions: formData.additionalInputs.trim() } : {}),
+    }
+    const project = await projectsService.create(projectData)
+    if (formData.files.length > 0) {
+      localStorage.setItem(
+        `project_${project.id}_pending_files`,
+        JSON.stringify(formData.files.map((f) => f.name))
+      )
+    }
+    setCreatedProject(project)
+    setShowEstimationUI(true)
+    setQualityResult(null)
+  }, [formData])
+
+  // Handle form submission: run quality check first, then create if sufficient
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
@@ -167,38 +196,68 @@ export function NewProjectPage() {
       if (!validateForm()) return
 
       try {
-        setIsSubmitting(true)
+        setIsCheckingQuality(true)
         setSubmitError(null)
+        setQualityResult(null)
 
-        const projectData: ProjectCreate = {
-          name: formData.name.trim(),
+        const quality = await projectsService.checkContentQuality({
+          project_name: formData.name.trim(),
           description: formData.description.trim(),
-          platform: formData.platform,
-          ...(formData.additionalInputs.trim() ? { additional_instructions: formData.additionalInputs.trim() } : {}),
+          additional_instructions: formData.additionalInputs.trim() || undefined,
+        })
+
+        if (quality.overall_sufficient) {
+          setIsSubmitting(true)
+          await createProjectAndContinue()
+        } else {
+          setQualityResult(quality)
         }
-
-        const project = await projectsService.create(projectData)
-
-        // Store file references for later upload
-        if (formData.files.length > 0) {
-          localStorage.setItem(
-            `project_${project.id}_pending_files`,
-            JSON.stringify(formData.files.map((f) => f.name))
-          )
-        }
-
-        // Show estimation generation UI
-        setCreatedProject(project)
-        setShowEstimationUI(true)
       } catch (err) {
-        setSubmitError('Failed to create project. Please try again.')
-        console.error('Failed to create project:', err)
+        setSubmitError(null)
+        const isTimeout =
+          (err as { code?: string; message?: string })?.code === 'ECONNABORTED' ||
+          /timeout/i.test(String((err as { message?: string })?.message ?? ''))
+        const reason = isTimeout
+          ? 'The check took too long (request timed out). Your content may be fine—create the project anyway or try again.'
+          : 'The quality check could not be completed. You can create the project anyway or try again.'
+        setQualityResult({
+          overall_sufficient: false,
+          score: 0,
+          feedback: {
+            project_name: [],
+            description: [reason],
+            additional_instructions: [],
+          },
+          suggested_improvements: isTimeout
+            ? 'The server took too long to respond. This is usually temporary. You can create the project anyway; your description (cart page, payment page, home page) is sufficient for an estimate.'
+            : 'The quality check could not be completed. You can create the project anyway or fix any issues and try again.',
+        })
+        console.error('Content quality check failed:', err)
       } finally {
+        setIsCheckingQuality(false)
         setIsSubmitting(false)
       }
     },
-    [formData, validateForm]
+    [formData, validateForm, createProjectAndContinue]
   )
+
+  const dismissQualityWarning = useCallback(() => {
+    setQualityResult(null)
+  }, [])
+
+  const handleCreateAnyway = useCallback(async () => {
+    if (!validateForm()) return
+    try {
+      setIsSubmitting(true)
+      setSubmitError(null)
+      await createProjectAndContinue()
+    } catch (err) {
+      setSubmitError('Failed to create project. Please try again.')
+      console.error('Failed to create project:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [formData, validateForm, createProjectAndContinue])
 
   // Handle estimation complete
   const handleEstimationComplete = useCallback(
@@ -301,6 +360,50 @@ export function NewProjectPage() {
             </div>
           )}
 
+          {/* Content quality warning (AI detected vague/gibberish input, or check failed/timed out) */}
+          {qualityResult && !qualityResult.overall_sufficient && (
+            <div className="new-project-quality-warning" role="alert">
+              <div className="new-project-quality-warning-header">
+                <AlertCircle style={{ width: 20, height: 20, flexShrink: 0 }} />
+                <span>
+                  {qualityResult.suggested_improvements?.toLowerCase().includes('took too long') ||
+                  qualityResult.suggested_improvements?.toLowerCase().includes('timed out')
+                    ? 'Quality check timed out'
+                    : 'Content may be too vague for an accurate estimate'}
+                </span>
+              </div>
+              {qualityResult.score > 0 && (
+                <p className="new-project-quality-warning-score">
+                  Quality score: {qualityResult.score}/100
+                </p>
+              )}
+              {qualityResult.suggested_improvements && (
+                <p className="new-project-quality-warning-suggestion">
+                  {qualityResult.suggested_improvements}
+                </p>
+              )}
+              <div className="new-project-quality-warning-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={dismissQualityWarning}
+                  disabled={isSubmitting}
+                >
+                  Improve content
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={handleCreateAnyway}
+                  disabled={isSubmitting}
+                  isLoading={isSubmitting}
+                >
+                  Create project anyway
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="new-project-form">
             {/* Project Name */}
@@ -312,9 +415,14 @@ export function NewProjectPage() {
                 value={formData.name}
                 onChange={handleChange('name')}
                 placeholder="Enter your project name"
-                error={errors.name}
-                disabled={isSubmitting}
+                error={errors.name || (qualityResult?.feedback.project_name?.[0] ?? undefined)}
+                disabled={isSubmitting || isCheckingQuality}
               />
+              {qualityResult?.feedback.project_name?.map((msg, i) => (
+                <span key={i} className="new-project-form-error new-project-form-quality-hint">
+                  {msg}
+                </span>
+              ))}
             </div>
 
             {/* Project Description */}
@@ -323,17 +431,22 @@ export function NewProjectPage() {
                 Project Description
               </Label>
               <textarea
-                className={`input ${errors.description ? 'input-error' : ''}`}
+                className={`input ${errors.description || qualityResult?.feedback.description?.length ? 'input-error' : ''}`}
                 value={formData.description}
                 onChange={handleChange('description')}
                 placeholder="Describe the project requirements, goals, and any important details..."
                 rows={5}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingQuality}
                 style={{ resize: 'vertical', minHeight: '120px' }}
               />
               {errors.description && (
                 <span className="new-project-form-error">{errors.description}</span>
               )}
+              {qualityResult?.feedback.description?.map((msg, i) => (
+                <span key={i} className="new-project-form-error new-project-form-quality-hint">
+                  {msg}
+                </span>
+              ))}
               <p className="new-project-form-hint">
                 This will be used to generate your AI-powered estimate.
               </p>
@@ -346,14 +459,19 @@ export function NewProjectPage() {
                 <span className="new-project-form-optional">(Optional)</span>
               </Label>
               <textarea
-                className="input"
+                className={`input ${qualityResult?.feedback.additional_instructions?.length ? 'input-error' : ''}`}
                 value={formData.additionalInputs}
                 onChange={handleChange('additionalInputs')}
                 placeholder="Any extra details for the estimate: constraints, preferences, must-haves..."
                 rows={3}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingQuality}
                 style={{ resize: 'vertical', minHeight: '80px' }}
               />
+              {qualityResult?.feedback.additional_instructions?.map((msg, i) => (
+                <span key={i} className="new-project-form-error new-project-form-quality-hint">
+                  {msg}
+                </span>
+              ))}
               <p className="new-project-form-hint">
                 Optional. These will be used during estimation if provided.
               </p>
@@ -454,8 +572,12 @@ export function NewProjectPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" isLoading={isSubmitting}>
-                Create Project
+              <Button
+                type="submit"
+                isLoading={isSubmitting || isCheckingQuality}
+                disabled={isSubmitting || isCheckingQuality}
+              >
+                {isCheckingQuality ? 'Checking content...' : 'Create Project'}
               </Button>
             </div>
           </form>

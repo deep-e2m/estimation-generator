@@ -85,3 +85,28 @@ export interface ProjectFilters {
   sort_by?: 'created_at' | 'name' | 'updated_at';
   sort_order?: 'asc' | 'desc';
 }
+
+// Content quality check (before project creation)
+export interface CheckContentQualityRequest {
+  project_name: string;
+  description: string;
+  additional_instructions?: string;
+}
+
+export interface ContentQualityFeedback {
+  project_name: string[];
+  description: string[];
+  additional_instructions: string[];
+}
+
+export interface CheckContentQualityData {
+  overall_sufficient: boolean;
+  score: number;
+  feedback: ContentQualityFeedback;
+  suggested_improvements: string;
+}
+
+export interface CheckContentQualityResponse {
+  success: boolean;
+  data: CheckContentQualityData;
+}

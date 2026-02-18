@@ -10,6 +10,7 @@ import {
   useCreateBlockNote,
 } from '@blocknote/react';
 import './inline-editor.css';
+import { estimationOutcomesToBlockNoteBlocks } from '@/lib/estimation-outcomes-to-blocks';
 import { cn } from '@/lib/utils';
 import type { Quote } from '@/types';
 
@@ -43,27 +44,25 @@ export function BlockNoteQuoteEditor({
   className,
   readOnly = false,
 }: BlockNoteQuoteEditorProps) {
-  // Try to hydrate BlockNote from the quote's executive_summary when it
-  // contains a serialized BlockNote document (JSON string). This makes
-  // BlockNote state persistent across reloads for Phase 2 without
-  // changing the backend schema yet.
+  // Hydrate BlockNote from quote content. Prefer structured conversion from
+  // estimation_outcomes (key-value) so outcomes render with headings,
+  // paragraphs, and bullets. Otherwise use executive_summary (BlockNote JSON
+  // or legacy line-by-line).
   const initialContent = useMemo(() => {
+    const outcomes = quote.content?.estimation_outcomes;
+    if (outcomes && typeof outcomes === 'object' && Object.keys(outcomes).length > 0) {
+      const blocks = estimationOutcomesToBlockNoteBlocks(outcomes);
+      if (blocks.length > 0) return JSON.parse(JSON.stringify(blocks)) as unknown[];
+    }
+
     const summary = quote.content?.executive_summary;
     if (!summary) return undefined;
     try {
       const parsed = JSON.parse(summary) as unknown;
-      // BlockNote expects an array of blocks as the top-level document.
       if (Array.isArray(parsed)) {
-        // Deep-clone so no block is shared; avoids one edit updating every "line".
         return JSON.parse(JSON.stringify(parsed)) as unknown[];
       }
     } catch {
-      // Not JSON (likely legacy markdown/HTML). Split into one block per LINE
-      // so that editing or formatting one line (e.g. "Prepared for: Client")
-      // does not affect other lines or the rest of the document. Previously
-      // we used one block per paragraph, which made the first three metadata
-      // lines a single block so block-level formatting (e.g. H1) applied to
-      // all of them and appeared to "affect" the whole document.
       const trimmed = summary.trim();
       if (trimmed.length > 0) {
         const blocks: Array<{ type: 'paragraph'; content: string }> = [];
