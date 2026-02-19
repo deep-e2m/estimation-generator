@@ -20,6 +20,8 @@ import {
   Archive,
   Trash2,
   Edit,
+  CheckCircle,
+  RotateCcw,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -90,9 +92,21 @@ function ProjectCard({
   onSeeMore: () => void
   onAction: (action: string, project: ProjectSummary) => void
 }) {
+  // Status-specific actions: only show options that change state (not current state)
+  const status = (project.status || 'active').toLowerCase()
+  const statusActions: Array<{ value: string; label: string; icon: React.ReactNode }> = []
+  if (status !== 'active') {
+    statusActions.push({ value: 'active', label: 'Active', icon: <RotateCcw style={{ width: 16, height: 16 }} /> })
+  }
+  if (status !== 'completed') {
+    statusActions.push({ value: 'complete', label: 'Completed', icon: <CheckCircle style={{ width: 16, height: 16 }} /> })
+  }
+  if (status !== 'archived') {
+    statusActions.push({ value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> })
+  }
   const dropdownOptions = [
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
-    { value: 'archive', label: 'Archive', icon: <Archive style={{ width: 16, height: 16 }} /> },
+    ...statusActions,
     { value: 'divider', label: '', divider: true },
     { value: 'delete', label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true },
   ]
@@ -335,6 +349,26 @@ export default function Projects() {
     },
   })
 
+  // Mark project as completed mutation
+  const completeMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.complete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    },
+  })
+
+  // Reactivate project (set status to active)
+  const reactivateMutation = useMutation({
+    mutationFn: (projectId: string) => projectsService.reactivate(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    },
+  })
+
   // Update project mutation (for inline dialog edits)
   const updateMutation = useMutation({
     mutationFn: (payload: { projectId: string; data: ProjectUpdate }) =>
@@ -353,6 +387,20 @@ export default function Projects() {
     switch (action) {
       case 'edit':
         handleOpenDialog(project)
+        break
+      case 'active':
+        try {
+          await reactivateMutation.mutateAsync(project.id)
+        } catch (err) {
+          console.error('Failed to set project to active:', err)
+        }
+        break
+      case 'complete':
+        try {
+          await completeMutation.mutateAsync(project.id)
+        } catch (err) {
+          console.error('Failed to mark project as completed:', err)
+        }
         break
       case 'archive':
         try {

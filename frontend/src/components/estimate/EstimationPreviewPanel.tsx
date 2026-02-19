@@ -283,10 +283,11 @@ export function EstimationPreviewPanel({
           </div>
 
           {/* Editable content: BlockNote editor (content is always BlockNote JSON or legacy text).
-              Key on quote.id only so that typing (which updates updated_at) does NOT remount
-              the editor and steal focus on every change. */}
+              Key on quote.id + updated_at so that when the server returns new content (refine,
+              save, or WebSocket), the editor remounts and shows the new content in real time.
+              Local typing does not change updated_at until save, so focus is preserved. */}
           <BlockNoteQuoteEditor
-            key={quote.id}
+            key={`${quote.id}-${quote.updated_at ?? ''}`}
             quote={quote}
             onContentChange={handleContentChange}
             onSave={handleEditorSave}

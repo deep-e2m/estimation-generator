@@ -126,6 +126,64 @@ def outcomes_dict_to_blocknote_json(outcomes: dict[str, Any]) -> str:
     return json.dumps(result)
 
 
+# Match markdown headings: # or ## etc. followed by space and heading text.
+_HEADING_LINE_RE = re.compile(r"^#+\s+(.+)$")
+
+
+def markdown_sections_to_blocknote_json(markdown: str) -> str:
+    """
+    Parse markdown into sections by # headings and build a BlockNote JSON document.
+
+    Used when conversational refinement returns full updated markdown (updated_content).
+    The system rebuilds the BlockNote document from it so add/remove/reorder sections
+    are all supported. Each line matching ^#+\\s+(.+)$ starts a new section; content
+    until the next heading is the section body. Section order is preserved.
+    """
+    if not markdown or not markdown.strip():
+        return json.dumps([])
+
+    lines = markdown.strip().split("\n")
+    sections: list[tuple[str, str]] = []  # (heading_text, body)
+    current_heading: str | None = None
+    current_body: list[str] = []
+
+    for line in lines:
+        heading_match = _HEADING_LINE_RE.match(line.strip())
+        if heading_match:
+            heading_text = heading_match.group(1).strip()
+            if current_heading is not None:
+                body = "\n".join(current_body).strip()
+                sections.append((current_heading, body))
+            current_heading = heading_text
+            current_body = []
+        else:
+            current_body.append(line)
+
+    if current_heading is not None:
+        body = "\n".join(current_body).strip()
+        sections.append((current_heading, body))
+
+    result: list[dict[str, Any]] = []
+    for idx, (heading_text, body_str) in enumerate(sections):
+        section_id = f"section-{idx}"
+        result.append({
+            "id": f"{section_id}-h",
+            "type": "heading",
+            "props": {
+                "textColor": "default",
+                "backgroundColor": "default",
+                "textAlignment": "left",
+                "level": 1,
+            },
+            "content": _inline_content(heading_text or " "),
+            "children": [],
+        })
+        for blk in _value_to_blocks(body_str, section_id):
+            result.append(blk)
+
+    return json.dumps(result)
+
+
 def is_blocknote_json(content: str) -> bool:
     """Return True if content looks like a BlockNote document (JSON array of block objects)."""
     if not content or not content.strip():
@@ -138,6 +196,51 @@ def is_blocknote_json(content: str) -> bool:
         return False
     first = parsed[0]
     return isinstance(first, dict) and "type" in first and "content" in first
+
+
+def apply_blocknote_text_replacements(
+    content: str,
+    replacements: list[dict[str, str]],
+) -> str:
+    """
+    Apply a list of old -> new text replacements to all text nodes in a BlockNote document.
+
+    Used when conversational refinement returns text_replacements (e.g. theme name/URL,
+    hours in body) so the estimate body stays in sync with the LLM's changes.
+    """
+    if not is_blocknote_json(content) or not replacements:
+        return content
+
+    try:
+        blocks = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+
+    if not isinstance(blocks, list):
+        return content
+
+    for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+        content_items = blk.get("content")
+        if not isinstance(content_items, list):
+            continue
+        for item in content_items:
+            if not isinstance(item, dict) or item.get("type") != "text":
+                continue
+            text = str(item.get("text") or "")
+            for r in replacements:
+                old_s = r.get("old") or ""
+                new_s = r.get("new") or ""
+                if old_s and old_s in text:
+                    text = text.replace(old_s, new_s, 1)
+            if text != str(item.get("text") or ""):
+                item["text"] = text
+
+    try:
+        return json.dumps(blocks)
+    except TypeError:
+        return content
 
 
 def _inline_content_to_html(content: list[Any]) -> str:
@@ -241,9 +344,8 @@ def update_blocknote_total_hours(content: str, new_total_hours: float) -> str:
     if not isinstance(blocks, list):
         return content
 
-    target_heading = BLOCKNOTE_SECTION_LABELS.get("estimated_effort_timeline", "").strip()
-    if not target_heading:
-        return content
+    # Match section by containing "estimated effort" so "7. Estimated Effort & Timeline" is found
+    effort_section_key = "estimated effort"
 
     total_hours_re = re.compile(r"(Total Hours\s*:\s*)([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
     # Match any "X hours" / "X-YYY hours" style phrase so that both
@@ -268,39 +370,76 @@ def update_blocknote_total_hours(content: str, new_total_hours: float) -> str:
             continue
 
         # Track when we are inside the "Estimated Effort & Timeline" section
+        # (heading may be "Estimated Effort & Timeline" or "7. Estimated Effort & Timeline")
         if blk.get("type") == "heading":
             heading_text_parts = []
             for item in blk.get("content") or []:
                 if isinstance(item, dict) and item.get("type") == "text":
                     heading_text_parts.append(str(item.get("text") or ""))
             heading_text = " ".join(heading_text_parts).strip()
-            in_estimated_section = heading_text.lower() == target_heading.lower()
+            in_estimated_section = effort_section_key in heading_text.lower()
             continue
 
         if not in_estimated_section:
             continue
 
-        # Within the section: rewrite any "Total Hours: X" occurrences
+        # Within the section: rewrite "Total Hours: X" and "X hours" phrases.
+        # Build full block text so we catch hours split across inline items (e.g. bold "120" + " hours").
         content_items = blk.get("content")
         if not isinstance(content_items, list):
             continue
 
+        full_text = "".join(
+            str(item.get("text") or "")
+            for item in content_items
+            if isinstance(item, dict) and item.get("type") == "text"
+        )
+
+        # First try "Total Hours: X" on full block text; if matched, update the item containing the number
+        total_mo = total_hours_re.search(full_text)
+        if total_mo:
+            old_num = total_mo.group(2)
+            for item in content_items:
+                if not isinstance(item, dict) or item.get("type") != "text":
+                    continue
+                t = str(item.get("text") or "")
+                if old_num in t:
+                    item["text"] = total_hours_re.sub(rf"\1{new_value}", t, count=1)
+                    break
+
+        # Then try "X hours" / "X-YYY hours" on full block text; if matched, update the item containing the number
+        hours_mo = hours_phrase_re.search(full_text)
+        if hours_mo:
+            old_phrase = hours_mo.group(1)  # e.g. "120" or "180-200"
+            for item in content_items:
+                if not isinstance(item, dict) or item.get("type") != "text":
+                    continue
+                text = str(item.get("text") or "")
+                if old_phrase not in text:
+                    continue
+                # Same item has full "X hours" -> use regex; number in this item and " hours" elsewhere -> replace number only
+                updated_text = hours_phrase_re.sub(
+                    rf"{new_effort_value} \2",
+                    text,
+                    count=1,
+                )
+                if updated_text == text:
+                    updated_text = text.replace(old_phrase, new_effort_value, 1)
+                if updated_text != text:
+                    item["text"] = updated_text
+                break
+
+        # Per-item fallback: apply replacements when the full phrase is in a single item
         for item in content_items:
             if not isinstance(item, dict) or item.get("type") != "text":
                 continue
             text = str(item.get("text") or "")
             updated_text = total_hours_re.sub(rf"\1{new_value}", text)
-
-            # Also normalize any "X hours" / "X-YYY hours" style phrases so that
-            # when users change the estimation time via chat, the narrative
-            # sentence (e.g. "50 hours. Estimated Timeline: 6–8 weeks.") stays
-            # in sync with the updated total hours shown in the header/top bar.
             updated_text = hours_phrase_re.sub(
                 rf"{new_effort_value} \2",
                 updated_text,
-                count=1,  # only first hours phrase per line to avoid over-updating
+                count=1,
             )
-
             if updated_text != text:
                 item["text"] = updated_text
 

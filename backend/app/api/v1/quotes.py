@@ -50,8 +50,10 @@ from app.services.ai.knowledge_service import get_knowledge_service
 from app.services.ai.llm_service import LLMService, get_llm_service
 from app.services.ai.rag_service import RAGService, get_rag_service
 from app.services.blocknote import (
+    apply_blocknote_text_replacements,
     blocknote_json_to_html,
     is_blocknote_json,
+    markdown_sections_to_blocknote_json,
     update_blocknote_total_hours,
 )
 from app.services.export.html_utils import is_html_content, sanitize_html
@@ -1518,12 +1520,14 @@ async def refine_quote(
             project_updates,
             proposed_new_total_hours,
             needs_hour_confirmation,
+            text_replacements,
         ) = await refinement_service.refine_quote_conversational(
             quote=quote,
             user_message=request.message,
             project_name=project.name,
             project_description=project.description,
             project_context=project_context,
+            is_blocknote=is_blocknote,
         )
     except Exception as e:
         logger.error("Quote refinement failed: %s", str(e))
@@ -1537,13 +1541,15 @@ async def refine_quote(
 
     # Update quote content in database.
     #
-    # For BlockNote-backed quotes, we keep the existing JSON layout and only
-    # update the numeric "Total Hours" text when the user asks to change the
-    # estimation time. This avoids the LLM rewriting the entire document into
-    # plain markdown and breaking the editor layout.
+    # For BlockNote-backed quotes, we rebuild the document from the LLM's full
+    # updated_content (markdown) so add/remove/reorder sections all work. Then we
+    # sync the "Total Hours" value in the effort section when new_total_hours is set.
     if is_blocknote:
+        quote.content = markdown_sections_to_blocknote_json(updated_content)
         if new_total_hours is not None:
             quote.content = update_blocknote_total_hours(quote.content, float(new_total_hours))
+        if text_replacements:
+            quote.content = apply_blocknote_text_replacements(quote.content, text_replacements)
     else:
         quote.content = updated_content
 
@@ -1563,13 +1569,15 @@ async def refine_quote(
             description=project.description,
         )
 
-    # Recompute analysis on refined content to keep feature flags up to date
+    # Recompute analysis on the actual persisted content so feature flags match what the user sees
     breakdown_for_analysis = None
     if quote.extra_data:
         breakdown_for_analysis = quote.extra_data.get("breakdown")
-
+    content_for_analysis = (
+        blocknote_json_to_html(quote.content) if is_blocknote else (quote.content or "")
+    )
     analysis_metadata = extract_analysis_metadata(
-        content=updated_content,
+        content=content_for_analysis,
         requirements=quote.requirements,
         breakdown=breakdown_for_analysis,
     )
@@ -1601,6 +1609,15 @@ async def refine_quote(
         "interactive_tools": analysis_metadata.has_interactive_tools,
         "seo": analysis_metadata.has_seo,
     }
+    # Recompute structured_content from persisted body so exports and UI stay consistent
+    content_for_structured = (
+        blocknote_json_to_html(quote.content) if is_blocknote else (quote.content or "")
+    )
+    existing_metadata["structured_content"] = build_structured_content(
+        content=content_for_structured,
+        breakdown=breakdown_for_analysis,
+        total_hours=float(quote.total_hours or 0),
+    ).model_dump(mode="json")
     quote.extra_data = existing_metadata
 
     await db.commit()

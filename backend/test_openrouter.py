@@ -212,6 +212,7 @@ async def test_conversational_refinement():
             project_updates,
             proposed_new_total_hours,
             needs_hour_confirmation,
+            text_replacements,
         ) = await service.refine_quote_conversational(
             quote, "Add 2 hours to the total."
         )

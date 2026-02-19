@@ -50,6 +50,7 @@ class QuoteRefinementService:
         project_name: Optional[str] = None,
         project_description: Optional[str] = None,
         project_context: Optional[dict[str, Any]] = None,
+        is_blocknote: bool = False,
     ) -> tuple[
         str,
         str,
@@ -58,6 +59,7 @@ class QuoteRefinementService:
         Optional[dict[str, Optional[str]]],
         Optional[float],
         bool,
+        list[dict[str, str]],
     ]:
         """
         Process a natural language request to modify a quote (and optionally project).
@@ -69,9 +71,9 @@ class QuoteRefinementService:
             project_description: Current project description (same).
 
         Returns:
-            Tuple of (updated_content, ai_explanation, changes_list, new_total_hours, project_updates).
-            new_total_hours: set when user asks to change total hours (e.g. increase by 20).
-            project_updates: optional dict with keys "name" and/or "description" (only if user asked to change them).
+            Tuple of (updated_content, ai_explanation, changes_list, new_total_hours, project_updates,
+            proposed_new_total_hours, needs_hour_confirmation, text_replacements).
+            text_replacements: list of {"old": "...", "new": "..."} for applying changes to structured (BlockNote) content.
         """
         logger.info("Processing quote refinement request: quote_id=%s", quote.id)
 
@@ -80,13 +82,14 @@ class QuoteRefinementService:
         # the carefully formatted layout produced by the inline editor.
         is_html = getattr(quote, "content_format", None) == ContentFormat.HTML
 
-        system_prompt = self._build_system_prompt(is_html=is_html)
+        system_prompt = self._build_system_prompt(is_html=is_html, is_blocknote=is_blocknote)
         user_prompt = self._build_user_prompt(
             quote,
             user_message,
             project_name=project_name,
             project_description=project_description,
             is_html=is_html,
+            is_blocknote=is_blocknote,
             project_context=project_context,
         )
 
@@ -137,15 +140,31 @@ class QuoteRefinementService:
                 if not project_updates:
                     project_updates = None
 
+            # Text replacements for structured (BlockNote) documents: exact old -> new strings
+            text_replacements: list[dict[str, str]] = []
+            replacements_raw = result.get("text_replacements")
+            if isinstance(replacements_raw, list):
+                for r in replacements_raw:
+                    if isinstance(r, dict) and "old" in r and "new" in r:
+                        old_val = r.get("old")
+                        new_val = r.get("new")
+                        if old_val is not None and new_val is not None:
+                            text_replacements.append({
+                                "old": str(old_val).strip(),
+                                "new": str(new_val).strip(),
+                            })
+
             logger.info(
                 "Quote refinement completed: quote_id=%s, changes=%d, new_total_hours=%s, "
-                "proposed_new_total_hours=%s, needs_hour_confirmation=%s, project_updates=%s",
+                "proposed_new_total_hours=%s, needs_hour_confirmation=%s, project_updates=%s, "
+                "text_replacements=%d",
                 quote.id,
                 len(changes),
                 new_total_hours,
                 proposed_new_total_hours,
                 needs_hour_confirmation,
                 bool(project_updates),
+                len(text_replacements),
             )
 
             return (
@@ -156,17 +175,20 @@ class QuoteRefinementService:
                 project_updates,
                 proposed_new_total_hours,
                 needs_hour_confirmation,
+                text_replacements,
             )
 
         except Exception as e:
             logger.error("Quote refinement failed: %s", str(e))
             raise Exception(f"Failed to process refinement request: {str(e)}") from e
 
-    def _build_system_prompt(self, *, is_html: bool) -> str:
+    def _build_system_prompt(self, *, is_html: bool, is_blocknote: bool = False) -> str:
         """Build the system prompt for quote refinement.
 
         When is_html=True, the assistant MUST treat the content as literal HTML
         and only adjust numeric hour values, preserving headings/structure.
+        When is_blocknote=True, the document is stored as BlockNote; return full
+        markdown with section headings so the system can rebuild the document (add/remove/reorder).
         """
         if is_html:
             return """You are a careful assistant that edits HTML project estimates based on natural language requests.
@@ -215,7 +237,30 @@ Rules:
 - Omit "project_updates" entirely if the user did not ask to change project name or description; include only "name" and/or "description" keys that the user asked to change."""
 
         # Markdown / plain-text mode (tightened for minimal, targeted edits)
-        return """You are a careful assistant that modifies project estimates/quotes based on natural language requests.
+        blocknote_intro = ""
+        if is_blocknote:
+            blocknote_intro = """BLOCKNOTE MODE - The document is stored as structured BlockNote. The content you see below is a flattened view. Your "updated_content" will be used to rebuild the full document, so you CAN add sections, remove sections, or reorder them. Use markdown with # section headings. Preferred section headings (use these when present so the estimate stays consistent):
+- Project Overview
+- Website Structure & Page Scope
+- Development Approach
+- Estimated Effort & Timeline
+- Assumptions & Client Responsibilities
+- Exclusions
+You may add new sections with # Your Section Title, omit sections, or reorder. Return the COMPLETE updated markdown in "updated_content".
+
+"""
+
+        strict_rules = """STRICT RULES FOR EDITING:
+- Treat the existing document as the source of truth.
+- DO NOT add new sections, headings, or boilerplate unless the user explicitly asks for them.
+- DO NOT reorder sections or rewrite large parts of the document when the user only requested a small change.
+- DO NOT copy or include any of the "PROJECT CONTEXT" helper text that appears AFTER the document (it is for reasoning only)."""
+        if is_blocknote:
+            strict_rules = """RULES FOR EDITING (BlockNote - full replace):
+- Return the COMPLETE updated document in "updated_content" with # section headings so the system can rebuild it. Add/remove/reorder sections as the user requests.
+- DO NOT copy or include any of the "PROJECT CONTEXT" helper text that appears AFTER the document (it is for reasoning only)."""
+
+        return blocknote_intro + """You are a careful assistant that modifies project estimates/quotes based on natural language requests.
 
 Your task is to:
 1. Understand the user's request (modify hours, add/remove deliverables, update text, change project name/description, etc.)
@@ -229,11 +274,7 @@ The quote content is in markdown format with sections like:
 - Assumptions
 - Exclusions
 
-STRICT RULES FOR EDITING:
-- Treat the existing document as the source of truth.
-- DO NOT add new sections, headings, or boilerplate unless the user explicitly asks for them.
-- DO NOT reorder sections or rewrite large parts of the document when the user only requested a small change.
-- DO NOT copy or include any of the "PROJECT CONTEXT" helper text that appears AFTER the document (it is for reasoning only).
+""" + strict_rules + """
 
 When modifying hours:
 - Look for tables or lists showing hours estimates
@@ -260,6 +301,12 @@ When your changes clearly imply that the overall total hours SHOULD change (for 
 When the user explicitly instructs you to set the total hours (e.g. "set total to 150 hours", "increase total hours by 20 and apply it now"):
 - Set "new_total_hours" to that number and you MAY omit "proposed_new_total_hours" and "needs_hour_confirmation".
 
+IMPORTANT - text_replacements for structured documents:
+When you change specific phrases in the quote (e.g. theme name, plugin name, URL, hour numbers in the body text), you MUST include "text_replacements" as an array of objects with "old" and "new" keys. Use the EXACT strings as they appear in the document (including surrounding punctuation/URLs). Examples:
+- Replacing a theme: {"old": "Divi (URL: https://www.elegantthemes.com/gallery/divi/)", "new": "Elementor (URL: https://elementor.com/)"}
+- Replacing hours in body: {"old": "120 hours", "new": "145 hours"} or {"old": "Estimated Total Effort: 120 hours", "new": "Estimated Total Effort: 145 hours"}
+Include one entry per distinct phrase you changed. The system will apply these to the stored document so the estimate body stays in sync with your explanation.
+
 The input you receive includes:
 - The full quote content (between --- markers)
 - The numeric Total Hours and Platform
@@ -280,10 +327,14 @@ Respond with JSON in this format:
   "new_total_hours": 155,
   "proposed_new_total_hours": 160,
   "needs_hour_confirmation": true,
-  "project_updates": { "name": "New Project Name", "description": "New description or null" }
+  "project_updates": { "name": "New Project Name", "description": "New description or null" },
+  "text_replacements": [
+    { "old": "exact old phrase from document", "new": "exact new phrase" }
+  ]
 }
 
 Rules:
+- Always include "text_replacements" with one entry per distinct text change (theme, URL, hours in body). Use exact strings from the document.
 - Omit "new_total_hours" if the user did not clearly ask you to update the stored total hours; include it (as a number) ONLY when the user explicitly requested to change the total.
 - When you believe hours should change but the user did not explicitly say to update the stored total, set "proposed_new_total_hours" and "needs_hour_confirmation": true instead, and leave "new_total_hours" unset/null.
 - If no change to total hours is needed, omit both "new_total_hours" and "proposed_new_total_hours", and set "needs_hour_confirmation": false or omit it.
@@ -297,6 +348,7 @@ Rules:
         project_name: Optional[str] = None,
         project_description: Optional[str] = None,
         is_html: bool = False,
+        is_blocknote: bool = False,
         project_context: Optional[dict[str, Any]] = None,
     ) -> str:
         """Build the user prompt with quote and project context."""
@@ -307,6 +359,11 @@ Rules:
                 "The quote content below is FULL HTML from a rich-text editor. "
                 "Treat it as literal HTML code. Only adjust numeric hour values requested by the user; "
                 "do not change headings, tags, or overall structure."
+            )
+        elif is_blocknote:
+            header_lines.append(
+                "The quote content below is a flattened view of a BlockNote document. "
+                "Return the complete updated markdown in updated_content using # section headings (e.g. # Project Overview, # Estimated Effort & Timeline) so the system can rebuild the document. You may add, remove, or reorder sections."
             )
         else:
             header_lines.append("Here is the current quote content (markdown/text):")
