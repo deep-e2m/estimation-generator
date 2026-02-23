@@ -182,6 +182,9 @@ export interface GenerateQuoteRequest {
     platform?: Platform;
     project_name?: string;
     industry?: string;
+    /** SOW/source document text (e.g. extracted from uploaded PDF) for accurate timeline, sitemap, exclusions */
+    document_summary?: string;
+    additional_instructions?: string;
     [key: string]: unknown;
   };
 }

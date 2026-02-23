@@ -1173,6 +1173,46 @@ When estimating a **WordPress** project:
 
 
 # ---------------------------------------------------------------------------
+# Structured company stack (spec Step 4: recommended from company, not web)
+# Mirrors WORDPRESS_STACK_GUIDELINES_MD for use as "recommended" in resolution.
+# Web is used only for URLs (e.g. research model for client lock-in URLs).
+# ---------------------------------------------------------------------------
+
+COMPANY_STACK_STRUCTURED: Dict[str, List[Dict[str, Any]]] = {
+    "plugins": [
+        {"name": "Gravity Forms", "url": "https://www.gravityforms.com/", "purpose": "Forms"},
+        {"name": "Contact Form 7", "url": "https://contactform7.com/", "purpose": "Simple forms"},
+        {"name": "WooCommerce", "url": "https://woocommerce.com/", "purpose": "E-commerce"},
+        {"name": "Yoast SEO", "url": "https://yoast.com/wordpress/plugins/seo/", "purpose": "SEO"},
+        {"name": "Rank Math", "url": "https://rankmath.com/", "purpose": "SEO"},
+        {"name": "Advanced Custom Fields", "url": "https://www.advancedcustomfields.com/", "purpose": "Custom fields"},
+        {"name": "WP Rocket", "url": "https://wp-rocket.me/", "purpose": "Caching"},
+        {"name": "Wordfence", "url": "https://www.wordfence.com/", "purpose": "Security"},
+        {"name": "UpdraftPlus", "url": "https://updraftplus.com/", "purpose": "Backups"},
+    ],
+    "themes": [
+        {"name": "Underscores (_s)", "url": "https://underscores.me/", "notes": "Starter theme"},
+        {"name": "Astra", "url": "https://wpastra.com/", "notes": "Multi-purpose"},
+        {"name": "GeneratePress", "url": "https://generatepress.com/", "notes": "Lightweight"},
+    ],
+    "page_builders": [
+        {"name": "Elementor", "url": "https://elementor.com/"},
+        {"name": "Divi", "url": "https://www.elegantthemes.com/gallery/divi/"},
+        {"name": "Beaver Builder", "url": "https://www.wpbeaverbuilder.com/"},
+    ],
+}
+
+
+def get_company_stack_structured() -> Dict[str, List[Dict[str, Any]]]:
+    """Return the authoritative company stack for recommended tools (spec Step 4)."""
+    return {
+        "plugins": list(COMPANY_STACK_STRUCTURED["plugins"]),
+        "themes": list(COMPANY_STACK_STRUCTURED["themes"]),
+        "page_builders": list(COMPANY_STACK_STRUCTURED["page_builders"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Registry of builtin knowledge documents
 # ---------------------------------------------------------------------------
 

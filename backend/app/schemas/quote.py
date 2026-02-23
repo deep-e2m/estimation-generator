@@ -351,9 +351,24 @@ class QuoteGenerationMetadata(BaseModel):
     model_used: str = Field(..., description="LLM model used for generation")
     tokens_used: int = Field(..., description="Total tokens consumed")
     generation_cost: float = Field(..., description="Cost of the LLM API call")
-    rag_context_used: bool = Field(..., description="Whether RAG context was used")
+    rag_context_used: bool = Field(
+        ...,
+        description="Whether any RAG reference was used (company stack from KB and/or similar quotes)",
+    )
     generation_time_ms: Optional[int] = Field(None, description="Generation time in milliseconds")
     analysis: Optional[AnalysisMetadata] = Field(None, description="Analysis metadata from quote generation")
+    validation_warnings: list[str] = Field(
+        default_factory=list,
+        description="Content or stack validation warnings from generation",
+    )
+    company_stack_used: bool = Field(
+        default=True,
+        description="Whether company stack context was applied",
+    )
+    company_stack_fallback: Optional[str] = Field(
+        None,
+        description="e.g. 'builtin' when RAG stack was unavailable; null when from RAG",
+    )
 
 
 class QuoteGenerationResponse(BaseModel):

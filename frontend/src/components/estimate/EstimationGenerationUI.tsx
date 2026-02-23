@@ -1,11 +1,11 @@
 /**
  * EstimationGenerationUI Component
- * Modern Gen-Z style estimation generation with vertical timeline,
- * circular progress ring, and live stats counters.
+ * Estimation generation with timeline summary, circular progress ring,
+ * and estimate summary (requirements, tasks, hours + backend metadata).
+ * Progress is honest: single "Generating…" until API returns, then full results.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -20,9 +20,23 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { documentsService } from '@/services/documents.service';
 import { quoteService } from '@/services/quote-generation.service';
 import type { Project, Quote } from '@/types';
 import type { GenerateQuoteRequest } from '@/types/quote.types';
+
+/** Backend metadata returned after generation (same shape as API generation_metadata). */
+export interface GenerationMetadataResult {
+  model_used?: string;
+  tokens_used?: number;
+  generation_cost?: number;
+  rag_context_used?: boolean;
+  generation_time_ms?: number;
+  analysis?: { requirements_count?: number; tasks_count?: number };
+  validation_warnings?: string[];
+  company_stack_used?: boolean;
+  company_stack_fallback?: string | null;
+}
 
 // Step definitions
 type AnalysisStep =
@@ -186,51 +200,56 @@ function CircularProgress({
   );
 }
 
-// Step Card Component
-function StepCard({ 
-  step, 
-  index, 
-  currentStep, 
-  completedSteps,
-  timeTaken 
-}: { 
+// Step Card — shows step; supports complete, active (during gen), or pending
+function StepCard({
+  step,
+  index,
+  isComplete,
+  isActive,
+  totalTimeSeconds,
+  stepCount,
+}: {
   step: StepConfig;
   index: number;
-  currentStep: number;
-  completedSteps: number[];
-  timeTaken?: number;
+  isComplete: boolean;
+  isActive: boolean;
+  totalTimeSeconds: number | null;
+  stepCount: number;
 }) {
   const Icon = step.icon;
-  const isComplete = completedSteps.includes(index);
-  const isCurrent = index === currentStep;
-  const isPending = index > currentStep;
+  const isLast = index === stepCount - 1;
+  const showTime = isComplete && isLast && totalTimeSeconds != null;
 
   return (
-    <div 
+    <div
       className={cn(
         'estimation-gen-step-card',
         isComplete && 'complete',
-        isCurrent && 'active',
-        isPending && 'pending'
+        isActive && 'active',
+        !isComplete && !isActive && 'pending'
       )}
     >
       <div className="estimation-gen-step-connector">
-        <div className={cn(
-          'estimation-gen-step-line',
-          isComplete && 'complete',
-          isCurrent && 'active'
-        )} />
+        <div
+          className={cn(
+            'estimation-gen-step-line',
+            isComplete && 'complete',
+            isActive && 'active'
+          )}
+        />
       </div>
-      
-      <div className={cn(
-        'estimation-gen-step-icon',
-        `color-${step.color}`,
-        isComplete && 'complete',
-        isCurrent && 'active'
-      )}>
+
+      <div
+        className={cn(
+          'estimation-gen-step-icon',
+          `color-${step.color}`,
+          isComplete && 'complete',
+          isActive && 'active'
+        )}
+      >
         {isComplete ? (
           <CheckCircle className="w-5 h-5" />
-        ) : isCurrent ? (
+        ) : isActive ? (
           <div className="estimation-gen-step-spinner">
             <Icon className="w-5 h-5" />
           </div>
@@ -238,14 +257,14 @@ function StepCard({
           <Icon className="w-5 h-5" />
         )}
       </div>
-      
+
       <div className="estimation-gen-step-content">
         <h4 className="estimation-gen-step-label">{step.label}</h4>
         <p className="estimation-gen-step-desc">{step.description}</p>
-        {isComplete && timeTaken !== undefined && (
+        {showTime && (
           <span className="estimation-gen-step-time">
             <Clock className="w-3 h-3" />
-            {timeTaken.toFixed(1)}s
+            Total: {totalTimeSeconds.toFixed(1)}s
           </span>
         )}
       </div>
@@ -253,21 +272,22 @@ function StepCard({
   );
 }
 
-// Live Stat Component
-function LiveStat({ 
-  icon: Icon, 
-  label, 
-  value, 
+// Live Stat Component — value can be number or null (shows "—" while pending)
+function LiveStat({
+  icon: Icon,
+  label,
+  value,
   suffix = '',
-  color = 'primary'
-}: { 
+  color = 'primary',
+}: {
   icon: React.ElementType;
   label: string;
-  value: number;
+  value: number | null;
   suffix?: string;
   color?: string;
 }) {
-  const animatedValue = useAnimatedCounter(value, 800);
+  const animatedValue = useAnimatedCounter(value ?? 0, 800);
+  const isPending = value === null;
 
   return (
     <div className={cn('estimation-gen-stat', `color-${color}`)}>
@@ -276,7 +296,7 @@ function LiveStat({
       </div>
       <div className="estimation-gen-stat-content">
         <span className="estimation-gen-stat-value">
-          {animatedValue}{suffix}
+          {isPending ? '—' : `${animatedValue}${suffix}`}
         </span>
         <span className="estimation-gen-stat-label">{label}</span>
       </div>
@@ -289,58 +309,37 @@ export function EstimationGenerationUI({
   onComplete,
   onCancel,
 }: EstimationGenerationUIProps) {
-  const navigate = useNavigate();
-  
   // State
-  const [currentStep, setCurrentStep] = useState(0);
-  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [progress, setProgress] = useState(0);
   const [isGenerating, setIsGenerating] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stepTimes, setStepTimes] = useState<Record<number, number>>({});
+  const [totalTimeSeconds, setTotalTimeSeconds] = useState<number | null>(null);
   const [liveStats, setLiveStats] = useState<LiveStats>({
     requirementsFound: 0,
     tasksIdentified: 0,
     hoursCalculated: 0,
   });
-  const [retryCount, setRetryCount] = useState(0); // Used to trigger retry
-  const [analysisReceived, setAnalysisReceived] = useState(false); // Track if real data received
+  const [generationMetadata, setGenerationMetadata] = useState<GenerationMetadataResult | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
-  const stepStartTimeRef = useRef<number>(Date.now());
-  const hasStartedRef = useRef<boolean>(false); // Prevent duplicate API calls in StrictMode
+  const startTimeRef = useRef<number>(Date.now());
+  const hasStartedRef = useRef<boolean>(false);
 
-  // Simulate step progression (visual feedback while waiting for API)
+  // Single progress ramp 0 → 90% over ~45s while waiting (honest: no fake steps)
   useEffect(() => {
     if (!isGenerating || error) return;
-
-    const stepDuration = 1800; // 1.8 seconds per step
-    const progressPerStep = 100 / ANALYSIS_STEPS.length;
-
+    const durationMs = 45_000;
+    const interval = 500;
+    const start = Date.now();
     const timer = setInterval(() => {
-      setProgress((prev) => {
-        const nextProgress = prev + 1.5;
-        const currentStepThreshold = (currentStep + 1) * progressPerStep;
-
-        // We do not animate fake requirements/tasks/hours here so the final values
-        // match the API and Project Detail (single source of truth).
-
-        // Check if we should advance to next step
-        if (nextProgress >= currentStepThreshold && currentStep < ANALYSIS_STEPS.length - 1) {
-          const timeTaken = (Date.now() - stepStartTimeRef.current) / 1000;
-          setStepTimes(prev => ({ ...prev, [currentStep]: timeTaken }));
-          setCompletedSteps(prev => [...prev, currentStep]);
-          setCurrentStep(s => s + 1);
-          stepStartTimeRef.current = Date.now();
-        }
-
-        return Math.min(nextProgress, 95); // Cap at 95% until API completes
-      });
-    }, stepDuration / (progressPerStep / 1.5));
-
+      const elapsed = Date.now() - start;
+      const pct = Math.min(90, (elapsed / durationMs) * 90);
+      setProgress(pct);
+    }, interval);
     return () => clearInterval(timer);
-  }, [isGenerating, currentStep, error, analysisReceived]);
+  }, [isGenerating, error]);
 
   // Start generation - with guard against React StrictMode double-mounting
   useEffect(() => {
@@ -364,7 +363,21 @@ export function EstimationGenerationUI({
       }
 
       abortControllerRef.current = new AbortController();
-      stepStartTimeRef.current = Date.now();
+      startTimeRef.current = Date.now();
+
+      // Include SOW/source document text from project requirement documents for accurate estimation
+      let documentSummary: string | undefined;
+      try {
+        const requirementDocs = await documentsService.list(project.id, 'requirements');
+        const texts = requirementDocs
+          .map((d) => d.plain_text?.trim())
+          .filter((t): t is string => !!t);
+        if (texts.length > 0) {
+          documentSummary = texts.join('\n\n---\n\n');
+        }
+      } catch {
+        // Non-blocking: continue without document_summary if list fails
+      }
 
       const request: GenerateQuoteRequest = {
         requirements: description,
@@ -376,6 +389,7 @@ export function EstimationGenerationUI({
           ...(project.additional_instructions?.trim()
             ? { additional_instructions: project.additional_instructions.trim() }
             : {}),
+          ...(documentSummary ? { document_summary: documentSummary } : {}),
         },
       };
 
@@ -391,25 +405,20 @@ export function EstimationGenerationUI({
       try {
         const response = await quoteService.generateQuote(project.id, request);
         const quote = response.quote;
-        const analysis = response.generation_metadata?.analysis;
+        const meta = response.generation_metadata;
+        const analysis = meta?.analysis;
 
-        // Complete final step
-        const timeTaken = (Date.now() - stepStartTimeRef.current) / 1000;
-        setStepTimes(prev => ({ ...prev, [currentStep]: timeTaken }));
-        setCompletedSteps(prev => [...prev, ANALYSIS_STEPS.length - 1]);
-        
-        // Set REAL stats from API response only (no fallback) so Live Analysis matches Project Detail
-        setAnalysisReceived(true);
+        const timeTaken = (Date.now() - startTimeRef.current) / 1000;
+        setTotalTimeSeconds(timeTaken);
+        setGenerationMetadata(meta ?? null);
         setLiveStats({
           requirementsFound: analysis?.requirements_count ?? 0,
           tasksIdentified: analysis?.tasks_count ?? 0,
           hoursCalculated: quote.total_hours ?? 0,
         });
-        
         setProgress(100);
         setIsGenerating(false);
 
-        // Small delay for animation, then complete
         setTimeout(() => {
           onComplete(quote);
         }, 1500);
@@ -438,18 +447,22 @@ export function EstimationGenerationUI({
   }, [onCancel]);
 
   const handleRetry = useCallback(() => {
-    // Reset state and trigger new generation via retryCount
     hasStartedRef.current = false;
     setError(null);
     setIsGenerating(true);
-    setCurrentStep(0);
-    setCompletedSteps([]);
     setProgress(0);
-    setStepTimes({});
+    setTotalTimeSeconds(null);
+    setGenerationMetadata(null);
     setLiveStats({ requirementsFound: 0, tasksIdentified: 0, hoursCalculated: 0 });
-    setAnalysisReceived(false);
-    setRetryCount(prev => prev + 1); // Trigger useEffect to run again
+    setRetryCount((prev) => prev + 1);
   }, []);
+
+  // Map time-based progress (0–90%) to an estimated step so the left panel and center message reflect progress
+  const estimatedStepIndex = Math.min(
+    ANALYSIS_STEPS.length - 1,
+    Math.floor((progress / 90) * ANALYSIS_STEPS.length)
+  );
+  const currentStepLabel = ANALYSIS_STEPS[estimatedStepIndex]?.label ?? 'Generating estimate';
 
   return (
     <div className="estimation-gen-container">
@@ -477,32 +490,39 @@ export function EstimationGenerationUI({
 
       {/* Main content */}
       <div className="estimation-gen-content">
-        {/* Left: Vertical Timeline */}
+        {/* Left: Timeline — summary of steps (all complete only after API returns) */}
         <div className="estimation-gen-timeline">
           <div className="estimation-gen-timeline-header">
             <h2>Generation Progress</h2>
-            <p>AI is analyzing your project</p>
+            <p>
+              {isGenerating
+                ? 'AI is analyzing your project'
+                : totalTimeSeconds != null
+                  ? `Complete · ${totalTimeSeconds.toFixed(1)}s`
+                  : 'Complete'}
+            </p>
           </div>
-          
+
           <div className="estimation-gen-steps">
             {ANALYSIS_STEPS.map((step, index) => (
               <StepCard
                 key={step.id}
                 step={step}
                 index={index}
-                currentStep={currentStep}
-                completedSteps={completedSteps}
-                timeTaken={stepTimes[index]}
+                isComplete={!isGenerating || index < estimatedStepIndex}
+                isActive={isGenerating && index === estimatedStepIndex}
+                totalTimeSeconds={!isGenerating ? totalTimeSeconds : null}
+                stepCount={ANALYSIS_STEPS.length}
               />
             ))}
           </div>
         </div>
 
-        {/* Center: Progress Ring */}
+        {/* Center: Progress Ring + current step label */}
         <div className="estimation-gen-center">
           <div className="estimation-gen-ring-container">
             <CircularProgress progress={progress} size={220} strokeWidth={14} />
-            
+
             {progress === 100 && (
               <div className="estimation-gen-complete-badge">
                 <CheckCircle className="w-6 h-6" />
@@ -511,11 +531,10 @@ export function EstimationGenerationUI({
             )}
           </div>
 
-          {/* Current step indicator */}
-          {isGenerating && currentStep < ANALYSIS_STEPS.length && (
+          {isGenerating && (
             <div className="estimation-gen-current-step">
               <span className="estimation-gen-current-step-text">
-                {ANALYSIS_STEPS[currentStep].label}
+                {currentStepLabel}…
               </span>
               <span className="estimation-gen-current-step-dots">
                 <span className="dot" />
@@ -537,30 +556,30 @@ export function EstimationGenerationUI({
           )}
         </div>
 
-        {/* Right: Live Stats */}
+        {/* Right: Estimate summary + backend details */}
         <div className="estimation-gen-stats">
           <div className="estimation-gen-stats-header">
-            <h2>Live Analysis</h2>
-            <p>Real-time insights</p>
+            <h2>Estimate Summary</h2>
+            <p>Results from this run</p>
           </div>
-          
+
           <div className="estimation-gen-stats-grid">
             <LiveStat
               icon={FileText}
               label="Requirements Found"
-              value={liveStats.requirementsFound}
+              value={isGenerating ? null : liveStats.requirementsFound}
               color="primary"
             />
             <LiveStat
               icon={ListTodo}
               label="Tasks Identified"
-              value={liveStats.tasksIdentified}
+              value={isGenerating ? null : liveStats.tasksIdentified}
               color="purple"
             />
             <LiveStat
               icon={Clock}
               label="Hours Calculated"
-              value={liveStats.hoursCalculated}
+              value={isGenerating ? null : liveStats.hoursCalculated}
               suffix="h"
               color="success"
             />
@@ -570,6 +589,12 @@ export function EstimationGenerationUI({
           <div className="estimation-gen-project-card">
             <h3>Project Details</h3>
             <div className="estimation-gen-project-info">
+              <div className="estimation-gen-project-row">
+                <span className="label">Input</span>
+                <span className="value estimation-gen-input-value">
+                  {project.name || '—'} · {(project.description || '').length} chars
+                </span>
+              </div>
               <div className="estimation-gen-project-row">
                 <span className="label">Platform</span>
                 <span className="value">{project.platform || 'Not specified'}</span>

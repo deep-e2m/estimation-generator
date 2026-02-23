@@ -19,6 +19,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
+from app.models.document import Document, DocumentType
 from app.models.project import Project
 from app.models.quote import Complexity, Quote, QuoteStatus
 from app.schemas.project import PaginationMeta
@@ -498,6 +499,60 @@ async def generate_quote(
     # Verify project access
     project = await get_project_with_access(project_id, current_user, db)
 
+    # Step 1 (spec): Validate project name and description; build single source of truth (project brief)
+    project_name = (project.name or "").strip()
+    project_description = (project.description or "").strip()
+    if len(project_name) < 2:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "INVALID_PROJECT_NAME",
+            "Project name is required and must be at least 2 characters.",
+        )
+    if not project_description:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "INVALID_PROJECT_DESCRIPTION",
+            "Project description is required for estimation.",
+        )
+    additional_instructions = None
+    document_summary = None
+    if request.project_context and isinstance(request.project_context, dict):
+        additional_instructions = request.project_context.get("additional_instructions")
+        # SOW/source document text (e.g. extracted from uploaded PDF) for single source of truth
+        document_summary = (
+            request.project_context.get("document_summary")
+            or request.project_context.get("source_document_text")
+            or request.project_context.get("attached_document")
+        )
+    parts = [f"Project: {project_name}", f"Description:\n{project_description}"]
+    if additional_instructions and str(additional_instructions).strip():
+        parts.append(f"Additional instructions:\n{str(additional_instructions).strip()}")
+    if (request.requirements or "").strip():
+        parts.append(f"Requirements:\n{request.requirements.strip()}")
+    if document_summary and str(document_summary).strip():
+        parts.append(f"Source document / SOW (authoritative for timeline, sitemap, exclusions, assumptions):\n{str(document_summary).strip()}")
+    else:
+        # Load project documents (e.g. uploaded SOW/requirements) and include plain_text in brief
+        try:
+            doc_query = (
+                select(Document.plain_text)
+                .where(
+                    Document.project_id == project_id,
+                    Document.document_type == DocumentType.REQUIREMENTS,
+                    Document.plain_text.isnot(None),
+                )
+                .order_by(Document.updated_at.desc())
+                .limit(5)
+            )
+            doc_result = await db.execute(doc_query)
+            doc_texts = [row[0].strip() for row in doc_result.fetchall() if row[0] and row[0].strip()]
+            if doc_texts:
+                combined = "\n\n---\n\n".join(doc_texts)
+                parts.append(f"Source document / SOW (authoritative for timeline, sitemap, exclusions, assumptions):\n{combined}")
+        except Exception as e:
+            logger.warning("Could not load project documents for brief: %s", e)
+    canonical_brief = "\n\n".join(parts)
+
     # ENFORCE SINGLE ESTIMATE PER PROJECT (unless regenerate=True)
     # Check if project already has an estimate
     existing_quote_query = select(Quote).where(Quote.project_id == project_id)
@@ -526,43 +581,64 @@ async def generate_quote(
                 "This project already has an estimate. Only ONE estimate per project is allowed. Set regenerate=true to replace the existing estimate.",
             )
 
-    # Get RAG context if enabled
-    rag_context = None
+    # Step 2 & 3: Company stack (plugins/themes/guidelines) + reference estimates (similar quotes)
+    # RAG = any reference from KB: guideline/training (company stack) OR similar quotes.
+    rag_service = get_rag_service()
+    company_stack_context, company_stack_from_rag = await rag_service.build_company_stack_context(
+        query=canonical_brief,
+        db_session=db,
+    )
+    reference_estimates_context = ""
     if request.use_rag:
         try:
-            rag_service = get_rag_service()
-            rag_context = await rag_service.build_rag_context(
-                query=request.requirements,
+            reference_estimates_context = await rag_service.build_reference_estimates_context(
+                query=canonical_brief,
                 platform=project.platform.value,
                 db_session=db,
             )
-            logger.debug("RAG context built: %d characters", len(rag_context) if rag_context else 0)
+            logger.debug(
+                "Reference estimates context: %d characters",
+                len(reference_estimates_context),
+            )
         except Exception as e:
-            logger.warning("Failed to get RAG context: %s", str(e))
-            # Rollback to clear any failed transaction state
+            logger.warning("Failed to get reference estimates context: %s", str(e))
             await db.rollback()
-            # Continue without RAG context
+    # RAG "used" when we pulled any reference from KB: company stack (plugins/themes) or similar quotes
+    any_rag_used = bool(reference_estimates_context) or company_stack_from_rag
 
-    # Generate quote using LLM (HOURS ONLY - NO PRICING)
-    try:
-        llm_service = get_llm_service()
-        result = await llm_service.generate_quote(
-            requirements=request.requirements,
-            platform=project.platform.value,
-            rag_context=rag_context,
-            project_context=request.project_context,
-            # NOTE: hourly_rate intentionally NOT passed - billing/pricing is out of scope
-            # Pricing is handled by separate sales team
-        )
-    except Exception as e:
-        logger.error("Quote generation failed: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "QUOTE_GENERATION_FAILED",
-                "message": f"Failed to generate quote: {str(e)}",
-            },
-        )
+    # Merge project_context with canonical brief for LLM (single source of truth)
+    project_context_for_llm = dict(request.project_context or {})
+    project_context_for_llm["project_name"] = project_name
+    project_context_for_llm["project_brief"] = canonical_brief
+
+    # Generate quote using LLM (HOURS ONLY - NO PRICING), with one retry on failure (spec Step 5/7)
+    llm_service = get_llm_service()
+    last_error: Optional[Exception] = None
+    for attempt in range(2):
+        try:
+            result = await llm_service.generate_quote(
+                requirements=request.requirements,
+                platform=project.platform.value,
+                project_brief=canonical_brief,
+                company_stack_context=company_stack_context,
+                reference_estimates_context=reference_estimates_context or None,
+                project_context=project_context_for_llm,
+                company_stack_fallback=not company_stack_from_rag,
+                # NOTE: hourly_rate intentionally NOT passed - billing/pricing is out of scope
+            )
+            break
+        except Exception as e:
+            last_error = e
+            logger.warning("Quote generation attempt %d failed: %s", attempt + 1, e)
+            if attempt == 1:
+                logger.error("Quote generation failed after retry: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={
+                        "code": "QUOTE_GENERATION_FAILED",
+                        "message": "Failed to generate quote after retry. Please try again.",
+                    },
+                ) from e
 
     # Determine title
     title = request.title
@@ -608,7 +684,11 @@ async def generate_quote(
             "model_used": result.model_used,
             "tokens_used": result.tokens_used,
             "generation_cost": result.generation_cost,
-            "rag_context_used": bool(rag_context),
+            "rag_context_used": any_rag_used,
+            "company_stack_used": True,
+            "company_stack_fallback": "builtin" if not company_stack_from_rag else None,
+            "validation_warnings": getattr(result, "validation_warnings", None) or [],
+            "resolved_stack": getattr(result, "resolved_stack", None),
             "breakdown": result.breakdown,
             "assumptions": result.assumptions,
             "exclusions": result.exclusions,
@@ -673,9 +753,12 @@ async def generate_quote(
                 model_used=result.model_used,
                 tokens_used=result.tokens_used,
                 generation_cost=result.generation_cost,
-                rag_context_used=bool(rag_context),
+                rag_context_used=any_rag_used,
                 generation_time_ms=generation_time_ms,
                 analysis=analysis_metadata,
+                validation_warnings=getattr(result, "validation_warnings", None) or [],
+                company_stack_used=True,
+                company_stack_fallback="builtin" if not company_stack_from_rag else None,
             ),
         ),
     )
@@ -1402,6 +1485,9 @@ async def regenerate_quote(
                 rag_context_used=bool(rag_context),
                 generation_time_ms=generation_time_ms,
                 analysis=analysis_metadata,
+                validation_warnings=getattr(result, "validation_warnings", None) or [],
+                company_stack_used=existing_metadata.get("company_stack_used", True),
+                company_stack_fallback=existing_metadata.get("company_stack_fallback"),
             ),
         ),
     )

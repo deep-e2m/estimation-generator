@@ -215,6 +215,9 @@ class QuoteGenerationService {
       rag_context_used?: boolean; 
       generation_time_ms?: number;
       analysis?: AnalysisMeta;
+      validation_warnings?: string[];
+      company_stack_used?: boolean;
+      company_stack_fallback?: string | null;
     };
     const response = await apiClient.post<{
       success: boolean;

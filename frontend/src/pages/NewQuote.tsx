@@ -21,7 +21,7 @@ import {
 import { cn } from '../lib/utils';
 import { FileUploader } from '../components/upload/FileUploader';
 import { useFileUpload } from '../hooks/useFileUpload';
-import { quoteService } from '@/services';
+import { documentsService, quoteService } from '@/services';
 import type {
   Platform,
   GenerationProgress,
@@ -127,7 +127,7 @@ export const NewQuotePage: React.FC<NewQuotePageProps> = ({
   /**
    * Handle quote generation
    */
-  const handleGenerateQuote = useCallback(() => {
+  const handleGenerateQuote = useCallback(async () => {
     if (!canGenerate) return;
 
     setIsGenerating(true);
@@ -135,12 +135,27 @@ export const NewQuotePage: React.FC<NewQuotePageProps> = ({
     setGeneratedQuote(null);
     setGenerationProgress(null);
 
+    // Include SOW/source document text so the model uses uploaded/supporting docs for accurate estimation
+    let documentSummary: string | undefined;
+    try {
+      const requirementDocs = await documentsService.list(projectId, 'requirements');
+      const texts = requirementDocs
+        .map((d) => d.plain_text?.trim())
+        .filter((t): t is string => !!t);
+      if (texts.length > 0) {
+        documentSummary = texts.join('\n\n---\n\n');
+      }
+    } catch {
+      // Non-blocking: continue without document_summary if list fails
+    }
+
     const request: GenerateQuoteRequest = {
       requirements: requirements,
       hourly_rate: 150, // Default rate, should come from user settings
       use_rag: true,
       project_context: {
         platform,
+        ...(documentSummary ? { document_summary: documentSummary } : {}),
       },
     };
 

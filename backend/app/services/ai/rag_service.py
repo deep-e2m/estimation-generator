@@ -18,6 +18,10 @@ from app.config import settings
 from app.core.database import get_session_factory
 from app.core.redis import make_cache_key, rag_cache
 from app.services.ai.openrouter_client import OpenRouterClient
+from app.services.ai.static_knowledge import (
+    ESTIMATION_GUIDELINES_MD,
+    WORDPRESS_STACK_GUIDELINES_MD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +396,108 @@ class RAGService:
         )
 
         return context
+
+    async def build_company_stack_context(
+        self,
+        query: str,
+        top_k: int = 8,
+        max_context_length: int = 12000,
+        db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
+    ) -> tuple[str, bool]:
+        """
+        Build context for company stack and estimation rules (authoritative).
+
+        Uses search_knowledge with source_types=["guideline", "training_quote"] only
+        (no "quote"). If RAG returns nothing or fails, falls back to built-in
+        WORDPRESS_STACK_GUIDELINES_MD + ESTIMATION_GUIDELINES_MD.
+
+        Returns:
+            Tuple of (context_string, from_rag). from_rag is False when fallback was used.
+        """
+        try:
+            results = await self.search_knowledge(
+                query=query,
+                source_types=["guideline", "training_quote"],
+                top_k=top_k,
+                similarity_threshold=0.6,
+                db_session=db_session,
+                use_cache=use_cache,
+            )
+            if not results:
+                logger.debug("No company stack from RAG; using built-in fallback")
+                fallback = f"{ESTIMATION_GUIDELINES_MD}\n\n---\n\n{WORDPRESS_STACK_GUIDELINES_MD}"
+                return (fallback[:max_context_length] if len(fallback) > max_context_length else fallback, False)
+            parts: List[str] = []
+            current_length = 0
+            for r in results:
+                content = (r.get("content") or "").strip()
+                if not content:
+                    continue
+                if current_length + len(content) > max_context_length:
+                    break
+                parts.append(content)
+                current_length += len(content)
+            if not parts:
+                fallback = f"{ESTIMATION_GUIDELINES_MD}\n\n---\n\n{WORDPRESS_STACK_GUIDELINES_MD}"
+                return (fallback[:max_context_length] if len(fallback) > max_context_length else fallback, False)
+            context = "\n\n---\n\n".join(parts)
+            logger.info("Company stack context from RAG: %d items, %d chars", len(parts), len(context))
+            return (context, True)
+        except Exception as e:
+            logger.warning("Company stack RAG failed, using built-in fallback: %s", e)
+            fallback = f"{ESTIMATION_GUIDELINES_MD}\n\n---\n\n{WORDPRESS_STACK_GUIDELINES_MD}"
+            return (fallback[:max_context_length] if len(fallback) > max_context_length else fallback, False)
+
+    async def build_reference_estimates_context(
+        self,
+        query: str,
+        platform: Optional[str] = None,
+        top_k: int = 5,
+        max_context_length: int = 8000,
+        db_session: Optional[AsyncSession] = None,
+        use_cache: bool = True,
+    ) -> str:
+        """
+        Build RAG context from similar quotes only (reference estimates for structure and hours).
+
+        Uses search_knowledge with source_types=["quote"] so that only approved/similar
+        quote chunks are included, not guidelines or training docs.
+        """
+        try:
+            results = await self.search_knowledge(
+                query=query,
+                source_types=["quote"],
+                top_k=top_k,
+                similarity_threshold=0.65,
+                db_session=db_session,
+                use_cache=use_cache,
+            )
+            if not results:
+                return ""
+            quote_like = []
+            for r in results:
+                extra = r.get("extra_data") or {}
+                quote_like.append({
+                    "platform": extra.get("platform") or "Unknown",
+                    "project_type": extra.get("project_type") or "Unknown",
+                    "total_hours": extra.get("total_hours"),
+                    "summary": extra.get("summary") or "",
+                    "content": r.get("content") or "",
+                    "similarity_score": r.get("similarity_score", 0),
+                })
+            context_parts: List[str] = []
+            current_length = 0
+            for i, q in enumerate(quote_like, 1):
+                quote_text = self._format_quote_for_context(q, i)
+                if current_length + len(quote_text) > max_context_length:
+                    break
+                context_parts.append(quote_text)
+                current_length += len(quote_text)
+            return "\n\n---\n\n".join(context_parts) if context_parts else ""
+        except Exception as e:
+            logger.warning("Reference estimates context failed: %s", e)
+            return ""
 
     def _format_quote_for_context(
         self,

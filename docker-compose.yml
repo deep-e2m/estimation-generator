@@ -115,7 +115,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
-      # Persist database data
+      # Named volume: use postgres_data (restores data from estimation-generator_postgres_data)
       - postgres_data:/var/lib/postgresql/data
       # Optional: init scripts
       - ./docker/init-db:/docker-entrypoint-initdb.d:ro
@@ -221,7 +221,9 @@ networks:
     driver: bridge
 
 # ===========================================
-# Volumes
+# Volumes (named volumes removed by "down -v")
+# To keep DB data: use "docker compose down" WITHOUT -v
+# To wipe cache only: down -v removes redis_data; DB stays (see note below)
 # ===========================================
 volumes:
   postgres_data:

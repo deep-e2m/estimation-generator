@@ -32,12 +32,32 @@ BLOCKNOTE_SECTION_LABELS: dict[str, str] = {
 
 BULLET_PREFIX = re.compile(r"^[-*•]\s+")
 INLINE_BULLET_SEP = re.compile(r"\s+-\s+")
+# Match **bold** (non-greedy) so we can split and convert to BlockNote bold style
+_BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _parse_inline_markdown(text: str) -> list[dict[str, Any]]:
+    """
+    Parse text that may contain **bold** markdown into BlockNote inline content.
+    Asterisks are removed; bold segments get styles.bold = True so no stars are visible.
+    """
+    t = (text or "").strip() or " "
+    parts = _BOLD_PATTERN.split(t)
+    if len(parts) == 1 and not _BOLD_PATTERN.search(t):
+        return [{"type": "text", "text": t, "styles": {}}]
+    result: list[dict[str, Any]] = []
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+        # Odd-indexed parts are the captured groups inside **...**
+        styles: dict[str, Any] = {"bold": True} if i % 2 == 1 else {}
+        result.append({"type": "text", "text": part, "styles": styles})
+    return result if result else [{"type": "text", "text": " ", "styles": {}}]
 
 
 def _inline_content(text: str) -> list[dict[str, Any]]:
-    """BlockNote inline content array from plain text."""
-    t = (text or "").strip() or " "
-    return [{"type": "text", "text": t, "styles": {}}]
+    """BlockNote inline content array from plain text (with **bold** parsed)."""
+    return _parse_inline_markdown(text)
 
 
 def _value_to_blocks(value: str, block_id_prefix: str) -> list[dict[str, Any]]:

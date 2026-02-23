@@ -146,7 +146,9 @@ export function EstimationPreviewPanel({
 
       // Optimistically update quote content in parent so Export preview
       // reflects formatting changes (e.g. bold bullets) immediately,
-      // even before the debounced save completes.
+      // even before the debounced save completes. Do NOT change updated_at
+      // here—otherwise the editor key (quote.id + quote.updated_at) would
+      // change on every keystroke and the editor would remount, losing focus.
       if (onQuoteSaved) {
         const optimisticQuote: Quote = {
           ...quote,
@@ -154,7 +156,6 @@ export function EstimationPreviewPanel({
             ...quote.content,
             executive_summary: serialized,
           },
-          updated_at: new Date().toISOString(),
         };
         onQuoteSaved(optimisticQuote);
       }

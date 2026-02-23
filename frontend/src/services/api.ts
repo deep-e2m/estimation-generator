@@ -119,7 +119,7 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
       if (!window.location.pathname.startsWith('/auth')) {
-        window.location.href = '/auth/login';
+        window.location.href = '/auth/login?reason=session_expired';
       }
     }
 
@@ -133,11 +133,20 @@ apiClient.interceptors.response.use(
 );
 
 // Helper function to extract error message
+// Backend uses FastAPI HTTPException which returns { detail: { code, message } };
+// some handlers return { error: { message } }. Support both.
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const apiError = error.response?.data as ApiError | undefined;
-    if (apiError?.error?.message) {
-      return apiError.error.message;
+    const data = error.response?.data as Record<string, unknown> | undefined;
+    if (data && typeof data === 'object') {
+      const detail = data.detail as { message?: string } | undefined;
+      if (detail && typeof detail === 'object' && typeof detail.message === 'string') {
+        return detail.message;
+      }
+      const err = data.error as { message?: string } | undefined;
+      if (err && typeof err === 'object' && typeof err.message === 'string') {
+        return err.message;
+      }
     }
     if (error.message) {
       return error.message;

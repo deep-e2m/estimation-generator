@@ -169,8 +169,13 @@ aider.conf.yml
 # ==========================================
 # Project-specific
 # ==========================================
+# specs/ and docs/ are intentionally tracked (feature specs, implementation plans, UAT docs)
 # Knowledge base generated files (match actual dir: knowledge-based)
 knowledge-based/formatting/
+
+# Cursor/IDE local data (MCP descriptors, agent transcripts at repo root)
+mcps/
+agent-transcripts/
 
 # Celery (docker-compose has celery-worker)
 celerybeat-schedule

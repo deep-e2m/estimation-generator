@@ -27,9 +27,76 @@ from app.services.ai.prompts import (
     build_wordpress_stack_research_prompt,
     format_rag_context,
 )
+from app.services.ai.static_knowledge import (
+    COMPANY_STACK_STRUCTURED,
+    get_company_stack_structured,
+)
 from app.services.blocknote import outcomes_dict_to_blocknote_json
 
 logger = logging.getLogger(__name__)
+
+# Names we check for in quote content (company stack + common alternatives). Spec Step 6.
+_STACK_CHECK_NAMES = set()
+for category in ("plugins", "themes", "page_builders"):
+    for item in COMPANY_STACK_STRUCTURED.get(category, []):
+        name = item.get("name") or ""
+        if name:
+            _STACK_CHECK_NAMES.add(name)
+# Common alternatives that would indicate quote drifted from company stack
+_STACK_CHECK_NAMES.update([
+    "Ninja Forms", "WPForms", "Formidable", "Divi Builder", "Bricks Builder",
+    "Gutenberg", "Breakdance", "Oxygen", "WPBakery", "Themify",
+])
+
+
+def _resolved_stack_summary(wordpress_stack: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Build a minimal summary of resolved stack (names only) for persistence."""
+    if not wordpress_stack:
+        return None
+    out: Dict[str, Any] = {"locked": {}, "recommended": {}}
+    for key in ("locked", "recommended"):
+        for cat in ("plugins", "themes", "page_builders"):
+            items = (wordpress_stack.get(key) or {}).get(cat) or []
+            names = []
+            for item in items:
+                n = (item.get("name") if isinstance(item, dict) else None) or str(item).strip()
+                if n:
+                    names.append(n)
+            out[key][cat] = names
+    return out
+
+
+def _validate_quote_against_stack(
+    content: str,
+    wordpress_stack: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """
+    Best-effort check: quote content vs resolved stack (locked + company recommended).
+    Returns list of warning strings when content mentions tools not in the resolved stack.
+    """
+    if not content:
+        return []
+    warnings: List[str] = []
+    content_lower = content.lower()
+    allowed: set = set()
+    stack = wordpress_stack or {}
+    for category in ("locked", "recommended"):
+        for key in ("plugins", "themes", "page_builders"):
+            for item in (stack.get(category) or {}).get(key) or []:
+                name = (item.get("name") if isinstance(item, dict) else None) or str(item)
+                if name:
+                    allowed.add(name.lower().strip())
+    for name in _STACK_CHECK_NAMES:
+        if not name:
+            continue
+        name_lower = name.lower()
+        if name_lower in allowed:
+            continue
+        if name_lower in content_lower or name in content:
+            warnings.append(
+                f"Quote mentions '{name}' which is not in the resolved company/client stack."
+            )
+    return warnings
 
 
 class QuoteGenerationResult:
@@ -63,6 +130,8 @@ class QuoteGenerationResult:
         model_used: str = "",
         tokens_used: int = 0,
         generation_cost: float = 0.0,
+        validation_warnings: Optional[List[str]] = None,
+        resolved_stack: Optional[Dict[str, Any]] = None,
     ):
         self.content = content
         self.total_hours = total_hours
@@ -75,6 +144,8 @@ class QuoteGenerationResult:
         self.model_used = model_used
         self.tokens_used = tokens_used
         self.generation_cost = generation_cost
+        self.validation_warnings = validation_warnings or []
+        self.resolved_stack = resolved_stack
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
@@ -90,6 +161,8 @@ class QuoteGenerationResult:
             "model_used": self.model_used,
             "tokens_used": self.tokens_used,
             "generation_cost": self.generation_cost,
+            "validation_warnings": self.validation_warnings,
+            "resolved_stack": self.resolved_stack,
         }
 
 
@@ -141,6 +214,10 @@ class LLMService:
         hourly_rate: Optional[float] = None,
         model: Optional[str] = None,
         temperature: float = 0.3,
+        project_brief: Optional[str] = None,
+        company_stack_context: Optional[str] = None,
+        reference_estimates_context: Optional[str] = None,
+        company_stack_fallback: bool = False,
     ) -> QuoteGenerationResult:
         """
         Generate a quote from requirements.
@@ -148,27 +225,22 @@ class LLMService:
         Args:
             requirements: Client requirements text.
             platform: Target platform (wordpress only).
-            rag_context: Pre-built RAG context from similar quotes.
+            rag_context: Pre-built RAG context (legacy; prefer reference_estimates_context).
             formatting_template: Optional template for output format.
-            project_context: Additional context (client name, industry, etc.).
+            project_context: Additional context (client name, industry, project_brief, etc.).
             hourly_rate: Hourly rate for cost calculation.
             model: LLM model to use. Defaults to 'generation'.
             temperature: Sampling temperature.
+            project_brief: Single source of truth brief (name + description + instructions).
+            company_stack_context: Company stack and estimation rules (MUST follow).
+            reference_estimates_context: Similar quotes for structure/hours only.
+            company_stack_fallback: True when company stack came from built-in fallback.
 
         Returns:
             QuoteGenerationResult with content and extracted data.
 
         Raises:
             OpenRouterError: If quote generation fails.
-
-        Example:
-            >>> result = await service.generate_quote(
-            ...     requirements="WordPress site with WooCommerce",
-            ...     platform="wordpress",
-            ...     hourly_rate=100.0,
-            ... )
-            >>> print(f"Hours: {result.total_hours}")
-            >>> print(f"Cost: ${result.total_cost}")
         """
         logger.info(
             "Generating quote: platform=%s, requirements_length=%d",
@@ -192,15 +264,30 @@ class LLMService:
                         len(wordpress_stack.get("locked", {}).get("plugins") or []),
                         len(wordpress_stack.get("recommended", {}).get("plugins") or []),
                     )
+                else:
+                    # Fallback: ensure prompt always gets a structured stack with URLs for Development Approach.
+                    enriched_project_context["wordpress_stack"] = {
+                        "locked": {"plugins": [], "themes": [], "page_builders": []},
+                        "recommended": get_company_stack_structured(),
+                    }
+                    logger.info("WordPress stack: using company fallback (no research result)")
             except Exception as e:  # pragma: no cover - best-effort enrichment
                 logger.warning("WordPress stack research failed; continuing without it: %s", e)
+                # Fallback: ensure prompt always gets a structured stack with URLs.
+                enriched_project_context["wordpress_stack"] = {
+                    "locked": {"plugins": [], "themes": [], "page_builders": []},
+                    "recommended": get_company_stack_structured(),
+                }
 
-        # Build prompt
+        # Build prompt (two-block RAG: company stack + reference estimates; single brief)
         messages = build_quote_generation_prompt_json(
             requirements=requirements,
             platform=platform,
             rag_context=rag_context,
             project_context=enriched_project_context,
+            project_brief=project_brief or enriched_project_context.get("project_brief"),
+            company_stack_context=company_stack_context,
+            reference_estimates_context=reference_estimates_context,
         )
 
         # Call LLM with JSON response format
@@ -242,6 +329,10 @@ class LLMService:
                 tokens_used=response.usage.total_tokens,
                 generation_cost=response.usage.total_cost,
             )
+            result.validation_warnings = _validate_quote_against_stack(
+                content, enriched_project_context.get("wordpress_stack")
+            )
+            result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
             return result
 
         estimation_outcomes = parsed.get("estimation_outcomes") or {}
@@ -337,6 +428,10 @@ class LLMService:
             tokens_used=response.usage.total_tokens,
             generation_cost=response.usage.total_cost,
         )
+        result.validation_warnings = _validate_quote_against_stack(
+            result.content, enriched_project_context.get("wordpress_stack")
+        )
+        result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
 
         logger.info(
             "Quote generated: hours=%s, model=%s, tokens=%d",
@@ -834,24 +929,21 @@ Focus on practical, actionable information relevant to project estimation."""
             logger.warning("WordPress stack research returned non-object JSON; ignoring")
             return None
 
-        # Best-effort normalization: ensure keys exist with list defaults
-        locked = parsed.get("locked") or {}
-        recommended = parsed.get("recommended") or {}
-
+        # Locked = client-specified tools from research (with URLs from web). Spec Step 4.
+        # Recommended = company stack (authoritative), not from web.
         def _ensure_list(obj: Any) -> list:
             return obj if isinstance(obj, list) else []
 
+        locked = parsed.get("locked") or {}
         locked["plugins"] = _ensure_list(locked.get("plugins"))
         locked["themes"] = _ensure_list(locked.get("themes"))
         locked["page_builders"] = _ensure_list(locked.get("page_builders"))
-        recommended["plugins"] = _ensure_list(recommended.get("plugins"))
-        recommended["themes"] = _ensure_list(recommended.get("themes"))
 
+        recommended = get_company_stack_structured()
         stack = {
             "locked": locked,
             "recommended": recommended,
         }
-
         return stack
 
     # ==================== Private Helper Methods ====================

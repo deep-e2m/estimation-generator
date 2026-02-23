@@ -12,7 +12,24 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_URL || 'http://localhost:8000'
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Redirect /favicon.ico to /favicon.svg to avoid 404 (browsers often request .ico by default)
+      {
+        name: 'favicon-ico-redirect',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url === '/favicon.ico') {
+              res.statusCode = 302
+              res.setHeader('Location', '/favicon.svg')
+              res.end()
+              return
+            }
+            next()
+          })
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

@@ -11,6 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -68,13 +69,12 @@ export default function Register() {
         password: data.password,
         full_name: data.full_name,
       })
+      toast.success('Account created successfully')
       navigate('/dashboard', { replace: true })
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Registration failed. Please try again.'
-      )
+    } catch {
+      const message = useAuthStore.getState().error || 'Registration failed. Please try again.'
+      setError(message)
+      toast.error(message, { duration: 5000 })
     } finally {
       setIsLoading(false)
     }

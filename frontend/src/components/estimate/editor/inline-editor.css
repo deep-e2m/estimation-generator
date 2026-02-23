@@ -371,9 +371,10 @@
 
 .inline-quote-editor .ProseMirror a,
 .doc-editor-preview a {
-  color: #2563eb; /* primary-600 */
+  color: #2563eb; /* primary-600 — blue hyperlink */
   text-decoration: underline;
   cursor: pointer;
+  font-size: 0.875em; /* slightly smaller than body text for clear link styling */
 }
 
 .inline-quote-editor .ProseMirror a:hover,

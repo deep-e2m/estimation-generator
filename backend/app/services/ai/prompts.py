@@ -8,10 +8,12 @@ including quote generation, chat responses, and requirement analysis.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from app.services.ai.static_knowledge import get_company_stack_structured
+
 
 # System prompts for different roles
 SYSTEM_PROMPTS = {
-    "quote_generator": """You are an expert project estimator for a digital agency specializing in WordPress development projects.
+    "quote_generator": """You are the lead WordPress project manager with 25+ years of experience. Your estimates are accurate, defensible, and follow the company's standard format. The single source of truth for every quote is the project brief provided; do not add scope beyond what the brief implies. Use only company-approved plugins, themes, and page builders unless the client has explicitly requested something else in the brief.
 
 Your role is to generate professional, detailed project quotes based on client requirements. You have extensive experience with:
 - WordPress development (themes, plugins, WooCommerce, Elementor, Bricks)
@@ -25,7 +27,7 @@ When generating quotes, you should:
 3. Include reasonable assumptions and exclusions
 4. Highlight any risks or dependencies
 5. Use a professional, confident tone
-6. TIMELINE IS CRITICAL: The Estimated Timeline (Section 7) must be accurate and consistent with total hours and scope. If requirements state a timeline or duration, use it. Otherwise derive timeline from total effort (e.g. hours ÷ realistic throughput). Use business days for short engagements (e.g. under ~40 hours), weeks for longer projects. Never invent or compress timeline; it must reflect real delivery expectations.
+6. TIMELINE IS KING: Your scope-based estimated total hours and derived timeline (e.g. business days = total_hours ÷ 8) are the primary estimate and must be accurate, defensible, and consistent with the described scope. Derive total hours from deliverables and complexity; then derive business days and weeks from that. If the project brief or SOW states a duration or hours, do not use it as the main timeline—include it only as an italic note (e.g. *Note: Client/SOW stated: ~90 business days.*). Your estimated hours and (business days) are the default and must be proper and accurate for the scope.
 7. Include every capability mentioned in the requirements (e.g. donations/tax receipts, SEO, analytics, SSL, backups, accessibility, filters) as explicit deliverables where applicable
 
 **WordPress-Specific Requirements:**
@@ -42,8 +44,13 @@ When generating quotes, you should:
     - You may suggest alternatives, but clearly label them as "Alternative (optional)" and do NOT imply the primary stack will change.
     - Reflect client-specified tools consistently in Development Approach, Plugins & Functionality, and WordPress Technical Stack sections.
 17. For every plugin, theme, or page builder that you mention anywhere in the estimate, include its official URL inline in the text using this pattern: "Name (URL: https://example.com)".
+18. Format every plugin name, theme name, and key tech stack item (e.g. page builders, WooCommerce, ACF, WPML) in bold so they stand out in the estimate—e.g. **Gravity Forms**, **Elementor**, **WooCommerce**. Use markdown bold (**text**) for these names; keep the rest of the sentence in normal weight.
 
-Your estimates should be thorough but concise, focusing on deliverables the client cares about.""",
+Your estimates should be thorough but concise, focusing on deliverables the client cares about.
+
+**Audience and clarity:** The estimation quote is a critical document for developers (implementation), project managers (planning and handoff), and clients (scope and expectations). Write every section so that all three can understand it without guesswork: use full sentences for assumptions and exclusions (no fragments or shorthand), briefly explain what each page or section is in the sitemap, and keep language precise and professional so the quote can be used as the single reference for scope and boundaries.
+
+Assumptions and exclusions must be derived from the project brief/SOW first; never default to a one-size-fits-all list.""",
 
     "chat_assistant": """You are an expert project estimator and quote generator for E2M Solutions, a digital agency specializing in WordPress web development.
 
@@ -688,6 +695,9 @@ def build_quote_generation_prompt_json(
     platform: str,
     rag_context: Optional[str] = None,
     project_context: Optional[Dict[str, Any]] = None,
+    project_brief: Optional[str] = None,
+    company_stack_context: Optional[str] = None,
+    reference_estimates_context: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """
     Build the prompt for quote generation with JSON output (key-value sections).
@@ -695,6 +705,10 @@ def build_quote_generation_prompt_json(
     Returns messages that ask the LLM to respond with a JSON object containing
     estimation_outcomes (object with section keys and string values) and
     total_hours (number).
+
+    When project_brief is provided, it is the single source of truth for scope.
+    When company_stack_context is provided, it is labeled as MUST follow.
+    When reference_estimates_context is provided, it is for structure and hours only.
     """
     messages: List[Dict[str, str]] = []
     system_content = SYSTEM_PROMPTS["quote_generator"]
@@ -714,20 +728,44 @@ Additional WordPress expertise:
 
     messages.append({"role": "system", "content": system_content})
 
-    user_content = f"""Generate a professional project quote based on the following requirements.
+    # Single source of truth: project brief (spec Step 5)
+    brief = (project_brief or "").strip() or requirements
+    user_content = f"""Generate a professional project quote. The ONLY basis for scope and deliverables is the following project brief (and any attached SOW/source document). Do not add scope not implied by this brief.
 
-## Client Requirements
-{requirements}
+## Single source of truth (project brief)
+{brief}
 
 ## Platform
 {platform}
+
+## Source fidelity (CRITICAL – follow exactly)
+- **Timeline and effort (primary = your estimate)**: Your scope-based estimate is the default and primary timeline. Derive total hours from the described scope (deliverables, phases, complexity), then derive business days as total_hours ÷ 8 (or a realistic rate). Output format: "Estimated Total Effort: X–Y hours (approximately Z business days)" where X–Y and Z come from YOUR estimate. The timeline is the most important output—it must be accurate, defensible, and consistent (Z ≈ total_hours ÷ 8). If the project brief or SOW states a duration (e.g. "~90 business days") or hours, do NOT use that as the main timeline. Instead, add a short note in *italic* in the same section, e.g. "*Note: Client/SOW referenced timeline: ~90 business days.*" or "*Document stated: Total Project Duration ~90 business days.*" Your estimated hours and (business days) remain the primary figures; the client/document reference is for context only.
+- **Website structure / sitemap**: This section is read by developers, project managers, and clients—it must be self-explanatory. Start with one or two short sentences stating what the section is (e.g. "The following pages and sections are in scope for this estimate, based on the project brief."). Then present the sitemap in a logical, readable structure: list main navigation items in order (Home, About, Products, Case Studies, etc.) using the source’s exact names. When the source lists product sub-areas or product lines (e.g. Invisibeam System, Carbon Corner), show them under or next to "Products"—e.g. "Products (Invisibeam System, Carbon Corner)" or as sub-bullets under Products—so the reader understands they are product areas, not unrelated top-level pages. Do not put product sub-areas as standalone bullets at the top with no context. Do not merge distinct nav items into thematic groups (e.g. keep "Apply to be a contractor" and "Find An Invisibeam Contractor" if the source uses both). Do not add pages not in the source (e.g. no Blog if the brief does not mention it). The result must read as a clear, professional sitemap that developers and PMs can implement from and clients can sign off on. For each page or section, add a brief explanation: use the form "Page name – Short description" (e.g. "Home – Main landing page introducing the brand." or "Apply to be a contractor – Application form and process for new contractors."). Do not list bare names only (e.g. not just "Home" or "About").
+- **Exclusions**: First, extract and list every exclusion explicitly stated in the project brief (e.g. under "Explicitly Excluded", "Exclusions", "Out of scope", or similar). List each as a full sentence. If the brief does not list specific exclusions, infer from scope (e.g. login-gated eCommerce implies "Consumer-facing checkout is out of scope" if not mentioned; single-product implies "Multi-product filtering is out of scope"). Then add standard exclusions (maintenance, content creation, training beyond handoff). Do not output the same generic list for every project—tailor to this brief. Write every exclusion as a complete sentence (e.g. "Advanced recommendation engines are out of scope."). No single-word or phrase-only bullets.
+- **Assumptions**: First, extract and list every assumption explicitly stated in the project brief (e.g. under "Assumptions & Constraints", "Assumptions", "Dependencies"). List each as a full sentence. If the brief states "Two (2) rounds of revisions per phase", use that exact phrasing. Include: brand book/logo/content approvals if in the brief; hosting/domains separate; revision rounds. If the brief does not specify theme/plugins, add one sentence: "Company-approved plugins and themes will be used unless the SOW specifies otherwise." Do not output the same generic list for every project—tailor to this brief. Write every assumption as a complete sentence. No fragments or shorthand.
+- **Tech stack**: If the brief only states "WordPress + WooCommerce" (or similar) and does not name a theme, page builder, or form plugin, use company-approved tools but state them as assumptions (e.g. "Assumes Elementor and Gravity Forms per company standards unless the client specifies otherwise"). Do not present them as if they were specified in the source document.
 """
 
-    if rag_context:
-        user_content += f"""
-## Reference: Similar Historical Projects
-{rag_context}
+    # Company stack and estimation rules (MUST follow) — spec Step 3
+    if company_stack_context:
+        user_content += """
+## Company stack and estimation rules (MUST follow)
+The following are company-approved guidelines and stack. You MUST follow these rules and use only company-approved plugins/themes/page builders unless the client has explicitly requested something else in the brief above.
+
 """
+        user_content += company_stack_context
+        user_content += "\n\n"
+
+    # Reference estimates: structure and hours only — spec Step 3
+    ref_context = reference_estimates_context or rag_context
+    if ref_context:
+        user_content += """
+## Reference estimates (for structure and hours only)
+Use the following similar projects ONLY for estimation structure and hour benchmarks. Do NOT copy scope or content; base scope strictly on the project brief above.
+
+"""
+        user_content += ref_context
+        user_content += "\n\n"
 
     wordpress_stack = None
     if project_context:
@@ -755,6 +793,11 @@ Additional WordPress expertise:
         locked_builders = wordpress_stack.get("locked", {}).get("page_builders") or []
         recommended_plugins = wordpress_stack.get("recommended", {}).get("plugins") or []
         recommended_themes = wordpress_stack.get("recommended", {}).get("themes") or []
+        # When research returned only locked tools and no recommended list, use company stack so Development Approach has concrete tools with URLs.
+        if not recommended_plugins and not recommended_themes:
+            company = get_company_stack_structured()
+            recommended_plugins = company.get("plugins") or []
+            recommended_themes = company.get("themes") or []
 
         user_content += """
 ## WordPress Stack (LOCKED-IN CLIENT TOOLS + RESEARCHED RECOMMENDATIONS)
@@ -832,6 +875,7 @@ The following stack has been pre-computed for you. You MUST respect it when writ
 When writing the estimate:
 - ALWAYS use the client-locked tools above when they exist (do not replace them).
 - You MAY add recommended tools from this list where they make sense for the scope.
+- In the Development Approach section, list every theme, page builder, and plugin you use by name with URL. Use the locked-in tools first; then add recommended tools that apply to this project.
 - For EVERY plugin, theme, or page builder you mention anywhere in the estimate text, include its official URL inline using the pattern "Name (URL: https://example.com)".
 """
 
@@ -842,11 +886,11 @@ You MUST respond with a single JSON object (no markdown, no code fence) with thi
 {
   "estimation_outcomes": {
     "project_overview": "2-4 sentence summary of the project, key features, and goal.",
-    "website_structure": "Full section 2 content: Website Structure & Page Scope (list pages, features, blog, etc.).",
-    "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA.",
-    "estimated_effort_timeline": "Full section 7: Estimated Total Effort (X–Y hours), Estimated Timeline (X–Y weeks).",
-    "assumptions": "Full section 8: Assumptions & Client Responsibilities (what client provides, plugins, etc.).",
-    "exclusions": "Full section 10: Exclusions (copywriting, animations, integrations, maintenance, etc.)."
+    "website_structure": "Full section 2: Website Structure & Page Scope. This section is used by developers, PMs, and clients—every item must be clear. Start with 1-2 sentences explaining the section. Then list each page/section with a brief description: use the form 'Page name – Short description of what it is' (e.g. 'Home – Main landing page introducing the brand and key offerings.' or 'Apply to be a contractor – Application form and process for new contractors.'). Do not list bare names only. Main nav in logical order using the source's exact names; product sub-areas (e.g. Invisibeam System, Carbon Corner) under Products. The result must be a professional, self-explanatory sitemap.",
+    "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA. The Development Approach section MUST list the exact theme, page builder, and every plugin that will be used, each by name with its official URL in the form **Name** (URL: https://...). Do not write generic phrases like 'a form plugin' or 'WordPress and WooCommerce' without naming the theme, page builder, and key plugins with URLs. Use the locked-in and recommended tools provided in the WordPress Stack section when present; otherwise use company-approved defaults and include their URLs.",
+    "estimated_effort_timeline": "Full section 7: Primary figures are YOUR scope-based estimate. Include 'Estimated Total Effort: X–Y hours (approximately Z business days)' where X–Y and Z are derived from your scope analysis (Z = total_hours ÷ 8). Then 'Estimated Timeline: ...' (e.g. N weeks) consistent with Z. If the brief or SOW states a duration or hours (e.g. 'Total Project Duration: ~90 business days'), add one line in italic as a note only, e.g. '*Note: Client/SOW referenced timeline: ~90 business days.*' Your estimated hours and days remain the main timeline.",
+    "assumptions": "Full section 8: Assumptions & Client Responsibilities. The quote is read by developers, PMs, and clients—every bullet must be a full sentence. Start with a short intro (e.g. 'The following are assumed for this estimate.'). Then list each assumption from the brief as a complete sentence (e.g. 'The brand book will be finalized before design work begins.' not 'Brand book finalized before design.'). Include: brand book, logo, content approvals, hosting, revision rounds (use the source's exact wording for revision rounds if stated). If the brief does not specify theme/plugins, add a full sentence (e.g. 'Company-approved plugins and themes will be used unless the SOW specifies otherwise.'). No fragments or shorthand.",
+    "exclusions": "Full section 10: Exclusions. The quote is used by developers, PMs, and clients—every bullet must be a full sentence so scope is unambiguous. Start with a short intro (e.g. 'The following are out of scope for this estimate.'). Then list every exclusion FROM the project brief as a complete sentence (e.g. 'Advanced recommendation engines are out of scope.' not 'Advanced recommendation engines.'). Include each specific exclusion from the brief (recommendation engines, subscription billing, automated upsells/cross-sells, faceted navigation, consumer-facing checkout, etc.); add generic exclusions (maintenance, content, etc.) after. No single-word or phrase-only bullets."
   },
   "total_hours": <number>
 }
@@ -855,9 +899,14 @@ Rules:
 - Every key in estimation_outcomes must be present; use empty string "" if a section does not apply.
 - Use plain text inside each value (no markdown tables, no emojis).
 - Structure each value for readability: separate paragraphs with a blank line. For lists, put each item on its own line and start the line with "- " (e.g. "- Item one"). Do not put multiple list items on the same line.
-- total_hours must be a number (e.g. 120 or 150). Derive from your estimate (use the midpoint of your range if you think in ranges).
-- Be specific with hours (tight ranges in the text like "180–200 hours").
+- Audience: The estimation quote is a key document for developers (implementation), project managers (planning and handoff), and clients (scope and sign-off). Every section must be self-explanatory so all three can use it as the single reference for scope and boundaries.
+- Website Structure: Start with a brief intro; then list each page/section with a short description (e.g. "Home – Main landing page." or "Apply to be a contractor – Application form for new contractors."). No bare names only. Main nav in order; product sub-areas under Products. The section must be explainable at a glance for dev, PM, and client.
+- Assumptions and Exclusions: Each section starts with a short intro. Every list item must be a full sentence (subject + verb + clear meaning)—e.g. "The brand book will be finalized before design begins." and "Advanced recommendation engines are out of scope." No sentence fragments, shorthand, or single-word bullets. This ensures the quote is properly understandable by developers, PMs, and clients.
+- total_hours must be a number derived from your scope-based estimate (deliverables, phases, complexity). Do not override it with the client/SOW-stated duration. Set days = total_hours ÷ 8 (business days) so the timeline is consistent and accurate.
+- estimated_effort_timeline must show your estimated hours and (approximately N business days) as the primary timeline. If the source document or project mentions a duration or hours, add a single italic note in that section, e.g. *Note: Client/SOW stated: ~90 business days.*
 - For every plugin, theme, or page builder you mention in any section, always include its official URL inline using the pattern "Name (URL: https://example.com)".
+- Format plugin names, theme names, and key tech stack items in bold using markdown (**Name**) so they stand out in the estimate.
+- Development Approach: In the development_approach section, list every theme, page builder, and plugin you use by name with URL. Use the locked-in tools first when provided; then add recommended tools that apply to this project. Do not output generic "WordPress and WooCommerce" without concrete theme/page builder/plugin names and URLs.
 """
     messages.append({"role": "user", "content": user_content})
     return messages

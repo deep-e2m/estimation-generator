@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, chat, clients, dashboard, documents, knowledge, projects, quotes
+from app.api.v1 import auth, chat, clients, dashboard, documents, files, knowledge, projects, quotes
 from app.config import settings
 from app.core.database import close_db_connection, init_db_connection
 from app.core.redis import close_redis_client, get_redis_client, redis_ping
@@ -148,6 +148,12 @@ def create_application() -> FastAPI:
         documents.router,
         prefix=f"{settings.API_V1_PREFIX}",
         tags=["Documents"],
+    )
+
+    app.include_router(
+        files.router,
+        prefix=f"{settings.API_V1_PREFIX}",
+        tags=["Files"],
     )
 
     return app

@@ -3,14 +3,16 @@
  * 
  * Uses centralized CSS classes from styles/pages.css
  * Features animated branding with Framer Motion
+ * Shows toast popup on auth errors (e.g. invalid credentials, session expired).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { Mail, Lock, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -48,19 +50,29 @@ export default function Login() {
     },
   })
 
+  // Show toast when redirected due to session expiry (401 from API interceptor)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('reason') === 'session_expired') {
+      toast.error('Your session expired. Please sign in again.')
+      window.history.replaceState({}, '', location.pathname)
+    }
+  }, [location.search, location.pathname])
+
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true)
     setError(null)
 
     try {
       await login({ email: data.email, password: data.password, remember_me: data.remember })
+      toast.success('Signed in successfully')
       navigate(from, { replace: true })
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Invalid email or password. Please try again.'
-      )
+    } catch {
+      // Auth store already sets error with API message via getErrorMessage; prefer it over generic axios message
+      const message = useAuthStore.getState().error
+      const displayMessage = message || 'Invalid email or password. Please try again.'
+      setError(displayMessage)
+      toast.error(displayMessage, { duration: 5000 })
     } finally {
       setIsLoading(false)
     }
