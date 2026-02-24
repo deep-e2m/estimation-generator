@@ -9,7 +9,8 @@ Includes Redis caching for improved performance on repeated queries.
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import statistics
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -457,12 +458,17 @@ class RAGService:
         max_context_length: int = 8000,
         db_session: Optional[AsyncSession] = None,
         use_cache: bool = True,
-    ) -> str:
+    ) -> Tuple[str, Optional[Dict[str, float]]]:
         """
         Build RAG context from similar quotes only (reference estimates for structure and hours).
 
         Uses search_knowledge with source_types=["quote"] so that only approved/similar
         quote chunks are included, not guidelines or training docs.
+
+        Returns:
+            (context_string, calibration_band). calibration_band is None or
+            {"min_hours": float, "max_hours": float, "median_hours": float} when
+            at least 2 similar quotes have total_hours (for guardrail warnings).
         """
         try:
             results = await self.search_knowledge(
@@ -474,7 +480,7 @@ class RAGService:
                 use_cache=use_cache,
             )
             if not results:
-                return ""
+                return "", None
             quote_like = []
             for r in results:
                 extra = r.get("extra_data") or {}
@@ -494,10 +500,28 @@ class RAGService:
                     break
                 context_parts.append(quote_text)
                 current_length += len(quote_text)
-            return "\n\n---\n\n".join(context_parts) if context_parts else ""
+            # Calibration band: median/min/max from similar quotes (≥2 with hours)
+            hours_list = [
+                float(q["total_hours"])
+                for q in quote_like
+                if q.get("total_hours") is not None
+                and isinstance(q["total_hours"], (int, float))
+            ]
+            calibration_band: Optional[Dict[str, float]] = None
+            if len(hours_list) >= 2:
+                median_h = statistics.median(hours_list)
+                min_h = min(hours_list)
+                max_h = max(hours_list)
+                calibration_band = {"min_hours": min_h, "max_hours": max_h, "median_hours": median_h}
+                calibration_line = (
+                    f"Similar past projects (calibration only): median {median_h:.0f} hours (range {min_h:.0f}–{max_h:.0f}). "
+                    "Use this only as a sanity check; derive your estimate from the current brief."
+                )
+                context_parts.append(calibration_line)
+            return "\n\n---\n\n".join(context_parts) if context_parts else "", calibration_band
         except Exception as e:
             logger.warning("Reference estimates context failed: %s", e)
-            return ""
+            return "", None
 
     def _format_quote_for_context(
         self,

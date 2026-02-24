@@ -23,7 +23,7 @@ FROM python:3.11-slim as runtime
 
 WORKDIR /app
 
-# Install runtime dependencies (WeasyPrint needs cairo/pango for PDF export)
+# Install runtime dependencies (WeasyPrint: cairo/pango; pdf2image: poppler for PDF→image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi8 \
     libglib2.0-0t64 \
     shared-mime-info \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

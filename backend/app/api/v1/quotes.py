@@ -132,6 +132,12 @@ quote_ws_manager = QuoteConnectionManager()
 DEFAULT_PREPARED_BY = "E2M Solutions"
 
 
+def _has_stack_violation_warnings(result: Any) -> bool:
+    """True if result has validation warnings about stack (tool not in resolved stack)."""
+    warnings = getattr(result, "validation_warnings", None) or []
+    return any("not in the resolved" in (w or "") for w in warnings)
+
+
 def _prepared_by(extra_data: Optional[dict]) -> str:
     """Return prepared_by from quote metadata or default to E2M Solutions."""
     return (extra_data or {}).get("prepared_by") or DEFAULT_PREPARED_BY
@@ -589,9 +595,10 @@ async def generate_quote(
         db_session=db,
     )
     reference_estimates_context = ""
+    calibration_band = None
     if request.use_rag:
         try:
-            reference_estimates_context = await rag_service.build_reference_estimates_context(
+            reference_estimates_context, calibration_band = await rag_service.build_reference_estimates_context(
                 query=canonical_brief,
                 platform=project.platform.value,
                 db_session=db,
@@ -610,10 +617,13 @@ async def generate_quote(
     project_context_for_llm = dict(request.project_context or {})
     project_context_for_llm["project_name"] = project_name
     project_context_for_llm["project_brief"] = canonical_brief
+    if calibration_band is not None:
+        project_context_for_llm["calibration_band"] = calibration_band
 
-    # Generate quote using LLM (HOURS ONLY - NO PRICING), with one retry on failure (spec Step 5/7)
+    # Generate quote using LLM (HOURS ONLY - NO PRICING), with retry on failure or stack violation
     llm_service = get_llm_service()
     last_error: Optional[Exception] = None
+    result = None
     for attempt in range(2):
         try:
             result = await llm_service.generate_quote(
@@ -624,8 +634,12 @@ async def generate_quote(
                 reference_estimates_context=reference_estimates_context or None,
                 project_context=project_context_for_llm,
                 company_stack_fallback=not company_stack_from_rag,
+                strict_stack=(attempt == 1),
                 # NOTE: hourly_rate intentionally NOT passed - billing/pricing is out of scope
             )
+            if attempt == 0 and result and _has_stack_violation_warnings(result):
+                logger.info("Stack violation warnings after first attempt; retrying with strict_stack=True")
+                continue
             break
         except Exception as e:
             last_error = e

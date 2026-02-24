@@ -17,7 +17,7 @@ import {
   Globe,
   Sparkles,
 } from 'lucide-react'
-import { projectsService } from '@/services'
+import { projectsService, uploadService } from '@/services'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,6 +58,12 @@ interface FormErrors {
   description?: string
   platform?: string
 }
+
+// Requirement file types accepted by backend (parsed for estimation brief)
+const REQUIREMENT_FILE_EXTS = new Set([
+  '.pdf', '.docx', '.doc', '.txt', '.md',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp',
+])
 
 // Steps data
 const STEPS = [
@@ -177,11 +183,21 @@ export function NewProjectPage() {
       ...(formData.additionalInputs.trim() ? { additional_instructions: formData.additionalInputs.trim() } : {}),
     }
     const project = await projectsService.create(projectData)
-    if (formData.files.length > 0) {
-      localStorage.setItem(
-        `project_${project.id}_pending_files`,
-        JSON.stringify(formData.files.map((f) => f.name))
-      )
+    const filesToUpload = formData.files.filter((f) => {
+      const ext = (f.name && f.name.includes('.')) ? `.${f.name.split('.').pop()?.toLowerCase()}` : ''
+      return REQUIREMENT_FILE_EXTS.has(ext)
+    })
+    if (filesToUpload.length > 0) {
+      for (const file of filesToUpload) {
+        try {
+          await uploadService.uploadFile(file, {
+            projectId: project.id,
+            category: 'requirements',
+          })
+        } catch (err) {
+          console.error('Failed to upload supporting file:', file.name, err)
+        }
+      }
     }
     setCreatedProject(project)
     setShowEstimationUI(true)

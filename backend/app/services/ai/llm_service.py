@@ -27,6 +27,7 @@ from app.services.ai.prompts import (
     build_wordpress_stack_research_prompt,
     format_rag_context,
 )
+from app.services.ai.stack_enforcement import ensure_one_theme_in_text, normalize_stack_in_text
 from app.services.ai.static_knowledge import (
     COMPANY_STACK_STRUCTURED,
     get_company_stack_structured,
@@ -97,6 +98,96 @@ def _validate_quote_against_stack(
                 f"Quote mentions '{name}' which is not in the resolved company/client stack."
             )
     return warnings
+
+
+def _detect_placeholders(text: str) -> List[str]:
+    """
+    Detect placeholder patterns in quote text (e.g. [X], [actual count], [TBD]).
+    Returns list of warning strings for each placeholder found.
+    """
+    if not text or not text.strip():
+        return []
+    warnings: List[str] = []
+    # Explicit patterns that indicate placeholders
+    explicit = re.compile(
+        r"\[(?:X|Y|Z|N|TBD|TODO|actual count|number|hours?|days?)\b[^\]]*\]",
+        re.IGNORECASE,
+    )
+    for m in explicit.finditer(text):
+        warnings.append(f"Placeholder detected in quote: '{m.group(0)}'")
+    # Short bracketed placeholders like [actual count], [number], [N] (already in explicit)
+    # Single-capital or generic [X]/[Y] style
+    short_bracket = re.compile(r"\[\s*([A-Za-z]{1,2})\s*\]")
+    for m in short_bracket.finditer(text):
+        token = m.group(1).lower()
+        if token in ("x", "y", "z", "n", "tbd"):
+            warnings.append(f"Placeholder detected in quote: '{m.group(0)}'")
+    return warnings[:10]  # Cap to avoid noise
+
+
+def _check_calibration_band(
+    total_hours: Optional[float],
+    calibration_band: Optional[Dict[str, Any]],
+) -> Optional[str]:
+    """
+    If total_hours is outside the calibration band (min*0.7, max*1.5), return a warning.
+    Warn only; do not clamp. calibration_band is {"min_hours", "max_hours", "median_hours"}.
+    """
+    if total_hours is None or not calibration_band:
+        return None
+    min_h = calibration_band.get("min_hours")
+    max_h = calibration_band.get("max_hours")
+    if min_h is None or max_h is None:
+        return None
+    try:
+        min_h, max_h = float(min_h), float(max_h)
+    except (TypeError, ValueError):
+        return None
+    if total_hours < min_h * 0.7:
+        return (
+            f"Total hours ({total_hours:.0f}) is below typical range for similar projects "
+            f"(min {min_h:.0f} hours). Verify estimate is justified by scope."
+        )
+    if total_hours > max_h * 1.5:
+        return (
+            f"Total hours ({total_hours:.0f}) is above typical range for similar projects "
+            f"(max {max_h:.0f} hours). Verify estimate is justified by scope."
+        )
+    return None
+
+
+# Brief keywords that imply scope the quote should mention (signal -> expected phrases in quote)
+_SCOPE_SIGNALS: List[tuple] = [
+    ("donation", ["donation", "donate", "give", "fundraising"]),
+    ("lms", ["learndash", "lms", "course", "e-learning", "training"]),
+    ("woocommerce", ["woocommerce", "e-commerce", "shop", "cart", "checkout", "product"]),
+    ("multi-language", ["multilingual", "wpml", "polylang", "translation", "language"]),
+    ("blog", ["blog", "posts", "news"]),
+    ("membership", ["membership", "member", "restrict", "subscription"]),
+    ("migration", ["migration", "migrate", "import", "content move"]),
+    ("form", ["form", "gravity", "contact form", "submission"]),
+]
+
+
+def _check_scope_signals(brief: str, quote_content: str) -> List[str]:
+    """
+    If the brief strongly mentions a topic (e.g. donations, LMS), check the quote
+    has at least one related phrase. Returns list of warning strings.
+    """
+    if not brief or not quote_content:
+        return []
+    brief_lower = brief.lower()
+    content_lower = quote_content.lower()
+    warnings: List[str] = []
+    for keyword, expected_phrases in _SCOPE_SIGNALS:
+        if keyword not in brief_lower:
+            continue
+        if any(phrase in content_lower for phrase in expected_phrases):
+            continue
+        warnings.append(
+            f"Brief mentions '{keyword}'; verify quote covers it (e.g. {expected_phrases[0]})."
+        )
+    return warnings[:5]  # Cap to avoid noise
 
 
 class QuoteGenerationResult:
@@ -213,11 +304,12 @@ class LLMService:
         project_context: Optional[Dict[str, Any]] = None,
         hourly_rate: Optional[float] = None,
         model: Optional[str] = None,
-        temperature: float = 0.3,
+        temperature: float = 0.2,
         project_brief: Optional[str] = None,
         company_stack_context: Optional[str] = None,
         reference_estimates_context: Optional[str] = None,
         company_stack_fallback: bool = False,
+        strict_stack: bool = False,
     ) -> QuoteGenerationResult:
         """
         Generate a quote from requirements.
@@ -235,6 +327,7 @@ class LLMService:
             company_stack_context: Company stack and estimation rules (MUST follow).
             reference_estimates_context: Similar quotes for structure/hours only.
             company_stack_fallback: True when company stack came from built-in fallback.
+            strict_stack: If True, prompt adds critical line to use only listed tools (for retry after stack violation).
 
         Returns:
             QuoteGenerationResult with content and extracted data.
@@ -266,17 +359,20 @@ class LLMService:
                     )
                 else:
                     # Fallback: ensure prompt always gets a structured stack with URLs for Development Approach.
+                    fallback_rec = get_company_stack_structured()
+                    fallback_rec["themes"] = (fallback_rec.get("themes") or [])[:1]
                     enriched_project_context["wordpress_stack"] = {
                         "locked": {"plugins": [], "themes": [], "page_builders": []},
-                        "recommended": get_company_stack_structured(),
+                        "recommended": fallback_rec,
                     }
                     logger.info("WordPress stack: using company fallback (no research result)")
             except Exception as e:  # pragma: no cover - best-effort enrichment
                 logger.warning("WordPress stack research failed; continuing without it: %s", e)
-                # Fallback: ensure prompt always gets a structured stack with URLs.
+                fallback_rec = get_company_stack_structured()
+                fallback_rec["themes"] = (fallback_rec.get("themes") or [])[:1]
                 enriched_project_context["wordpress_stack"] = {
                     "locked": {"plugins": [], "themes": [], "page_builders": []},
-                    "recommended": get_company_stack_structured(),
+                    "recommended": fallback_rec,
                 }
 
         # Build prompt (two-block RAG: company stack + reference estimates; single brief)
@@ -288,6 +384,7 @@ class LLMService:
             project_brief=project_brief or enriched_project_context.get("project_brief"),
             company_stack_context=company_stack_context,
             reference_estimates_context=reference_estimates_context,
+            strict_stack=strict_stack,
         )
 
         # Call LLM with JSON response format
@@ -309,6 +406,16 @@ class LLMService:
         except (TypeError, ValueError) as e:
             logger.warning("Quote response was not valid JSON, falling back to text: %s", e)
             content = response.content
+            # Post-generation stack normalization (same as JSON path)
+            normalized_content, repl = normalize_stack_in_text(
+                content, enriched_project_context.get("wordpress_stack")
+            )
+            if repl:
+                content = normalized_content
+                logger.info("Stack normalization (fallback): %s", repl)
+            content = ensure_one_theme_in_text(
+                content, enriched_project_context.get("wordpress_stack")
+            )
             hours_data = self._extract_hours(content)
             assumptions = self._extract_section(content, "assumptions")
             exclusions = self._extract_section(content, ["exclusions", "out of scope"])
@@ -332,14 +439,39 @@ class LLMService:
             result.validation_warnings = _validate_quote_against_stack(
                 content, enriched_project_context.get("wordpress_stack")
             )
+            result.validation_warnings.extend(_detect_placeholders(content))
+            cal_warn = _check_calibration_band(
+                result.total_hours, enriched_project_context.get("calibration_band")
+            )
+            if cal_warn:
+                result.validation_warnings.append(cal_warn)
+            result.validation_warnings.extend(
+                _check_scope_signals(
+                    (enriched_project_context.get("project_brief") or "") or requirements,
+                    content,
+                )
+            )
             result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
             return result
 
         estimation_outcomes = parsed.get("estimation_outcomes") or {}
         if not isinstance(estimation_outcomes, dict):
             estimation_outcomes = {}
-        # Ensure all values are strings, then convert to BlockNote JSON for storage
+        # Ensure all values are strings
         estimation_outcomes = {k: (v if isinstance(v, str) else str(v)) for k, v in estimation_outcomes.items()}
+        # Post-generation stack normalization (canonical names, disallowed->allowed, one-theme)
+        wordpress_stack = enriched_project_context.get("wordpress_stack")
+        for section in ("development_approach", "project_overview"):
+            raw = estimation_outcomes.get(section) or ""
+            if raw:
+                normalized, repl = normalize_stack_in_text(raw, wordpress_stack)
+                if repl:
+                    estimation_outcomes[section] = normalized
+                    logger.info("Stack normalization in %s: %s", section, repl)
+                # One-theme post-check safety net
+                estimation_outcomes[section] = ensure_one_theme_in_text(
+                    estimation_outcomes[section], wordpress_stack
+                )
         content = outcomes_dict_to_blocknote_json(estimation_outcomes)
         total_hours_val = parsed.get("total_hours")
         if total_hours_val is not None and isinstance(total_hours_val, (int, float)):
@@ -430,6 +562,18 @@ class LLMService:
         )
         result.validation_warnings = _validate_quote_against_stack(
             result.content, enriched_project_context.get("wordpress_stack")
+        )
+        result.validation_warnings.extend(_detect_placeholders(result.content))
+        cal_warn = _check_calibration_band(
+            result.total_hours, enriched_project_context.get("calibration_band")
+        )
+        if cal_warn:
+            result.validation_warnings.append(cal_warn)
+        result.validation_warnings.extend(
+            _check_scope_signals(
+                (enriched_project_context.get("project_brief") or "") or requirements,
+                result.content,
+            )
         )
         result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
 
@@ -755,7 +899,7 @@ class LLMService:
         response = await self.client.chat_completion(
             messages=messages,
             model="generation",
-            temperature=0.3,
+            temperature=0.2,
             max_tokens=4096,
         )
 
@@ -832,6 +976,45 @@ class LLMService:
             "model_used": response.model,
             "tokens_used": response.usage.total_tokens,
         }
+
+    async def describe_document_image(
+        self,
+        image_base64: str,
+        *,
+        is_standalone_image: bool = False,
+    ) -> str:
+        """
+        Extract text and describe figures from a document page or standalone image.
+        Used for requirement documents (PDF pages with images, uploaded PNG/JPG).
+
+        Args:
+            image_base64: Base64-encoded image data (no data URL prefix).
+            is_standalone_image: If True, use document_image prompt; else document_page.
+
+        Returns:
+            Extracted text and descriptions for use in project brief.
+        """
+        analysis_type = "document_image" if is_standalone_image else "document_page"
+        prompt = build_vision_analysis_prompt(context="", analysis_type=analysis_type)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                    },
+                ],
+            }
+        ]
+        response = await self.client.chat_completion(
+            messages=messages,
+            model="document_vision",
+            temperature=0.2,
+            max_tokens=4096,
+        )
+        return (response.content or "").strip()
 
     async def research_topic(
         self,
@@ -930,7 +1113,8 @@ Focus on practical, actionable information relevant to project estimation."""
             return None
 
         # Locked = client-specified tools from research (with URLs from web). Spec Step 4.
-        # Recommended = company stack (authoritative), not from web.
+        # Recommended = always from company stack (Phase 3.3: research may omit "recommended";
+        # we never read parsed.get("recommended")—backend fills it).
         def _ensure_list(obj: Any) -> list:
             return obj if isinstance(obj, list) else []
 
@@ -940,6 +1124,11 @@ Focus on practical, actionable information relevant to project estimation."""
         locked["page_builders"] = _ensure_list(locked.get("page_builders"))
 
         recommended = get_company_stack_structured()
+        # One-theme rule: prompt must show at most one theme (locked or single recommended).
+        if locked["themes"]:
+            recommended["themes"] = []
+        else:
+            recommended["themes"] = (recommended.get("themes") or [])[:1]
         stack = {
             "locked": locked,
             "recommended": recommended,

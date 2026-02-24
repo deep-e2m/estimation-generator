@@ -8,6 +8,13 @@ deployments do not need access to the filesystem copies.
 It also contains organization-specific guidelines such as the
 preferred WordPress stack (themes, builders, plugins) that should be
 used as defaults when the client has not specified particular tools.
+
+Re-ingestion: After editing WORDPRESS_STACK_GUIDELINES_MD or other
+built-in guideline content used for company stack (e.g. in
+BUILTIN_KNOWLEDGE_DOCUMENTS), re-run knowledge ingestion for the
+affected source (e.g. guideline-wordpress-stack) so that
+build_company_stack_context retrieves the updated content. See
+docs/KNOWLEDGE-REINGESTION.md for the runbook.
 """
 
 from __future__ import annotations
@@ -39,6 +46,8 @@ class KnowledgeDocument:
 ESTIMATION_GUIDELINES_MD = r"""# Estimation Guidelines
 
 This document defines the rules, multipliers, and standards used by the AI to generate hour estimates. Customize these guidelines to match your organization's estimation practices.
+
+**Organization context (E2M):** We have a large, experienced WordPress team (140+ developers) and deliver efficiently. Estimates must be derived from the actual project brief—scope, deliverables, and complexity—not from generic benchmark tables. Do not pad for small-team or unknown-team scenarios; aim for accurate, defensible, realistic hours that reflect capable delivery.
 
 ---
 
@@ -106,7 +115,7 @@ Examples:
 
 ## Base Hour Estimates
 
-Use these as starting points, then apply complexity multipliers.
+Use these only as **relative complexity indicators** (simple vs medium vs complex). Do not copy these hour values into quotes. Always derive actual hours from the specific project brief, deliverables, and scope; the numbers below are generic and must not override scope-based estimation.
 
 ### Frontend Development
 
@@ -1031,20 +1040,27 @@ The AI should:
    - When suggesting tools, prioritize stability, long-term support, and
      popularity in the WordPress ecosystem.
 
+4. **Company stack (this RAG/knowledge base) over model-only suggestions**  
+   - The plugins, themes, and page builders listed here are the ones our team
+     uses daily. Estimation must prefer these over alternatives the model might
+     suggest from general knowledge or web search. When both our stack and
+     another option could work, use our stack so delivery stays consistent and
+     our 140+ developers can execute without friction.
+
 ---
 
-## Default Theme
+## Default Theme (Exactly One Per Project)
 
-- **Primary default theme**: `Underscores` (a.k.a. `_s`)
+- **Primary default theme**: `Underscores` (a.k.a. `_s`, underscore)
   - Use this when:
     - The client does **not** specify a theme.
     - A custom-designed site is being built rather than a pre-made template.
   - Rationale:
     - Clean starter theme, minimal bloat.
     - Ideal foundation for custom design and development.
+    - Our 140+ WordPress developers are familiar with it; using it keeps delivery fast and consistent.
 
-If the client explicitly names a different theme (e.g. Astra, GeneratePress,
-Hello Elementor, Divi theme), always respect that choice.
+**Rule: Use exactly ONE theme per project.** Do not recommend or list multiple themes for the same estimate. If the client explicitly names a different theme (e.g. Astra, GeneratePress, Hello Elementor, Divi theme), respect that choice and use only that theme.
 
 ---
 
@@ -1109,6 +1125,15 @@ Rules:
 - If the client simply says "online ordering" or "e-commerce" on a WordPress
   site and does not mention a specific e-commerce plugin, assume WooCommerce.
 
+### E-learning / LMS
+
+- **Default**: `LearnDash` for courses, memberships, and learning management.
+
+Rules:
+- If the project involves online courses, lessons, quizzes, certificates, or
+  membership-gated content, use **LearnDash** unless the client names another LMS.
+- If the client explicitly requests LearnDash or already uses it, keep it.
+
 ### SEO
 
 Common SEO plugins we are comfortable with include:
@@ -1120,6 +1145,17 @@ Selection rules:
 - If not specified, the AI can pick either Yoast SEO or Rank Math as the SEO
   plugin, based on context, and include setup/configuration time in the tasks.
 
+### Custom Fields and Flexible Content
+
+- **Default**: `ACF Pro` (Advanced Custom Fields Pro) when the project needs
+  custom post fields, flexible content blocks, options pages, or structured
+  content beyond the default editor.
+
+Rules:
+- Include ACF Pro when the brief implies custom content types, repeaters,
+  or client-editable structured data. Our developers use it routinely.
+- If the client names ACF or ACF Pro, use it and do not replace with another solution.
+
 ### Other Common Plugin Categories
 
 Depending on the project, the AI may also assume use of:
@@ -1128,7 +1164,7 @@ Depending on the project, the AI may also assume use of:
 - Backup plugins (e.g. UpdraftPlus).
 
 These should only be included when relevant to the project scope, and should
-never override a specific tool the client has requested.
+never override a specific tool the client has requested. **There is no fixed limit on the number of plugins**—use as many as the project needs (forms, e-commerce, e-learning, SEO, security, etc.), but **only one theme**.
 
 ---
 
@@ -1144,8 +1180,8 @@ When estimating a **WordPress** project:
    - → Use those exact tools in the plan and estimation.
 
 2. **If no tools are specified by the client**
-   - Theme:
-     - Default to **Underscores** for custom theme builds.
+   - Theme (exactly one):
+     - Default to **Underscores** (_s) for custom theme builds.
    - Page builder:
      - Default to **Elementor**, unless context strongly suggests another choice.
    - Forms:
@@ -1153,6 +1189,10 @@ When estimating a **WordPress** project:
      - Optionally use **Contact Form 7** for trivial contact forms only.
    - E-commerce:
      - Default to **WooCommerce** for WordPress-based stores.
+   - E-learning / LMS:
+     - Default to **LearnDash** for courses, lessons, memberships.
+   - Custom fields:
+     - Default to **ACF Pro** when custom content types or flexible content are needed.
    - SEO:
      - Choose a standard plugin such as **Yoast SEO** or **Rank Math**.
 
@@ -1183,17 +1223,18 @@ COMPANY_STACK_STRUCTURED: Dict[str, List[Dict[str, Any]]] = {
         {"name": "Gravity Forms", "url": "https://www.gravityforms.com/", "purpose": "Forms"},
         {"name": "Contact Form 7", "url": "https://contactform7.com/", "purpose": "Simple forms"},
         {"name": "WooCommerce", "url": "https://woocommerce.com/", "purpose": "E-commerce"},
+        {"name": "LearnDash", "url": "https://www.learndash.com/", "purpose": "E-learning / LMS"},
+        {"name": "ACF Pro", "url": "https://www.advancedcustomfields.com/pro/", "purpose": "Custom fields"},
         {"name": "Yoast SEO", "url": "https://yoast.com/wordpress/plugins/seo/", "purpose": "SEO"},
         {"name": "Rank Math", "url": "https://rankmath.com/", "purpose": "SEO"},
-        {"name": "Advanced Custom Fields", "url": "https://www.advancedcustomfields.com/", "purpose": "Custom fields"},
         {"name": "WP Rocket", "url": "https://wp-rocket.me/", "purpose": "Caching"},
         {"name": "Wordfence", "url": "https://www.wordfence.com/", "purpose": "Security"},
         {"name": "UpdraftPlus", "url": "https://updraftplus.com/", "purpose": "Backups"},
     ],
     "themes": [
-        {"name": "Underscores (_s)", "url": "https://underscores.me/", "notes": "Starter theme"},
-        {"name": "Astra", "url": "https://wpastra.com/", "notes": "Multi-purpose"},
-        {"name": "GeneratePress", "url": "https://generatepress.com/", "notes": "Lightweight"},
+        {"name": "Underscores (_s)", "url": "https://underscores.me/", "notes": "Default starter theme; use exactly one theme per project"},
+        {"name": "Astra", "url": "https://wpastra.com/", "notes": "Multi-purpose (if client specifies)"},
+        {"name": "GeneratePress", "url": "https://generatepress.com/", "notes": "Lightweight (if client specifies)"},
     ],
     "page_builders": [
         {"name": "Elementor", "url": "https://elementor.com/"},

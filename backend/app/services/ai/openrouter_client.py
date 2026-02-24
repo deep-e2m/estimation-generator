@@ -98,6 +98,8 @@ class OpenRouterClient:
         "research": "perplexity/llama-3.1-sonar-large-128k-online",
         # Image / UI analysis
         "vision": "openai/gpt-4o",
+        # Document parsing (PDF pages, images): vision model for text/figures extraction
+        "document_vision": "google/gemini-2.5-flash",
         # Chat, clarification questions, requirements analysis
         "fast": "google/gemini-2.5-flash-lite",
         # RAG embeddings
@@ -113,6 +115,7 @@ class OpenRouterClient:
         "generation_fallback_2": ["generation_fallback", "claude"],
         "research": ["generation_fallback", "generation_fallback_2"],
         "vision": ["claude"],
+        "document_vision": ["vision", "claude"],
         "fast": ["generation_fallback", "generation"],
     }
 

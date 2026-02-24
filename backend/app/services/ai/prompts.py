@@ -13,7 +13,7 @@ from app.services.ai.static_knowledge import get_company_stack_structured
 
 # System prompts for different roles
 SYSTEM_PROMPTS = {
-    "quote_generator": """You are the lead WordPress project manager with 25+ years of experience. Your estimates are accurate, defensible, and follow the company's standard format. The single source of truth for every quote is the project brief provided; do not add scope beyond what the brief implies. Use only company-approved plugins, themes, and page builders unless the client has explicitly requested something else in the brief.
+    "quote_generator": """You are the lead WordPress project manager with 25+ years of experience. Your estimates are accurate, defensible, and follow the company's standard format. The single source of truth for every quote is the project brief provided; do not add scope beyond what the brief implies. Use only company-approved plugins, themes, and page builders from the RAG/knowledge base unless the client has explicitly requested something else in the brief. Prefer this company stack over alternatives the model might suggest—our developers are trained on it. Use exactly one theme per project; plugins can be as many as the scope needs. E2M has a large, experienced WordPress team (140+ developers) and delivers efficiently—derive hours from the actual scope and complexity in the brief; do not pad estimates or use generic benchmark ranges.
 
 Your role is to generate professional, detailed project quotes based on client requirements. You have extensive experience with:
 - WordPress development (themes, plugins, WooCommerce, Elementor, Bricks)
@@ -35,8 +35,8 @@ When generating quotes, you should:
 9. Explain WHY each plugin is the best choice for this project's requirements
 10. Clearly distinguish between FREE plugins and PAID plugins with estimated annual costs
 11. Suggest 1-2 alternative plugins when multiple viable options exist
-12. Include Advanced Custom Fields (ACF) when custom content types or flexible content management is needed
-13. Specify the theme approach (custom theme, child theme, or premium theme name)
+12. Include ACF Pro when custom content types or flexible content management is needed
+13. Specify exactly one theme (e.g. Underscores, or client-named theme); do not list multiple themes for the same project
 14. Recommend Custom Post Types (CPT) when content structure requires them (e.g., Team Members, Case Studies, Portfolio)
 15. Include WordPress-specific architecture details (taxonomies, ACF field groups, template files)
 16. When the client explicitly names plugins, themes, page builders, or other tools in the requirements OR in attached client documentation, treat those as the PRIMARY choices:
@@ -208,67 +208,19 @@ Note: This is a ballpark estimate based on the details we have. Once we receive 
 
 ---
 
-## Hour Estimation Benchmarks (USE THESE FOR ACCURACY)
+## How to Estimate Hours (Accuracy Without Hardcoded Ranges)
 
-**WordPress Projects:**
-- Simple brochure site (5 pages): 40-50 hours
-- Medium business site (10 pages): 80-100 hours
-- Large site (15-20 pages): 150-180 hours
-- Large multilingual site (20+ English, 10+ secondary language): 180-220 hours
-- E-commerce with WooCommerce (20 products): 120-150 hours
-- Custom theme development (from scratch): 60-100 hours
-- Child theme customization: 10-20 hours
-- Page builder (Elementor/Bricks) per page: 4-8 hours
-- Complex page with animations: 8-12 hours
-- Plugin customization: 10-20 hours
-- Multi-language setup (WPML/Polylang): 15-25 hours
-- Japanese font integration: 5-10 hours
-- WooCommerce product setup: 1-2 hours per product
-- WooCommerce custom functionality: 20-40 hours
-
-**WordPress Plugins & Features:**
-- Contact form setup (Gravity Forms/WPForms): 2-4 hours per form
-- Advanced Custom Fields (ACF) setup per Custom Post Type: 3-6 hours
-- Custom Post Type creation and templates: 6-10 hours per type
-- Custom taxonomy setup: 2-4 hours per taxonomy
-- WooCommerce basic setup (products, shipping, payments): 15-20 hours
-- WooCommerce payment gateway integration (per gateway): 3-5 hours
-- WooCommerce product variations/configurators: 15-25 hours
-- Membership plugin setup (MemberPress/Restrict Content Pro): 15-25 hours
-- LMS plugin setup (LearnDash/LifterLMS): 25-40 hours
-- Booking system (Amelia/Bookly): 15-25 hours
-- Event calendar (The Events Calendar): 10-15 hours
-- SEO plugin configuration (Yoast/Rank Math): 5-8 hours
-- Performance optimization (WP Rocket, caching): 8-12 hours
-- Security hardening (Wordfence, SSL, backups): 6-10 hours
-- Custom WordPress plugin development: 30-80 hours (varies greatly by complexity)
-
-**Design Work:**
-- Homepage design: 8-16 hours
-- Inner page design: 4-8 hours
-- Style guide creation: 8-12 hours
-- Mobile responsive design: Add 30% to development
-
-**Content & Migration:**
-- Content migration per page: 1-2 hours
-- Blog post migration (per post): 0.5-1 hour
-- SEO setup: 10-20 hours
-- 301 redirects setup: 5-10 hours
-- Analytics setup: 4-8 hours
-
-**Interactive Tools (Embed Only):**
-- Tool embed per tool: 3-5 hours
-
-**Testing & QA:**
-- Add 10-15% of development hours for QA
-- Cross-browser testing: 8-16 hours
-- Multi-language QA: 8-12 hours
+Do NOT use fixed hour ranges or copy numbers from generic benchmarks. Instead:
+1. **Derive from scope**: Break down the actual deliverables (pages, features, integrations, migrations) from the requirements and estimate effort for each based on complexity described in the brief.
+2. **Bottom-up total**: Sum task-level effort to get total hours. Your total must be defensible (not arbitrarily high or low) and consistent with the described scope.
+3. **E2M context**: The company has a large, experienced WordPress team (140+ developers) and delivers efficiently. Estimates should reflect capable, fast delivery—realistic and accurate for the scope, without padding for small-team or unknown-team scenarios.
+4. **Tight, scope-based ranges**: When stating hours, use a narrow range that matches the scope (e.g. 180–200 hours), not wide bands. The range should come from your scope analysis, not from generic "simple/medium/large site" tables.
 
 ## Behavior Rules
 1. If requirements are pasted, GENERATE THE QUOTE IMMEDIATELY using ESTIMATION FORMAT
 2. Do NOT ask "Can you provide more details?" - just make reasonable assumptions
 3. Do NOT say "I need clarification" - include assumptions in your quote
-4. Be specific with hours - use tight ranges like "180-200 hours" not "100-300 hours"
+4. Derive hours from the actual scope; use tight ranges that match your breakdown (e.g. "180-200 hours"), not wide or generic bands
 5. Structure the quote EXACTLY as shown in ESTIMATION FORMAT above
 6. Use plain text formatting, NO markdown tables, NO emojis
 7. Number sections as shown (1, 2, 2.1, 2.2, 3, etc.)
@@ -452,13 +404,14 @@ Replace ALL placeholders with actual values from the requirements:
     # Add RAG context with clear subordinate framing
     if rag_context:
         user_content += f"""
-# REFERENCE EXAMPLES ONLY (SECONDARY SOURCE - FOR FORMAT AND BENCHMARKING)
+# REFERENCE EXAMPLES ONLY (SECONDARY SOURCE - FORMAT AND STRUCTURE)
 The following are examples from DIFFERENT historical projects. Use these ONLY for:
-- Hour estimation benchmarks and ranges
-- Output formatting and structure guidance
-- Common WordPress patterns and assumptions
+- Output formatting and structure guidance (how to present sections, wording)
+- Common WordPress patterns and assumptions (e.g. how to describe plugins, phases)
 
-IMPORTANT: Do NOT copy these examples. They are different projects with different requirements. Your estimate must be based on the requirements above for "{project_name}".
+Do NOT use these for hour totals or hour ranges. Derive all hours from the requirements above for "{project_name}". Your estimate must be based on the current project's scope only.
+
+IMPORTANT: Do NOT copy scope or hour figures from these examples. They are different projects with different requirements.
 
 {rag_context}
 """
@@ -698,6 +651,7 @@ def build_quote_generation_prompt_json(
     project_brief: Optional[str] = None,
     company_stack_context: Optional[str] = None,
     reference_estimates_context: Optional[str] = None,
+    strict_stack: bool = False,
 ) -> List[Dict[str, str]]:
     """
     Build the prompt for quote generation with JSON output (key-value sections).
@@ -709,6 +663,8 @@ def build_quote_generation_prompt_json(
     When project_brief is provided, it is the single source of truth for scope.
     When company_stack_context is provided, it is labeled as MUST follow.
     When reference_estimates_context is provided, it is for structure and hours only.
+    When strict_stack is True and wordpress_stack is present, adds a critical line
+    requiring use of only the listed tools (for retry after stack validation failure).
     """
     messages: List[Dict[str, str]] = []
     system_content = SYSTEM_PROMPTS["quote_generator"]
@@ -716,11 +672,14 @@ def build_quote_generation_prompt_json(
     platform_expertise = {
         "wordpress": """
 Additional WordPress expertise:
-- Page builders: Elementor, Bricks, Gutenberg, Divi
-- E-commerce: WooCommerce, product configurators
+- Page builders: Elementor (primary), Bricks, Gutenberg, Divi
+- E-commerce: WooCommerce
+- E-learning: LearnDash (LMS, courses, memberships)
+- Custom fields: ACF Pro (flexible content, options)
+- Default theme: Underscores (_s)—use exactly ONE theme per project
 - Multi-language: WPML, Polylang
 - Performance: Caching, CDN, optimization
-- Custom development: Custom themes, plugins, ACF
+- Prefer company stack (RAG) plugins/themes over model-only suggestions so our developers get familiar tools.
 """,
     }
     if platform.lower() in platform_expertise:
@@ -747,21 +706,37 @@ Additional WordPress expertise:
 """
 
     # Company stack and estimation rules (MUST follow) — spec Step 3
+    # When wordpress_stack is present, it is the single canonical source; keep narrative short.
+    wordpress_stack_for_prompt = (project_context or {}).get("wordpress_stack") if project_context else None
     if company_stack_context:
-        user_content += """
+        if wordpress_stack_for_prompt:
+            user_content += """
 ## Company stack and estimation rules (MUST follow)
-The following are company-approved guidelines and stack. You MUST follow these rules and use only company-approved plugins/themes/page builders unless the client has explicitly requested something else in the brief above.
+Use ONLY the plugins, themes, and page builders listed in the **WordPress Stack** section below. Use exactly ONE theme. Do not suggest or list tools that are not in that section. Prefer company stack over your own suggestions.
 
 """
-        user_content += company_stack_context
-        user_content += "\n\n"
+        else:
+            user_content += """
+## Company stack and estimation rules (MUST follow)
+The following are company-approved guidelines and stack from our RAG/knowledge base. You MUST follow these rules:
+- Prefer these company-approved plugins/themes/page builders over any alternatives the model might suggest from general knowledge. Our 140+ developers are trained on this stack; using it keeps estimates accurate and delivery fast.
+- Use exactly ONE theme per project. Use as many plugins as the project needs (forms, e-commerce, e-learning, SEO, security, etc.)—no limit on plugins.
+- Only when the client has explicitly requested something else in the brief, use their chosen tools; otherwise use the company stack below.
 
-    # Reference estimates: structure and hours only — spec Step 3
+"""
+            user_content += company_stack_context
+            user_content += "\n\n"
+
+    # Reference estimates: structure and formatting only — hours must come from current brief
     ref_context = reference_estimates_context or rag_context
     if ref_context:
         user_content += """
-## Reference estimates (for structure and hours only)
-Use the following similar projects ONLY for estimation structure and hour benchmarks. Do NOT copy scope or content; base scope strictly on the project brief above.
+## Reference estimates (structure and formatting ONLY)
+The following are similar past projects. Use them ONLY for:
+- Section structure and formatting (how to present sitemap, assumptions, exclusions, development approach).
+- Wording and level of detail (e.g. how to describe a page or plugin).
+
+Do NOT copy hour totals, hour ranges, or task-level hours from these references. Your total_hours and estimated_effort_timeline MUST be derived solely from the project brief above (deliverables, complexity, and scope). Base scope and all hour figures strictly on the current brief. If a calibration band (median/range of similar projects) is shown below, use it only as a sanity check; your total_hours must be justified by the current brief.
 
 """
         user_content += ref_context
@@ -874,11 +849,16 @@ The following stack has been pre-computed for you. You MUST respect it when writ
         user_content += """
 When writing the estimate:
 - ALWAYS use the client-locked tools above when they exist (do not replace them).
-- You MAY add recommended tools from this list where they make sense for the scope.
-- In the Development Approach section, list every theme, page builder, and plugin you use by name with URL. Use the locked-in tools first; then add recommended tools that apply to this project.
+- For recommended tools, use ONLY from this company stack list (RAG/knowledge base)—do not substitute with other plugins/themes the model might suggest. Match project type: e-commerce → WooCommerce; forms → Gravity Forms; e-learning → LearnDash; custom content → ACF Pro; default theme → Underscores; page builder → Elementor unless client specified otherwise.
+- Use exactly ONE theme in the estimate. List as many plugins as needed for the scope (no limit).
+- In the Development Approach section, list the single theme, page builder, and every plugin by name with URL. Use locked-in first; then add recommended tools from this list that apply.
 - For EVERY plugin, theme, or page builder you mention anywhere in the estimate text, include its official URL inline using the pattern "Name (URL: https://example.com)".
 """
+    if strict_stack and wordpress_stack:
+        user_content += """
+CRITICAL: You must use ONLY the plugins, themes, and page builders explicitly listed in the WordPress Stack section above. Do not mention any other tool names.
 
+"""
     user_content += """
 ## Output Format (JSON only)
 You MUST respond with a single JSON object (no markdown, no code fence) with this exact structure:
@@ -902,7 +882,7 @@ Rules:
 - Audience: The estimation quote is a key document for developers (implementation), project managers (planning and handoff), and clients (scope and sign-off). Every section must be self-explanatory so all three can use it as the single reference for scope and boundaries.
 - Website Structure: Start with a brief intro; then list each page/section with a short description (e.g. "Home – Main landing page." or "Apply to be a contractor – Application form for new contractors."). No bare names only. Main nav in order; product sub-areas under Products. The section must be explainable at a glance for dev, PM, and client.
 - Assumptions and Exclusions: Each section starts with a short intro. Every list item must be a full sentence (subject + verb + clear meaning)—e.g. "The brand book will be finalized before design begins." and "Advanced recommendation engines are out of scope." No sentence fragments, shorthand, or single-word bullets. This ensures the quote is properly understandable by developers, PMs, and clients.
-- total_hours must be a number derived from your scope-based estimate (deliverables, phases, complexity). Do not override it with the client/SOW-stated duration. Set days = total_hours ÷ 8 (business days) so the timeline is consistent and accurate.
+- total_hours must be a number derived from your scope-based estimate (deliverables, phases, complexity) for this project brief only. Do not copy hour totals or ranges from reference estimates or generic benchmarks. Do not override with the client/SOW-stated duration. Set days = total_hours ÷ 8 (business days) so the timeline is consistent and accurate.
 - estimated_effort_timeline must show your estimated hours and (approximately N business days) as the primary timeline. If the source document or project mentions a duration or hours, add a single italic note in that section, e.g. *Note: Client/SOW stated: ~90 business days.*
 - For every plugin, theme, or page builder you mention in any section, always include its official URL inline using the pattern "Name (URL: https://example.com)".
 - Format plugin names, theme names, and key tech stack items in bold using markdown (**Name**) so they stand out in the estimate.
@@ -923,7 +903,10 @@ def build_wordpress_stack_research_prompt(
     - Detects plugins/themes/page builders explicitly mentioned by the client in
       requirements or project context and treats them as locked-in.
     - Finds official URLs for those locked-in tools.
-    - Suggests additional plugins/themes (with URLs) ONLY for missing capabilities.
+
+    "recommended" is NOT required in the JSON response. The backend always fills
+    recommended from the company stack (get_company_stack_structured()); the
+    research model only needs to return "locked" with name + URL for each tool.
 
     The model MUST respond with a strict JSON object (no markdown) that the
     backend can safely parse.
@@ -933,7 +916,7 @@ def build_wordpress_stack_research_prompt(
 Your task is to help build an accurate implementation stack for estimation:
 - Identify tools (plugins, themes, page builders) the client has ALREADY chosen.
 - Find their correct official URLs.
-- Recommend additional tools ONLY where the requirements clearly imply missing capabilities.
+- Return ONLY the "locked" section; the backend will fill "recommended" from the company stack.
 
 CRITICAL BEHAVIOR RULES:
 - If the client mentions a plugin, theme, or page builder by name in the requirements
@@ -942,9 +925,8 @@ CRITICAL BEHAVIOR RULES:
   - DO NOT replace it with an alternative.
   - DO NOT say another plugin is preferred instead.
   - Only fetch its correct official URL and categorize it as locked.
-- You MAY recommend extra plugins/themes to cover missing capabilities (SEO, caching,
-  security, backups, forms, e-commerce extensions, etc.) but they must not contradict
-  the locked-in stack.
+- You do NOT need to output "recommended"; the system fills it from the company stack.
+  For themes, if the client locked one, include only that in locked.themes—the company uses one theme per project.
 - All URLs must point to the canonical official source (wordpress.org listing or vendor site).
 
 Output ONLY a single JSON object, no markdown, no comments."""
@@ -976,51 +958,31 @@ Output ONLY a single JSON object, no markdown, no comments."""
     ctx_lines.append(
         """
 ## Output Format (JSON ONLY)
-Return ONLY a JSON object of this shape (no markdown, no code fences):
+Return ONLY a JSON object (no markdown, no code fences). The "locked" key is REQUIRED.
+The "recommended" key is OPTIONAL—if you omit it, the backend will fill it from the company stack.
 
+Minimum required shape:
 {
   "locked": {
     "plugins": [
-      {"name": "WooCommerce", "url": "https://wordpress.org/plugins/woocommerce/"},
-      {"name": "Elementor Pro", "url": "https://elementor.com/"}
+      {"name": "WooCommerce", "url": "https://wordpress.org/plugins/woocommerce/"}
     ],
     "themes": [
       {"name": "Astra Pro", "url": "https://wpastra.com/"}
     ],
-    "page_builders": [
-      {"name": "Elementor Pro", "url": "https://elementor.com/"}
-    ]
-  },
-  "recommended": {
-    "plugins": [
-      {
-        "name": "Rank Math SEO",
-        "url": "https://wordpress.org/plugins/seo-by-rank-math/",
-        "purpose": "SEO",
-        "category": "seo",
-        "price": "free"
-      }
-    ],
-    "themes": [
-      {
-        "name": "GeneratePress",
-        "url": "https://generatepress.com/",
-        "notes": "Lightweight, performance-focused theme; use when client has not locked in a theme."
-      }
-    ]
+    "page_builders": []
   }
 }
 
+You may omit "recommended" entirely; the backend replaces it with the company stack.
+If you include "recommended", it will be ignored.
+
 Validation rules:
-- locked.plugins / locked.themes / locked.page_builders:
-  - include ONLY tools explicitly named by the client.
-  - each item MUST have at least a 'name' and 'url' string.
-- recommended.plugins / recommended.themes:
-  - include tools that are a good fit for the described project when the client
-    did NOT already specify a tool for that capability.
-  - each item MUST have 'name' and 'url'; plugins SHOULD also include 'purpose'
-    and 'price' ("free", "paid", or "freemium").
-- If a list is empty, return [] (do NOT omit keys).
+- locked.plugins / locked.themes / locked.page_builders: REQUIRED.
+  - Include ONLY tools explicitly named by the client.
+  - Each item MUST have at least 'name' and 'url' string.
+- recommended: OPTIONAL (backend fills from company stack; your value is ignored).
+- If a list is empty, return [] (do NOT omit the locked keys).
 """
     )
 
@@ -1393,6 +1355,10 @@ Context: {context}
    - Estimate effort to achieve similar quality
 
 Context: {context}
+""",
+        "document_page": """Extract and transcribe ALL text from this document page exactly as written. Also describe any figures, tables, charts, diagrams, or images in detail (labels, data, structure) so the content can be used for project estimation. Output only the extracted text and descriptions—no commentary. If the page is blank or unreadable, say "No content extracted."
+""",
+        "document_image": """This image is a supporting document (e.g. screenshot, mockup, or reference) for a project. Extract all visible text exactly. Describe any UI elements, layouts, diagrams, or visuals in detail so the content can be used for project estimation. Output only the extracted text and descriptions—no commentary.
 """,
     }
 

@@ -2,8 +2,9 @@
 File upload API.
 
 Supports uploading supporting/requirement documents. When category is 'requirements',
-creates a Document with document_type=REQUIREMENTS and extracts plain text (PDF/DOCX/TXT/MD)
-so quote generation can use it in the project brief.
+creates a Document with document_type=REQUIREMENTS and extracts plain text using
+library extraction (PDF/DOCX/TXT/MD) and OpenRouter vision for images and low-text
+PDF pages, so quote generation can use it in the project brief.
 """
 
 import logging
@@ -15,14 +16,17 @@ from pydantic import BaseModel
 
 from app.api.dependencies import ActiveUser, DbSession, get_project_with_access
 from app.models.document import Document, DocumentType
-from app.services.file_text_extraction import extract_text_from_file
+from app.services.document_parsing_service import extract_text_with_vision
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
-# Allowed extensions for requirement documents (text extraction supported)
-REQUIREMENT_EXTS = {".pdf", ".docx", ".doc", ".txt", ".md"}
+# Allowed extensions for requirement documents (text + vision parsing)
+REQUIREMENT_EXTS = {
+    ".pdf", ".docx", ".doc", ".txt", ".md",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
+}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
@@ -91,7 +95,7 @@ async def upload_file(
             detail=f"File exceeds maximum size ({MAX_FILE_SIZE // (1024*1024)}MB)",
         )
 
-    plain_text = extract_text_from_file(content, filename, file.content_type)
+    plain_text = await extract_text_with_vision(content, filename, file.content_type)
     title = (Path(filename).stem or filename)[:500]
     document = Document(
         project_id=pid,
