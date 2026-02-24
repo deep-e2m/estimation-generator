@@ -53,6 +53,53 @@ class FileUploadDataResponse(BaseModel):
     data: FileUploadResponse
 
 
+class ExtractTextResponse(BaseModel):
+    """Plain text extracted from a file (no project required)."""
+
+    plain_text: str
+
+
+class ExtractTextDataResponse(BaseModel):
+    """API wrapper for extract-text."""
+
+    success: bool = True
+    data: ExtractTextResponse
+
+
+@router.post(
+    "/extract-text",
+    response_model=ExtractTextDataResponse,
+    summary="Extract plain text from a file",
+    description="Extract plain text from a single file (PDF, DOCX, TXT, MD, images). No project required. Use to feed content quality check before project creation.",
+    responses={
+        200: {"description": "Extracted plain text"},
+        400: {"description": "Unsupported file type or too large"},
+    },
+)
+async def extract_text(
+    current_user: ActiveUser,
+    file: UploadFile = File(..., description="File to extract text from"),
+):
+    """Extract plain text from file content. Same formats as requirement uploads."""
+    filename = file.filename or "document"
+    ext = (Path(filename).suffix or "").lower()
+    if ext not in REQUIREMENT_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Allowed types: {', '.join(sorted(REQUIREMENT_EXTS))}",
+        )
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File exceeds maximum size ({MAX_FILE_SIZE // (1024*1024)}MB)",
+        )
+    plain_text = await extract_text_with_vision(content, filename, file.content_type)
+    return ExtractTextDataResponse(
+        data=ExtractTextResponse(plain_text=(plain_text or "").strip()),
+    )
+
+
 @router.post(
     "/upload",
     response_model=FileUploadDataResponse,

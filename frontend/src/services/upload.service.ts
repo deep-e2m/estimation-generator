@@ -100,6 +100,23 @@ class UploadService {
   }
 
   /**
+   * Extract plain text from a file (no project required).
+   * Used to feed content quality check before project creation.
+   * @param file - File to extract text from (PDF, DOCX, TXT, MD, images)
+   * @returns Promise with extracted plain text
+   */
+  async extractText(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post<{ success: boolean; data: { plain_text: string } }>(
+      '/api/v1/files/extract-text',
+      formData,
+      createMultipartConfig()
+    );
+    return response.data.data.plain_text ?? '';
+  }
+
+  /**
    * List files for a project
    * @param projectId - Project ID
    * @param category - Optional category filter

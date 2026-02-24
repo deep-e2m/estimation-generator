@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
 from app.models.client import Client
+from app.models.document import Document, DocumentType
 from app.models.project import Platform, Project, ProjectStatus
 from app.models.quote import Quote
 from app.schemas.project import (
@@ -42,33 +43,64 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# Max combined document text length for quality check (avoid token overflow)
+CONTENT_QUALITY_DOCUMENT_TEXT_CAP = 50_000
+
+
 @router.post(
     "/check-content-quality",
     response_model=CheckContentQualityResponse,
     summary="Check project content quality",
-    description="Evaluates project name, description, and optional additional instructions for estimation readiness. Use before creating a project to warn when content is vague, gibberish, or too short.",
+    description="Evaluates project name, description, optional instructions, and optional document text (or requirement docs for a project) for estimation readiness. When documents are provided, form + document are evaluated together.",
     responses={
         200: {"description": "Content quality result"},
         401: {"description": "Not authenticated"},
+        404: {"description": "Project not found (when project_id given)"},
         500: {"description": "Quality check failed"},
     },
 )
 async def check_content_quality(
     request: CheckContentQualityRequest,
     current_user: ActiveUser,
+    db: DbSession,
 ) -> CheckContentQualityResponse:
     """
-    Run AI check on project name, description, and additional instructions.
-
+    Run AI check on project name, description, and optional instructions.
+    When project_id is provided, load requirement documents and include their
+    text. When document_text is provided, use it (merged with project docs).
     Returns overall_sufficient, score (0-100), per-field feedback, and
     suggested_improvements. No project is created; this is for validation only.
     """
+    document_text = (request.document_text or "").strip()
+
+    if request.project_id:
+        await get_project_with_access(request.project_id, current_user, db)
+        doc_query = (
+            select(Document.plain_text)
+            .where(
+                Document.project_id == request.project_id,
+                Document.document_type == DocumentType.REQUIREMENTS,
+                Document.plain_text.isnot(None),
+            )
+            .order_by(Document.updated_at.desc())
+            .limit(5)
+        )
+        doc_result = await db.execute(doc_query)
+        doc_texts = [row[0].strip() for row in doc_result.fetchall() if row[0] and row[0].strip()]
+        if doc_texts:
+            combined_docs = "\n\n---\n\n".join(doc_texts)
+            document_text = f"{document_text}\n\n---\n\n{combined_docs}".strip() if document_text else combined_docs
+
+    if len(document_text) > CONTENT_QUALITY_DOCUMENT_TEXT_CAP:
+        document_text = document_text[:CONTENT_QUALITY_DOCUMENT_TEXT_CAP] + "\n\n[... truncated for quality check ...]"
+
     try:
         llm_service = get_llm_service()
         result = await llm_service.check_content_quality(
             project_name=request.project_name,
             description=request.description,
             additional_instructions=request.additional_instructions,
+            document_text=document_text or None,
         )
     except Exception as e:
         logger.exception("Content quality check failed: %s", e)

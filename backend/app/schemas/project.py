@@ -253,6 +253,15 @@ class CheckContentQualityRequest(BaseModel):
         max_length=5000,
         description="Optional additional instructions",
     )
+    document_text: Optional[str] = Field(
+        default=None,
+        max_length=100_000,
+        description="Plain text from attached/source documents (SOW, requirements). When provided, quality is evaluated for form + document together.",
+    )
+    project_id: Optional[UUID] = Field(
+        default=None,
+        description="When provided, load requirement documents for this project and include their text in the check (in addition to any document_text).",
+    )
 
 
 class ContentQualityFeedback(BaseModel):

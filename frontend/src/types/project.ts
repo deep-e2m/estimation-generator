@@ -91,6 +91,10 @@ export interface CheckContentQualityRequest {
   project_name: string;
   description: string;
   additional_instructions?: string;
+  /** Plain text from attached/source documents; when provided, quality is evaluated for form + document together */
+  document_text?: string;
+  /** When provided, backend loads requirement documents for this project and includes their text in the check */
+  project_id?: string;
 }
 
 export interface ContentQualityFeedback {

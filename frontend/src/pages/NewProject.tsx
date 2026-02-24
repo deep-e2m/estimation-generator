@@ -204,6 +204,9 @@ export function NewProjectPage() {
     setQualityResult(null)
   }, [formData])
 
+  // Max document text length to send to quality check (backend caps at 100k; stay under for prompt)
+  const DOCUMENT_TEXT_CAP = 45_000
+
   // Handle form submission: run quality check first, then create if sufficient
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -216,10 +219,28 @@ export function NewProjectPage() {
         setSubmitError(null)
         setQualityResult(null)
 
+        let documentText: string | undefined
+        const requirementFiles = formData.files.filter((f) => {
+          const ext = f.name && f.name.includes('.') ? `.${f.name.split('.').pop()?.toLowerCase()}` : ''
+          return REQUIREMENT_FILE_EXTS.has(ext)
+        })
+        if (requirementFiles.length > 0) {
+          const texts = await Promise.all(
+            requirementFiles.map((file) => uploadService.extractText(file))
+          )
+          const combined = texts.filter(Boolean).join('\n\n---\n\n')
+          if (combined) {
+            documentText = combined.length > DOCUMENT_TEXT_CAP
+              ? combined.slice(0, DOCUMENT_TEXT_CAP) + '\n\n[... truncated for quality check ...]'
+              : combined
+          }
+        }
+
         const quality = await projectsService.checkContentQuality({
           project_name: formData.name.trim(),
           description: formData.description.trim(),
           additional_instructions: formData.additionalInputs.trim() || undefined,
+          ...(documentText ? { document_text: documentText } : {}),
         })
 
         if (quality.overall_sufficient) {

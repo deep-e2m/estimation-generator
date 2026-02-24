@@ -795,27 +795,38 @@ class LLMService:
         project_name: str,
         description: str,
         additional_instructions: Optional[str] = None,
+        document_text: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Check if project name, description, and optional additional instructions
-        are sufficient for accurate estimation (detect gibberish, too short, vague).
+        Check if project name, description, optional instructions, and optional
+        document text are sufficient for accurate estimation (detect gibberish,
+        too short, vague). When document_text is provided, form + document are
+        evaluated together.
 
         Args:
             project_name: Project name.
             description: Project description (used as requirements for quote).
             additional_instructions: Optional extra instructions.
+            document_text: Optional plain text from attached/source documents (SOW,
+                requirements). When present, quality is judged for form + document.
 
         Returns:
             Dict with: overall_sufficient (bool), score (int 0-100), feedback (dict
             with project_name, description, additional_instructions as list[str]),
             suggested_improvements (str).
         """
-        logger.debug("Checking content quality: name_len=%d, desc_len=%d", len(project_name or ""), len(description or ""))
+        logger.debug(
+            "Checking content quality: name_len=%d, desc_len=%d, doc_len=%d",
+            len(project_name or ""),
+            len(description or ""),
+            len(document_text or ""),
+        )
 
         messages = build_content_quality_prompt(
             project_name=project_name or "",
             description=description or "",
             additional_instructions=additional_instructions or None,
+            document_text=document_text or None,
         )
 
         response = await self.client.chat_completion(

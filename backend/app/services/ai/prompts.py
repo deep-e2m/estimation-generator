@@ -1178,12 +1178,16 @@ def build_content_quality_prompt(
     project_name: str,
     description: str,
     additional_instructions: Optional[str] = None,
+    document_text: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """
     Build prompt for checking project content quality (name, description, additional inputs).
 
     Used at project creation to detect vague, gibberish, or insufficient input
-    so the user can improve it before generating estimates.
+    so the user can improve it before generating estimates. When document_text
+    is provided, the model evaluates form + document together: if the document
+    contains substantial scope, overall content can be sufficient even if the
+    description field is brief.
 
     Returns:
         List of message dicts. LLM must respond with JSON: overall_sufficient (bool),
@@ -1194,12 +1198,13 @@ def build_content_quality_prompt(
 
     system_content = """You are an expert at assessing whether project briefs contain enough information for accurate software estimates.
 
-Your task: evaluate the project name, description, and optional additional instructions. Decide if this content is SUFFICIENT for an estimator to produce an accurate quote.
+Your task: evaluate the project name, description, and optional additional instructions. If an attached/source document (e.g. SOW, requirements) is also provided, consider it together with the form fields. Decide if the COMBINED content is SUFFICIENT for an estimator to produce an accurate quote.
 
 Consider:
 1. **Project name**: Is it meaningful (e.g. "Acme Corp website") or unclear/gibberish (e.g. "gfnx", "asdf")? Very short or random strings are insufficient.
-2. **Description**: This is the main "requirements" for the estimate. It must describe scope: pages, features, goals, or at least a clear purpose. Single characters, placeholder text ("weghfsgnnnfnbfbn"), or fewer than ~20 meaningful words are insufficient. Vague one-liners ("a website") are low quality.
+2. **Description**: This is the main "requirements" for the estimate. It must describe scope: pages, features, goals, or at least a clear purpose. Single characters, placeholder text ("weghfsgnnnfnbfbn"), or fewer than ~20 meaningful words are insufficient. Vague one-liners ("a website") are low quality. HOWEVER: if an attached document is provided and contains substantial scope (pages, features, timeline, deliverables), the description may be brief—the combined content is then sufficient.
 3. **Additional instructions** (if provided): Should add useful context; if present but nonsensical, note it.
+4. **Attached/source document** (if provided): If it contains clear scope, sitemap, features, timeline, or deliverables, treat it as part of the brief. Only flag as insufficient when BOTH the form fields AND the document are vague or missing.
 
 Output ONLY valid JSON with this exact structure (no markdown, no code fence):
 {
@@ -1213,9 +1218,9 @@ Output ONLY valid JSON with this exact structure (no markdown, no code fence):
   "suggested_improvements": "One or two sentences telling the user how to improve the content for better estimates."
 }
 
-- overall_sufficient: true only if both name and description are meaningful and description gives real scope (pages, features, or clear goal). Otherwise false.
-- score: 0-100. 0-30 = gibberish/placeholder/too short; 31-60 = vague but readable; 61-100 = sufficient for estimation.
-- feedback: per-field list of short, actionable messages (e.g. "Description is too short; add pages or features."). Empty list if that field is fine.
+- overall_sufficient: true if (a) name and description are meaningful and description gives real scope, OR (b) name is meaningful and an attached document provides substantial scope (even if description is brief). Otherwise false.
+- score: 0-100. 0-30 = gibberish/placeholder/too short and no document; 31-60 = vague but readable or document adds some context; 61-100 = sufficient for estimation (form and/or document).
+- feedback: per-field list of short, actionable messages. If document makes content sufficient, avoid harsh description feedback (e.g. do not say "description is too vague" if the document covers scope).
 - suggested_improvements: single string, user-facing. Empty string if overall_sufficient is true."""
 
     messages.append({"role": "system", "content": system_content})
@@ -1225,18 +1230,35 @@ Output ONLY valid JSON with this exact structure (no markdown, no code fence):
     if not extra_block:
         extra_block = "(none provided)"
 
-    user_content = f"""Evaluate this project content for estimation quality.
-
-## Project name
-{project_name or "(empty)"}
-
-## Description (used as requirements for the estimate)
-{desc_block}
-
-## Additional instructions
-{extra_block}
-
-Respond with a single JSON object only (no other text). Keys: overall_sufficient, score, feedback (object with project_name, description, additional_instructions arrays), suggested_improvements (string)."""
+    user_parts = [
+        "Evaluate this project content for estimation quality.",
+        "",
+        "## Project name",
+        project_name or "(empty)",
+        "",
+        "## Description (used as requirements for the estimate)",
+        desc_block,
+        "",
+        "## Additional instructions",
+        extra_block,
+    ]
+    if document_text and document_text.strip():
+        # Cap length to avoid token overflow; first N chars is enough for quality judgment
+        doc_preview = document_text.strip()[:25000]
+        if len(document_text.strip()) > 25000:
+            doc_preview += "\n\n[... document truncated for quality check ...]"
+        user_parts.extend([
+            "",
+            "## Attached/source document (e.g. SOW, requirements)",
+            "The user has attached the following document text. If it contains substantial scope (pages, features, timeline, deliverables), the overall content may be sufficient even if the description above is brief.",
+            "",
+            doc_preview,
+        ])
+    user_parts.extend([
+        "",
+        "Respond with a single JSON object only (no other text). Keys: overall_sufficient, score, feedback (object with project_name, description, additional_instructions arrays), suggested_improvements (string).",
+    ])
+    user_content = "\n".join(user_parts)
 
     messages.append({"role": "user", "content": user_content})
     return messages
