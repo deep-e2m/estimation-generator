@@ -37,6 +37,10 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.services.ai.llm_service import get_llm_service
+from app.services.reference_url_context import (
+    REFERENCE_URLS_HEADER,
+    build_reference_url_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +97,21 @@ async def check_content_quality(
 
     if len(document_text) > CONTENT_QUALITY_DOCUMENT_TEXT_CAP:
         document_text = document_text[:CONTENT_QUALITY_DOCUMENT_TEXT_CAP] + "\n\n[... truncated for quality check ...]"
+
+    # Reference URL context (scraped + vision) when ENABLE_URL_SCRAPING
+    reference_url_context, _ = await build_reference_url_context(
+        request.description,
+        request.additional_instructions,
+        document_text,
+        document_plain_texts=[],
+    )
+    if reference_url_context:
+        document_text = f"{document_text}\n\n{REFERENCE_URLS_HEADER}\n{reference_url_context}"
+        if len(document_text) > CONTENT_QUALITY_DOCUMENT_TEXT_CAP:
+            document_text = (
+                document_text[:CONTENT_QUALITY_DOCUMENT_TEXT_CAP]
+                + "\n\n[... truncated for quality check ...]"
+            )
 
     try:
         llm_service = get_llm_service()

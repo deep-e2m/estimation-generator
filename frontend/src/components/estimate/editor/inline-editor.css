@@ -61,6 +61,21 @@
 }
 
 /* ============================================================================
+   BlockNote bullet list — align bullet with first line of text
+   BlockNote uses .bn-block-content[data-content-type="bulletListItem"] with
+   flex; without alignment the bullet (::before) can sit above the text.
+   ============================================================================ */
+
+.inline-quote-editor .bn-block-content[data-content-type="bulletListItem"] {
+  align-items: baseline;
+}
+
+.inline-quote-editor .bn-block-content[data-content-type="bulletListItem"]::before {
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+/* ============================================================================
    ProseMirror Core
    Font and color settings match the markdown-body / doc-body-text styling.
    Padding is minimal since .doc-container provides outer spacing.

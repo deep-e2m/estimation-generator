@@ -59,6 +59,10 @@ from app.services.blocknote import (
 )
 from app.services.export.html_utils import is_html_content, sanitize_html
 from app.services.quote_refinement_service import get_refinement_service
+from app.services.reference_url_context import (
+    REFERENCE_URLS_HEADER,
+    build_reference_url_context,
+)
 from app.services.structured_quote_service import build_structured_content
 
 logger = logging.getLogger(__name__)
@@ -530,6 +534,7 @@ async def generate_quote(
             or request.project_context.get("source_document_text")
             or request.project_context.get("attached_document")
         )
+    doc_texts: list[str] = []
     parts = [f"Project: {project_name}", f"Description:\n{project_description}"]
     if additional_instructions and str(additional_instructions).strip():
         parts.append(f"Additional instructions:\n{str(additional_instructions).strip()}")
@@ -557,6 +562,18 @@ async def generate_quote(
                 parts.append(f"Source document / SOW (authoritative for timeline, sitemap, exclusions, assumptions):\n{combined}")
         except Exception as e:
             logger.warning("Could not load project documents for brief: %s", e)
+
+    # Reference URL context (scraped content + vision descriptions when ENABLE_URL_SCRAPING)
+    reference_url_context, reference_urls_used = await build_reference_url_context(
+        project_description,
+        additional_instructions,
+        document_summary,
+        doc_texts,
+        explicit_urls=(request.project_context or {}).get("reference_urls") if request.project_context else None,
+    )
+    if reference_url_context:
+        parts.append(f"{REFERENCE_URLS_HEADER}\n{reference_url_context}")
+
     canonical_brief = "\n\n".join(parts)
 
     # ENFORCE SINGLE ESTIMATE PER PROJECT (unless regenerate=True)
@@ -720,6 +737,7 @@ async def generate_quote(
                 breakdown=result.breakdown or [],
                 total_hours=float(result.total_hours or 0),
             ).model_dump(mode="json"),
+            "reference_urls_used": reference_urls_used,
         },
     )
 

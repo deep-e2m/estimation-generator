@@ -36,6 +36,7 @@ export interface GenerationMetadataResult {
   validation_warnings?: string[];
   company_stack_used?: boolean;
   company_stack_fallback?: string | null;
+  reference_urls_used?: string[];
 }
 
 // Step definitions
@@ -102,6 +103,8 @@ interface EstimationGenerationUIProps {
   project: Project;
   onComplete: (quote: Quote) => void;
   onCancel: () => void;
+  /** Optional explicit reference URLs to include in the brief (when URL scraping is enabled) */
+  referenceUrls?: string[];
 }
 
 // Animated counter hook
@@ -308,6 +311,7 @@ export function EstimationGenerationUI({
   project,
   onComplete,
   onCancel,
+  referenceUrls,
 }: EstimationGenerationUIProps) {
   // State
   const [progress, setProgress] = useState(0);
@@ -320,6 +324,7 @@ export function EstimationGenerationUI({
     hoursCalculated: 0,
   });
   const [generationMetadata, setGenerationMetadata] = useState<GenerationMetadataResult | null>(null);
+  const [referenceUrlsUsed, setReferenceUrlsUsed] = useState<string[]>([]);
   const [retryCount, setRetryCount] = useState(0);
 
   // Refs
@@ -390,6 +395,7 @@ export function EstimationGenerationUI({
             ? { additional_instructions: project.additional_instructions.trim() }
             : {}),
           ...(documentSummary ? { document_summary: documentSummary } : {}),
+          ...(referenceUrls?.length ? { reference_urls: referenceUrls } : {}),
         },
       };
 
@@ -411,6 +417,8 @@ export function EstimationGenerationUI({
         const timeTaken = (Date.now() - startTimeRef.current) / 1000;
         setTotalTimeSeconds(timeTaken);
         setGenerationMetadata(meta ?? null);
+        const urlsUsed = (quote.metadata as { reference_urls_used?: string[] } | undefined)?.reference_urls_used;
+        setReferenceUrlsUsed(Array.isArray(urlsUsed) ? urlsUsed : []);
         setLiveStats({
           requirementsFound: analysis?.requirements_count ?? 0,
           tasksIdentified: analysis?.tasks_count ?? 0,
@@ -438,7 +446,7 @@ export function EstimationGenerationUI({
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [project, retryCount]);
+  }, [project, retryCount, referenceUrls]);
 
   const handleCancel = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -453,6 +461,7 @@ export function EstimationGenerationUI({
     setProgress(0);
     setTotalTimeSeconds(null);
     setGenerationMetadata(null);
+    setReferenceUrlsUsed([]);
     setLiveStats({ requirementsFound: 0, tasksIdentified: 0, hoursCalculated: 0 });
     setRetryCount((prev) => prev + 1);
   }, []);
@@ -584,6 +593,12 @@ export function EstimationGenerationUI({
               color="success"
             />
           </div>
+
+          {!isGenerating && referenceUrlsUsed.length > 0 && (
+            <p className="estimation-gen-reference-urls-used">
+              Reference URLs ({referenceUrlsUsed.length}) were used for this estimate.
+            </p>
+          )}
 
           {/* Project info card */}
           <div className="estimation-gen-project-card">

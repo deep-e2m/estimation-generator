@@ -185,6 +185,8 @@ export interface GenerateQuoteRequest {
     /** SOW/source document text (e.g. extracted from uploaded PDF) for accurate timeline, sitemap, exclusions */
     document_summary?: string;
     additional_instructions?: string;
+    /** Explicit reference URLs to scrape and include in the brief (when URL scraping is enabled) */
+    reference_urls?: string[];
     [key: string]: unknown;
   };
 }

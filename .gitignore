@@ -70,6 +70,14 @@ coverage.xml
 *.cover
 *.py,cover
 
+# Backend test suite and ad-hoc test scripts (ignored; not committed)
+backend/tests/
+backend/test_*.py
+**/local_tests/
+**/generated_tests/
+**/test_output/
+**/test_output_*.py
+
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -109,11 +117,17 @@ docker/init-db/*.sh
 # ==========================================
 # Testing / Playwright
 # ==========================================
+# Test source (backend/tests/, *test*.py, *.test.ts, etc.) is tracked. Only outputs/caches below are ignored.
 .playwright-mcp/
+.playwright/
 playwright-report/
+playwright/.cache/
 test-results/
 coverage/
 model_evaluation/
+# Snapshot test artifacts (Jest/Vitest)
+__snapshots__/
+*.snap
 
 # ==========================================
 # AI Tools / Coding Assistants
@@ -169,7 +183,11 @@ aider.conf.yml
 # ==========================================
 # Project-specific
 # ==========================================
-# specs/ and docs/ are intentionally tracked (feature specs, implementation plans, UAT docs)
+# specs/, docs/, and *.md (README, ARCHITECTURE, etc.) are intentionally tracked.
+# Ignore only backup/temp markdown files:
+*.md.bak
+*.md~
+*.md.orig
 # Knowledge base generated files (match actual dir: knowledge-based)
 knowledge-based/formatting/
 

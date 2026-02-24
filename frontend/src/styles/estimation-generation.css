@@ -536,6 +536,13 @@
   gap: var(--space-3);
 }
 
+.estimation-gen-reference-urls-used {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+}
+
 /* Stat Card */
 .estimation-gen-stat {
   display: flex;

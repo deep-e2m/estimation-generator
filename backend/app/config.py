@@ -204,6 +204,50 @@ class Settings(BaseSettings):
         description="Token overlap between document chunks",
     )
 
+    # ==================== URL Scraping (Reference URLs for Estimation) ====================
+    # When enabled, URLs in description/instructions/docs are scraped (screenshot + text)
+    # and added to the project brief. See specs/url-scraping-estimation.md.
+    ENABLE_URL_SCRAPING: bool = Field(
+        default=False,
+        description="Enable scraping of reference URLs found in project content",
+    )
+    MAX_REFERENCE_URLS: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum number of reference URLs to scrape per request",
+    )
+    URL_SCRAPE_TIMEOUT_SEC: int = Field(
+        default=25,
+        ge=5,
+        le=120,
+        description="Timeout in seconds per URL when scraping (Playwright)",
+    )
+    # Maximum character length for the combined reference URL block in the brief
+    URL_REFERENCE_CONTEXT_MAX_CHARS: int = Field(
+        default=12_000,
+        ge=1000,
+        le=50_000,
+        description="Cap for reference URL context (scraped text + vision descriptions)",
+    )
+    # Allowed URL schemes (https only recommended for production)
+    ALLOWED_URL_SCHEMES: list[str] = Field(
+        default=["https"],
+        description="URL schemes allowed for reference scraping (e.g. https, http)",
+    )
+
+    @field_validator("ALLOWED_URL_SCHEMES", mode="before")
+    @classmethod
+    def parse_allowed_url_schemes(cls, v: object) -> list[str]:
+        """Accept comma-separated string from env (e.g. 'https,http')."""
+        if v is None:
+            return ["https"]
+        if isinstance(v, str):
+            return [s.strip().lower() for s in v.split(",") if s.strip()] or ["https"]
+        if isinstance(v, list):
+            return [str(x).strip().lower() for x in v if str(x).strip()]
+        return ["https"]
+
     _DEFAULT_SECRET_KEY = "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_IN_PRODUCTION"
 
     @model_validator(mode="after")

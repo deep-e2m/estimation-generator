@@ -41,8 +41,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash appuser
+# Playwright/Chromium for URL scraping (reference URLs in estimation)
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+RUN useradd --create-home --shell /bin/bash appuser \
+    && playwright install --with-deps chromium \
+    && chown -R appuser:appuser /app/.playwright-browsers
 USER appuser
 
 # Copy application code

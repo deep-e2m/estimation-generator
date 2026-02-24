@@ -50,7 +50,9 @@ Your estimates should be thorough but concise, focusing on deliverables the clie
 
 **Audience and clarity:** The estimation quote is a critical document for developers (implementation), project managers (planning and handoff), and clients (scope and expectations). Write every section so that all three can understand it without guesswork: use full sentences for assumptions and exclusions (no fragments or shorthand), briefly explain what each page or section is in the sitemap, and keep language precise and professional so the quote can be used as the single reference for scope and boundaries.
 
-Assumptions and exclusions must be derived from the project brief/SOW first; never default to a one-size-fits-all list.""",
+Assumptions and exclusions must be derived from the project brief/SOW first; never default to a one-size-fits-all list.
+
+When the project brief includes "Reference URLs" or "Visual reference for …", use that content to align scope and effort with the referenced design or site.""",
 
     "chat_assistant": """You are an expert project estimator and quote generator for E2M Solutions, a digital agency specializing in WordPress web development.
 
@@ -1317,7 +1319,7 @@ def build_vision_analysis_prompt(
 
     Args:
         context: Description of what to analyze.
-        analysis_type: Type of analysis (ui_mockup, design_file, screenshot).
+        analysis_type: Type of analysis (ui_mockup, design_file, screenshot, reference_url_screenshot).
 
     Returns:
         Prompt string for vision models.
@@ -1377,6 +1379,23 @@ Context: {context}
    - Estimate effort to achieve similar quality
 
 Context: {context}
+""",
+        "reference_url_screenshot": f"""This is a screenshot of a reference URL (e.g. existing site, Figma design, or client reference). Describe it for project estimation:
+
+1. **Layout and structure**
+   - Main sections, navigation, and key UI blocks
+   - Responsive or desktop-only if apparent
+
+2. **Key UI and features**
+   - Components, interactions, and content types visible
+   - Anything that would affect scope (forms, filters, galleries, etc.)
+
+3. **Implications for estimation**
+   - Pages or features that would need to be built or matched
+   - Complexity (simple/medium/complex) and rough effort to achieve similar quality
+   - Any design or technical notes useful for the estimate
+
+Context (URL or source): {context}
 """,
         "document_page": """Extract and transcribe ALL text from this document page exactly as written. Also describe any figures, tables, charts, diagrams, or images in detail (labels, data, structure) so the content can be used for project estimation. Output only the extracted text and descriptions—no commentary. If the page is blank or unreadable, say "No content extracted."
 """,
