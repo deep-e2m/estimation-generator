@@ -52,7 +52,7 @@ Your estimates should be thorough but concise, focusing on deliverables the clie
 
 Assumptions and exclusions must be derived from the project brief/SOW first; never default to a one-size-fits-all list.
 
-When the project brief includes "Reference URLs" or "Visual reference for …", use that content to align scope and effort with the referenced design or site.""",
+**Reference URLs:** When the project brief includes "Reference URLs" or "Visual reference for …", treat them as design/structure/content references. Users share URLs that are almost always (1) Figma or other design portals—use for design understanding, structure, and content grabbing—or (2) existing websites—use for structure, design, and content. Scope and estimate must reflect matching that design, structure, and content; do not treat reference URL sections as optional context.""",
 
     "chat_assistant": """You are an expert project estimator and quote generator for E2M Solutions, a digital agency specializing in WordPress web development.
 
@@ -692,6 +692,8 @@ Additional WordPress expertise:
     # Single source of truth: project brief (spec Step 5)
     brief = (project_brief or "").strip() or requirements
     user_content = f"""Generate a professional project quote. The ONLY basis for scope and deliverables is the following project brief (and any attached SOW/source document). Do not add scope not implied by this brief.
+
+If the brief contains a "Reference URLs (scraped content and visual description)" section: those URLs are typically Figma/design links or existing websites. Use them for design matching (layout, visual style, components), structure understanding (sections, navigation, pages), and content (copy, CTAs, features). Scope and hours must include achieving that design/structure/content where the client intends to match the reference.
 
 ## Single source of truth (project brief)
 {brief}
@@ -1380,20 +1382,19 @@ Context: {context}
 
 Context: {context}
 """,
-        "reference_url_screenshot": f"""This is a screenshot of a reference URL (e.g. existing site, Figma design, or client reference). Describe it for project estimation:
+        "reference_url_screenshot": f"""This screenshot is from a reference URL the client shared. Reference URLs are almost always one of: (1) Figma or another design portal (mockups, UI specs), or (2) an existing website they want to match or take inspiration from. Your description drives estimation—design matching, structure, and content.
 
-1. **Layout and structure**
-   - Main sections, navigation, and key UI blocks
-   - Responsive or desktop-only if apparent
+**If this looks like Figma / design tool (frames, canvas, design UI):**
+- **Design**: Layout, visual style, components, typography, spacing, and any design system cues. Note what must be built to match this design.
+- **Structure**: Sections, navigation, and page/screen structure implied by the design.
+- **Content**: Visible copy, labels, CTAs, and content elements so scope includes content structure.
 
-2. **Key UI and features**
-   - Components, interactions, and content types visible
-   - Anything that would affect scope (forms, filters, galleries, etc.)
+**If this looks like a live website (marketing site, app, etc.):**
+- **Structure**: Main sections, navigation, key UI blocks, responsive or desktop-only if apparent.
+- **Design**: Layout, visual style, and components that would need to be matched or recreated.
+- **Content**: Key content types, copy, forms, filters, galleries—anything that affects scope.
 
-3. **Implications for estimation**
-   - Pages or features that would need to be built or matched
-   - Complexity (simple/medium/complex) and rough effort to achieve similar quality
-   - Any design or technical notes useful for the estimate
+**Always end with:** Implications for estimation: pages/features to build or match, complexity (simple/medium/complex), and rough effort to achieve similar design and functionality. Call out design-matching effort when the client wants "same design" or "like this site."
 
 Context (URL or source): {context}
 """,

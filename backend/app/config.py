@@ -5,11 +5,49 @@ This module provides centralized configuration management with support for
 environment variables and .env files.
 """
 
+import json
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_list_env(v: object, default: list[str]) -> list[str]:
+    """Parse env value for list[str] fields: empty/invalid JSON -> default."""
+    if v is None:
+        return default
+    if isinstance(v, list):
+        return [str(x).strip() for x in v if str(x).strip()]
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return default
+        if s.startswith("["):
+            try:
+                parsed = json.loads(s)
+                return [str(x).strip() for x in parsed if str(x).strip()] or default
+            except (json.JSONDecodeError, TypeError):
+                return default
+        return [x.strip() for x in s.split(",") if x.strip()] or default
+    return default
+
+
+# Defaults for list-from-env fields (env source does JSON decode before validators;
+# we store these as str and expose list via properties to avoid empty/invalid JSON errors)
+_DEFAULT_ALLOWED_FILE_TYPES = [
+    "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain", "text/markdown", "text/csv",
+]
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000",
+    "http://frontend:3000", "http://localhost:80", "http://frontend:80",
+]
+_DEFAULT_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_DEFAULT_CORS_HEADERS = ["Authorization", "Content-Type", "X-Request-ID", "Accept"]
+_DEFAULT_ALLOWED_URL_SCHEMES = ["https"]
 
 
 class Settings(BaseSettings):
@@ -85,37 +123,14 @@ class Settings(BaseSettings):
 
     # File Upload Settings
     MAX_FILE_SIZE_MB: int = Field(default=10, ge=1, le=100)
-    ALLOWED_FILE_TYPES: list[str] = [
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/plain",
-        "text/markdown",
-        "text/csv",
-    ]
+    # Stored as str from env to avoid pydantic-settings JSON decode of empty/invalid values
+    allowed_file_types_raw: str = Field(default="", alias="ALLOWED_FILE_TYPES")
 
     # CORS Settings
-    # Includes localhost ports and Docker service names for development
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:3000",      # Frontend dev server (local)
-        "http://localhost:5173",      # Vite default port
-        "http://127.0.0.1:3000",      # Localhost alternative
-        "http://frontend:3000",       # Docker service name
-        "http://localhost:80",        # Production nginx
-        "http://frontend:80",         # Production Docker
-    ]
+    cors_origins_raw: str = Field(default="", alias="CORS_ORIGINS")
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    CORS_ALLOW_HEADERS: list[str] = [
-        "Authorization",
-        "Content-Type",
-        "X-Request-ID",
-        "Accept",
-    ]
+    cors_allow_methods_raw: str = Field(default="", alias="CORS_ALLOW_METHODS")
+    cors_allow_headers_raw: str = Field(default="", alias="CORS_ALLOW_HEADERS")
 
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -206,9 +221,9 @@ class Settings(BaseSettings):
 
     # ==================== URL Scraping (Reference URLs for Estimation) ====================
     # When enabled, URLs in description/instructions/docs are scraped (screenshot + text)
-    # and added to the project brief. See specs/url-scraping-estimation.md.
+    # and added to the project brief. Set to False to disable (e.g. no Playwright in env).
     ENABLE_URL_SCRAPING: bool = Field(
-        default=False,
+        default=True,
         description="Enable scraping of reference URLs found in project content",
     )
     MAX_REFERENCE_URLS: int = Field(
@@ -230,23 +245,75 @@ class Settings(BaseSettings):
         le=50_000,
         description="Cap for reference URL context (scraped text + vision descriptions)",
     )
-    # Allowed URL schemes (https only recommended for production)
-    ALLOWED_URL_SCHEMES: list[str] = Field(
-        default=["https"],
-        description="URL schemes allowed for reference scraping (e.g. https, http)",
+    # Allowed URL schemes (stored as str from env to avoid JSON decode errors)
+    allowed_url_schemes_raw: str = Field(
+        default="",
+        alias="ALLOWED_URL_SCHEMES",
+        description="URL schemes allowed for reference scraping (e.g. https,http)",
     )
 
-    @field_validator("ALLOWED_URL_SCHEMES", mode="before")
-    @classmethod
-    def parse_allowed_url_schemes(cls, v: object) -> list[str]:
-        """Accept comma-separated string from env (e.g. 'https,http')."""
-        if v is None:
-            return ["https"]
-        if isinstance(v, str):
-            return [s.strip().lower() for s in v.split(",") if s.strip()] or ["https"]
-        if isinstance(v, list):
-            return [str(x).strip().lower() for x in v if str(x).strip()]
-        return ["https"]
+    # ==================== Site crawl (full-site screenshots from one URL) ====================
+    # When enabled, "crawl=full" preview discovers same-host pages (sitemap + links) and scrapes each.
+    SITE_CRAWL_ENABLED: bool = Field(
+        default=True,
+        description="Enable full-site crawl from a seed URL (discover + scrape all pages)",
+    )
+    MAX_SITE_PAGES: int = Field(
+        default=25,
+        ge=1,
+        le=50,
+        description="Maximum number of pages to discover and scrape when crawling a site",
+    )
+    SITE_CRAWL_DEPTH: int = Field(
+        default=2,
+        ge=1,
+        le=3,
+        description="Crawl depth: 1=seed+same-page links, 2=one more hop from those pages",
+    )
+    SITE_CRAWL_TIMEOUT_SEC: int = Field(
+        default=90,
+        ge=30,
+        le=300,
+        description="Total timeout in seconds for the crawl phase (discovering URLs)",
+    )
+
+    # ==================== Reference site video (Playwright recording) ====================
+    # When set, full-site preview can record a video of the crawl (navigate through each page).
+    # Directory must exist and be writable; leave empty to disable video recording.
+    REFERENCE_VIDEO_STORAGE_PATH: str = Field(
+        default="",
+        description="Directory to store reference site videos (e.g. /tmp/estimate-ai-videos). Empty = disabled.",
+    )
+    REFERENCE_VIDEO_SECONDS_PER_PAGE: int = Field(
+        default=3,
+        ge=1,
+        le=15,
+        description="Seconds to stay on each page while recording (viewport + interactions visible)",
+    )
+
+    # List-like settings: stored as str from env, exposed as list via properties
+    @property
+    def ALLOWED_FILE_TYPES(self) -> list[str]:
+        return _parse_list_env(self.allowed_file_types_raw, _DEFAULT_ALLOWED_FILE_TYPES)
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        return _parse_list_env(self.cors_origins_raw, _DEFAULT_CORS_ORIGINS)
+
+    @property
+    def CORS_ALLOW_METHODS(self) -> list[str]:
+        return _parse_list_env(self.cors_allow_methods_raw, _DEFAULT_CORS_METHODS)
+
+    @property
+    def CORS_ALLOW_HEADERS(self) -> list[str]:
+        return _parse_list_env(self.cors_allow_headers_raw, _DEFAULT_CORS_HEADERS)
+
+    @property
+    def ALLOWED_URL_SCHEMES(self) -> list[str]:
+        raw = (self.allowed_url_schemes_raw or "").strip()
+        if not raw:
+            return _DEFAULT_ALLOWED_URL_SCHEMES.copy()
+        return [s.strip().lower() for s in raw.split(",") if s.strip()] or _DEFAULT_ALLOWED_URL_SCHEMES.copy()
 
     _DEFAULT_SECRET_KEY = "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_IN_PRODUCTION"
 

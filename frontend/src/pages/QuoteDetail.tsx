@@ -25,7 +25,6 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  ExternalLink,
   ChevronRight,
   History,
   FileDown,

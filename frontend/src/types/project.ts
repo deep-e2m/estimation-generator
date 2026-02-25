@@ -114,3 +114,17 @@ export interface CheckContentQualityResponse {
   success: boolean;
   data: CheckContentQualityData;
 }
+
+/** Scraped content and screenshot for a reference URL (preview for estimation). */
+export interface ReferenceUrlPreviewData {
+  url: string;
+  extracted_text: string;
+  screenshot_base64: string | null;
+  error: string | null;
+}
+
+/** Full-site preview: crawl + scrape result (one screenshot + text per page). */
+export interface ReferenceUrlSitePreviewData {
+  seed_url: string;
+  pages: ReferenceUrlPreviewData[];
+}

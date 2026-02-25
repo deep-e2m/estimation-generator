@@ -305,3 +305,62 @@ class CheckContentQualityResponse(APIResponse):
         ...,
         description="Content quality result",
     )
+
+
+# =============================================================================
+# Reference URL Preview (scraped content + screenshot for estimation)
+# =============================================================================
+
+
+class ReferenceUrlPreviewData(BaseModel):
+    """Scraped content and screenshot for a single reference URL."""
+
+    url: str = Field(..., description="The URL that was scraped")
+    extracted_text: str = Field(
+        default="",
+        description="Plain text extracted from the page body (used for estimation)",
+    )
+    screenshot_base64: Optional[str] = Field(
+        None,
+        description="PNG screenshot of the page (base64), or null if scrape failed",
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Error message if scraping failed",
+    )
+
+
+class ReferenceUrlPreviewResponse(APIResponse):
+    """Response schema for reference-url-preview endpoint."""
+
+    data: ReferenceUrlPreviewData = Field(
+        ...,
+        description="Scraped text and screenshot for the URL",
+    )
+
+
+# =============================================================================
+# Reference URL Site Preview (full-site crawl + scrape)
+# =============================================================================
+
+
+class ReferenceUrlSitePreviewData(BaseModel):
+    """Multi-page scraped content for a reference site (crawl + scrape)."""
+
+    pages: list[ReferenceUrlPreviewData] = Field(
+        default_factory=list,
+        description="One entry per discovered page (screenshot + text)",
+    )
+    seed_url: str = Field(
+        ...,
+        description="The seed URL that was crawled",
+    )
+
+
+class ReferenceUrlSitePreviewResponse(APIResponse):
+    """Response schema for reference-url-site-preview endpoint."""
+
+    data: ReferenceUrlSitePreviewData = Field(
+        ...,
+        description="Scraped pages from the crawled site",
+    )

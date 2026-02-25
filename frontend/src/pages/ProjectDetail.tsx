@@ -21,14 +21,28 @@ import {
   CheckCircle2,
   Calendar,
   ListChecks,
+  Link2,
+  Eye,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { parseTotalHoursFromContent, parseRequirementsCountFromContent } from '@/lib/quote-content-parse';
-import { projectsService, quotesService } from '@/services';
+import { apiClient, getErrorMessage, projectsService, quotesService } from '@/services';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/Dialog';
 import { EstimateChat } from '@/components/estimate/EstimateChat';
-import type { Project, ProjectStatus } from '@/types';
+import type {
+  Project,
+  ProjectStatus,
+  ReferenceUrlPreviewData,
+  ReferenceUrlSitePreviewData,
+} from '@/types';
 import type { ChangeDescription, Quote, RefinedProjectUpdate } from '@/types/quote.types';
 
 // Status badge variants
@@ -70,6 +84,15 @@ export function ProjectDetailPage() {
   // Description expand/collapse state
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
+  const [showReferenceUrlsList, setShowReferenceUrlsList] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<ReferenceUrlPreviewData | null>(null);
+  const [previewSiteData, setPreviewSiteData] = useState<ReferenceUrlSitePreviewData | null>(null);
+  const [previewMode, setPreviewMode] = useState<'page' | 'site'>('page');
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const saveStatusResetTimeoutRef = useRef<number | null>(null);
 
@@ -201,6 +224,58 @@ export function ProjectDetailPage() {
     <FileText style={{ width: 14, height: 14 }} />
   );
 
+  const referenceUrlsUsed = (quote?.metadata as { reference_urls_used?: string[] } | undefined)
+    ?.reference_urls_used;
+  const referenceUrlsCount = Array.isArray(referenceUrlsUsed) ? referenceUrlsUsed.length : 0;
+
+  const openUrlPreview = useCallback(
+    (url: string, mode: 'page' | 'site' = 'page') => {
+      if (!id) return;
+      setPreviewUrl(url);
+      setPreviewMode(mode);
+      setPreviewOpen(true);
+      setPreviewLoading(true);
+      setPreviewError(null);
+      setPreviewData(null);
+      setPreviewSiteData(null);
+      setPreviewPageIndex(0);
+      if (mode === 'site') {
+        projectsService
+          .getReferenceUrlSitePreview(id, url)
+          .then((data) => {
+            setPreviewSiteData(data);
+            setPreviewLoading(false);
+          })
+          .catch((err: unknown) => {
+            setPreviewError(getErrorMessage(err) || 'Failed to crawl and scrape site');
+            setPreviewLoading(false);
+          });
+      } else {
+        projectsService
+          .getReferenceUrlPreview(id, url)
+          .then((data) => {
+            setPreviewData(data);
+            setPreviewLoading(false);
+          })
+          .catch((err: unknown) => {
+            setPreviewError(getErrorMessage(err) || 'Failed to load scraped content');
+            setPreviewLoading(false);
+          });
+      }
+    },
+    [id]
+  );
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPreviewUrl(null);
+    setPreviewData(null);
+    setPreviewSiteData(null);
+    setPreviewError(null);
+    setPreviewPageIndex(0);
+    setPreviewVideoBlobUrl(null);
+  }, []);
+
   const statCardsData = [
     {
       label: 'Total Hours',
@@ -220,6 +295,21 @@ export function ProjectDetailPage() {
       value: lastUpdatedLabel,
       icon: lastUpdatedIcon,
       iconClass: 'updated',
+    },
+    // Always show Reference URLs pill so users see where scraped URLs appear (from description/documents)
+    {
+      label: 'Reference URLs',
+      value:
+        referenceUrlsCount === 0
+          ? '0 links'
+          : referenceUrlsCount === 1
+            ? '1 link'
+            : `${referenceUrlsCount} links`,
+      icon: <Link2 style={{ width: 14, height: 14 }} />,
+      iconClass: 'urls' as const,
+      ...(referenceUrlsCount > 0 && referenceUrlsUsed
+        ? { urls: referenceUrlsUsed as string[] }
+        : {}),
     },
   ];
 
@@ -370,19 +460,71 @@ export function ProjectDetailPage() {
 
         {/* Inline Stat Pills - shown when a quote exists */}
         {quote && (
-          <div className="project-detail-stat-pills">
-            {statCardsData.map((card, index) => (
-              <React.Fragment key={card.label}>
-                {index > 0 && <span className="project-detail-stat-pill-separator" />}
-                <div className="project-detail-stat-pill">
-                  <span className={`project-detail-stat-pill-icon ${card.iconClass}`}>
-                    {card.icon}
-                  </span>
-                  <span className="project-detail-stat-pill-label">{card.label}:</span>
-                  <span className="project-detail-stat-pill-value">{card.value}</span>
+          <div className="project-detail-stat-pills-wrapper">
+            <div className="project-detail-stat-pills">
+              {statCardsData.map((card, index) => {
+                const hasUrls = 'urls' in card && Array.isArray(card.urls);
+                const pill = (
+                  <div
+                    className={`project-detail-stat-pill ${hasUrls ? 'project-detail-stat-pill-clickable' : ''}`}
+                    role={hasUrls ? 'button' : undefined}
+                    tabIndex={hasUrls ? 0 : undefined}
+                    onClick={hasUrls ? () => setShowReferenceUrlsList((v) => !v) : undefined}
+                    onKeyDown={
+                      hasUrls
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setShowReferenceUrlsList((v) => !v);
+                            }
+                          }
+                        : undefined}
+                  >
+                    <span className={`project-detail-stat-pill-icon ${card.iconClass}`}>
+                      {card.icon}
+                    </span>
+                    <span className="project-detail-stat-pill-label">{card.label}:</span>
+                    <span className="project-detail-stat-pill-value">{card.value}</span>
+                  </div>
+                );
+                return (
+                  <React.Fragment key={card.label}>
+                    {index > 0 && <span className="project-detail-stat-pill-separator" />}
+                    {pill}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsUsed && (
+              <>
+                <div className="project-detail-reference-urls-list">
+                  {referenceUrlsUsed.map((url) => (
+                    <div key={url} className="project-detail-reference-url-item-row">
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="project-detail-reference-url-item"
+                      >
+                        {url}
+                      </a>
+                      <button
+                        type="button"
+                        className="project-detail-reference-url-preview-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          openUrlPreview(url, 'site');
+                        }}
+                        aria-label={`View full site asset for ${url} (crawl, screenshots, scraped content, video)`}
+                        title="Preview full site (crawl, screenshots, content, video)"
+                      >
+                        <Eye style={{ width: 16, height: 16 }} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              </React.Fragment>
-            ))}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -400,9 +542,193 @@ export function ProjectDetailPage() {
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
             onSaveStatusChange={handleSaveStatusChange}
+            referenceUrls={referenceUrlsUsed ?? undefined}
+            crawlSiteFromUrl={referenceUrlsUsed?.[0]}
           />
         )}
       </div>
+
+      {/* Reference URL preview dialog: single page or full site (tabs) */}
+      <Dialog open={previewOpen} onOpenChange={(open) => !open && closePreview()}>
+        <DialogContent
+          className="reference-url-preview-dialog"
+          style={{
+            maxWidth: '90vw',
+            width: previewSiteData ? 860 : 720,
+            maxHeight: '90vh',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {previewSiteData
+                ? `Reference site – ${previewSiteData.pages.length} page${previewSiteData.pages.length !== 1 ? 's' : ''}`
+                : 'Reference URL – scraped content'}
+            </DialogTitle>
+            <DialogDescription>
+              {(previewSiteData?.seed_url || previewUrl) && (
+                <a
+                  href={previewSiteData?.seed_url || previewUrl || undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="reference-url-preview-link"
+                  style={{ wordBreak: 'break-all', fontSize: '0.9rem' }}
+                >
+                  {previewSiteData?.seed_url || previewUrl}
+                </a>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="reference-url-preview-body" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {previewLoading && (
+              <div className="reference-url-preview-loading" style={{ padding: '2rem', textAlign: 'center' }}>
+                <Loader2 style={{ width: 32, height: 32 }} className="animate-spin" />
+                <p style={{ marginTop: 12, color: 'var(--color-gray-500)' }}>
+                  {previewMode === 'site'
+                    ? 'Crawling site, then scraping each page… This may take 1–3 minutes.'
+                    : 'Scraping URL…'}
+                </p>
+              </div>
+            )}
+            {!previewLoading && previewError && (
+              <div className="reference-url-preview-error" style={{ padding: '1rem', color: 'var(--color-error)' }}>
+                {previewError}
+              </div>
+            )}
+            {!previewLoading && previewSiteData && previewSiteData.pages.length > 0 && (
+              <>
+                <div
+                  role="tablist"
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 4,
+                    marginBottom: 12,
+                    borderBottom: '1px solid var(--color-border)',
+                    paddingBottom: 8,
+                  }}
+                >
+                  {previewSiteData.pages.map((page, idx) => {
+                    let label = `Page ${idx + 1}`;
+                    try {
+                      const u = new URL(page.url);
+                      label = (u.pathname || '/') + (u.search || '') || label;
+                    } catch {
+                      // keep Page N
+                    }
+                    return (
+                      <button
+                        key={page.url}
+                        type="button"
+                        role="tab"
+                        aria-selected={previewPageIndex === idx}
+                        aria-label={`Page ${idx + 1}: ${label}`}
+                        onClick={() => setPreviewPageIndex(idx)}
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '0.8rem',
+                          borderRadius: 6,
+                          border: '1px solid var(--color-border)',
+                          background: previewPageIndex === idx ? 'var(--color-primary)' : 'var(--color-gray-100)',
+                          color: previewPageIndex === idx ? 'white' : 'inherit',
+                          maxWidth: 140,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const page = previewSiteData.pages[previewPageIndex];
+                  if (!page) return null;
+                  return (
+                    <>
+                      {page.screenshot_base64 && (
+                        <div className="reference-url-preview-screenshot" style={{ marginBottom: 16 }}>
+                          <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                            Screenshot (used for estimation)
+                          </p>
+                          <img
+                            src={`data:image/png;base64,${page.screenshot_base64}`}
+                            alt={`Screenshot of ${page.url}`}
+                            style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--color-border)' }}
+                          />
+                        </div>
+                      )}
+                      {page.error && !page.screenshot_base64 && (
+                        <p style={{ color: 'var(--color-warning)', marginBottom: 12 }}>{page.error}</p>
+                      )}
+                      <div className="reference-url-preview-text">
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                          Extracted text (used for estimation)
+                        </p>
+                        <pre
+                          style={{
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            maxHeight: 280,
+                            overflow: 'auto',
+                            padding: 12,
+                            background: 'var(--color-gray-100)',
+                            borderRadius: 8,
+                            fontSize: '0.8rem',
+                          }}
+                        >
+                          {page.extracted_text || '(No text extracted)'}
+                        </pre>
+                      </div>
+                    </>
+                  );
+                })()}
+              </>
+            )}
+            {!previewLoading && previewData && !previewSiteData && (
+              <>
+                {previewData.screenshot_base64 && (
+                  <div className="reference-url-preview-screenshot" style={{ marginBottom: 16 }}>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                      Screenshot (used for estimation)
+                    </p>
+                    <img
+                      src={`data:image/png;base64,${previewData.screenshot_base64}`}
+                      alt="Screenshot of reference URL"
+                      style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--color-border)' }}
+                    />
+                  </div>
+                )}
+                {previewData.error && !previewData.screenshot_base64 && (
+                  <p style={{ color: 'var(--color-warning)', marginBottom: 12 }}>{previewData.error}</p>
+                )}
+                <div className="reference-url-preview-text">
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                    Extracted text (used for estimation)
+                  </p>
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxHeight: 320,
+                      overflow: 'auto',
+                      padding: 12,
+                      background: 'var(--color-gray-100)',
+                      borderRadius: 8,
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {previewData.extracted_text || '(No text extracted)'}
+                  </pre>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

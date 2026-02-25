@@ -51,8 +51,6 @@ interface FormData {
   platform: Platform
   clientType: 'new' | 'existing'
   files: File[]
-  /** Optional reference URLs (one per line) to include in the estimate brief when URL scraping is enabled */
-  referenceUrls: string
 }
 
 interface FormErrors {
@@ -94,7 +92,6 @@ export function NewProjectPage() {
     platform: 'wordpress',
     clientType: 'new',
     files: [],
-    referenceUrls: '',
   })
 
   const [errors, setErrors] = useState<FormErrors>({})
@@ -319,21 +316,14 @@ export function NewProjectPage() {
     }
   }, [createdProject, navigate])
 
-  // Parse reference URLs (one per line, trimmed, non-empty)
-  const parsedReferenceUrls =
-    formData.referenceUrls
-      ?.split(/\n/)
-      .map((u) => u.trim())
-      .filter(Boolean) ?? []
-
-  // Show estimation generation UI when project is created
+  // Show estimation generation UI when project is created.
+  // Reference URLs are auto-extracted by the backend from description, additional inputs, and uploaded documents.
   if (showEstimationUI && createdProject) {
     return (
       <EstimationGenerationUI
         project={createdProject}
         onComplete={handleEstimationComplete}
         onCancel={handleEstimationCancel}
-        referenceUrls={parsedReferenceUrls.length > 0 ? parsedReferenceUrls : undefined}
       />
     )
   }
@@ -608,26 +598,6 @@ export function NewProjectPage() {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Reference URLs (optional) */}
-            <div className="new-project-form-group">
-              <Label className="new-project-form-label">
-                Reference URLs{' '}
-                <span className="new-project-form-optional">(Optional)</span>
-              </Label>
-              <textarea
-                className="input"
-                value={formData.referenceUrls}
-                onChange={handleChange('referenceUrls')}
-                placeholder={'https://example.com/page1\nhttps://example.com/page2'}
-                rows={2}
-                disabled={isSubmitting}
-                style={{ resize: 'vertical', minHeight: '60px' }}
-              />
-              <p className="new-project-form-hint">
-                One URL per line. When enabled, these are scraped and included in the estimate brief.
-              </p>
             </div>
 
             {/* Form Actions */}

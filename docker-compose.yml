@@ -46,6 +46,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        INSTALL_PLAYWRIGHT: "true"
+    env_file:
+      - .env
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
@@ -83,9 +87,13 @@ services:
       - LLM_DEFAULT_TEMPERATURE=${LLM_DEFAULT_TEMPERATURE:-0.3}
       - LLM_DEFAULT_MAX_TOKENS=${LLM_DEFAULT_MAX_TOKENS:-4096}
       - LLM_REQUEST_TIMEOUT=${LLM_REQUEST_TIMEOUT:-120}
+      # Set ENABLE_URL_SCRAPING=false to skip Playwright install and start backend in ~15s (no reference URL scraping)
+      - ENABLE_URL_SCRAPING=${ENABLE_URL_SCRAPING:-true}
     volumes:
       # Mount source code for hot-reload in development
       - ./backend:/app
+      # Persist Playwright Chromium so host mount doesn't hide image install (avoids reinstall on every start)
+      - backend_playwright_browsers:/app/.playwright-browsers
       # Exclude venv from mount
       - /app/venv
     depends_on:
@@ -98,10 +106,11 @@ services:
       - estimation-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 6
+      # First run with empty Playwright volume can take ~2–3 min; subsequent runs are fast
+      start_period: 180s
 
   # ===========================================
   # PostgreSQL Database (with pgvector extension)
@@ -155,6 +164,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        INSTALL_PLAYWRIGHT: "false"
     environment:
       # Database connection (Docker internal)
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quote_assistant}
@@ -196,6 +207,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        INSTALL_PLAYWRIGHT: "false"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quote_assistant}
     depends_on:
@@ -229,4 +242,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  backend_playwright_browsers:
     driver: local

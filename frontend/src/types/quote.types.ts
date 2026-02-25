@@ -187,6 +187,8 @@ export interface GenerateQuoteRequest {
     additional_instructions?: string;
     /** Explicit reference URLs to scrape and include in the brief (when URL scraping is enabled) */
     reference_urls?: string[];
+    /** When set, backend crawls this URL for same-host pages and includes all in the brief (full-site estimation) */
+    crawl_site_from_url?: string;
     [key: string]: unknown;
   };
 }

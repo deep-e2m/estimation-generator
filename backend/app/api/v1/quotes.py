@@ -564,12 +564,14 @@ async def generate_quote(
             logger.warning("Could not load project documents for brief: %s", e)
 
     # Reference URL context (scraped content + vision descriptions when ENABLE_URL_SCRAPING)
+    ref_ctx = request.project_context or {}
     reference_url_context, reference_urls_used = await build_reference_url_context(
         project_description,
         additional_instructions,
         document_summary,
         doc_texts,
-        explicit_urls=(request.project_context or {}).get("reference_urls") if request.project_context else None,
+        explicit_urls=ref_ctx.get("reference_urls"),
+        crawl_site_from_url=ref_ctx.get("crawl_site_from_url"),
     )
     if reference_url_context:
         parts.append(f"{REFERENCE_URLS_HEADER}\n{reference_url_context}")

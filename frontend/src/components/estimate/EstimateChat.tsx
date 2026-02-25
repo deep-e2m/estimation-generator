@@ -95,6 +95,10 @@ interface EstimateChatProps {
   useFullscreenUI?: boolean;
   /** Notify parent when inline editor is saving / has saved */
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
+  /** When set, backend crawls this URL for same-host pages and includes all in the brief (full-site estimation) */
+  crawlSiteFromUrl?: string;
+  /** Optional explicit reference URLs to include in the brief */
+  referenceUrls?: string[];
 }
 
 export function EstimateChat({
@@ -103,6 +107,8 @@ export function EstimateChat({
   onEstimateGenerated,
   useFullscreenUI = true, // Default to new fullscreen UI
   onSaveStatusChange,
+  crawlSiteFromUrl,
+  referenceUrls,
 }: EstimateChatProps) {
   const navigate = useNavigate();
 
@@ -292,6 +298,8 @@ export function EstimateChat({
         project={project}
         onComplete={handleFullscreenComplete}
         onCancel={handleFullscreenCancel}
+        referenceUrls={referenceUrls}
+        crawlSiteFromUrl={crawlSiteFromUrl}
       />
     );
   }

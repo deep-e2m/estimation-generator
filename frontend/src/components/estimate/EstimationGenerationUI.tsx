@@ -105,6 +105,8 @@ interface EstimationGenerationUIProps {
   onCancel: () => void;
   /** Optional explicit reference URLs to include in the brief (when URL scraping is enabled) */
   referenceUrls?: string[];
+  /** When set, backend crawls this URL for same-host pages and includes all in the brief (full-site estimation) */
+  crawlSiteFromUrl?: string;
 }
 
 // Animated counter hook
@@ -312,6 +314,7 @@ export function EstimationGenerationUI({
   onComplete,
   onCancel,
   referenceUrls,
+  crawlSiteFromUrl,
 }: EstimationGenerationUIProps) {
   // State
   const [progress, setProgress] = useState(0);
@@ -384,6 +387,8 @@ export function EstimationGenerationUI({
         // Non-blocking: continue without document_summary if list fails
       }
 
+      // Reference URLs are auto-extracted by the backend from description, additional_instructions,
+      // and document text (uploaded PDFs/docs). No need to pass reference_urls from the form.
       const request: GenerateQuoteRequest = {
         requirements: description,
         use_rag: true,
@@ -396,6 +401,7 @@ export function EstimationGenerationUI({
             : {}),
           ...(documentSummary ? { document_summary: documentSummary } : {}),
           ...(referenceUrls?.length ? { reference_urls: referenceUrls } : {}),
+          ...(crawlSiteFromUrl ? { crawl_site_from_url: crawlSiteFromUrl } : {}),
         },
       };
 
@@ -446,7 +452,7 @@ export function EstimationGenerationUI({
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [project, retryCount, referenceUrls]);
+  }, [project, retryCount, referenceUrls, crawlSiteFromUrl]);
 
   const handleCancel = useCallback(() => {
     abortControllerRef.current?.abort();

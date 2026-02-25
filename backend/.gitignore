@@ -149,6 +149,7 @@ cython_debug/
 Thumbs.db
 
 # Project specific
+.playwright-browsers/
 *.db
 *.sqlite
 logs/

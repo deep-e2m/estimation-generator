@@ -3157,6 +3157,74 @@
   color: var(--color-gray-400);
 }
 
+.project-detail-stat-pill-icon.urls {
+  color: var(--color-primary-500);
+}
+
+.project-detail-stat-pills-wrapper {
+  padding-top: var(--space-2);
+}
+
+.project-detail-stat-pill-clickable {
+  cursor: pointer;
+}
+
+.project-detail-stat-pill-clickable:hover {
+  border-color: var(--color-primary-300);
+  color: var(--color-primary-700);
+}
+
+.project-detail-reference-urls-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gray-200);
+}
+
+.project-detail-reference-url-item {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-600);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.project-detail-reference-url-item:hover {
+  text-decoration: underline;
+}
+
+.project-detail-reference-url-item-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.project-detail-reference-url-item-row .project-detail-reference-url-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-detail-reference-url-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.project-detail-reference-url-preview-btn:hover {
+  background: var(--color-gray-100);
+  color: var(--color-primary-600);
+}
+
 .project-detail-stat-pill-label {
   font-weight: var(--font-weight-medium);
   color: var(--color-gray-500);

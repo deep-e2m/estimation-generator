@@ -41,15 +41,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Playwright/Chromium for URL scraping (reference URLs in estimation)
+# Playwright/Chromium for URL scraping (reference URLs in estimation).
+# Set INSTALL_PLAYWRIGHT=false for celery-worker and migrations to skip ~3min install.
+ARG INSTALL_PLAYWRIGHT=true
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
 RUN useradd --create-home --shell /bin/bash appuser \
-    && playwright install --with-deps chromium \
-    && chown -R appuser:appuser /app/.playwright-browsers
+    && if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
+        playwright install --with-deps chromium \
+        && chown -R appuser:appuser /app/.playwright-browsers; \
+    fi
 USER appuser
 
 # Copy application code
 COPY --chown=appuser:appuser . .
+# Entrypoint at /entrypoint.sh survives volume mount at /app (installs Playwright browsers when missing)
+COPY --chown=appuser:appuser docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -62,5 +69,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
+# Run the application (entrypoint installs Playwright Chromium when /app is volume-mounted)
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

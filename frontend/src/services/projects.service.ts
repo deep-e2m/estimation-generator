@@ -13,6 +13,8 @@ import type {
   ProjectFilters,
   CheckContentQualityRequest,
   CheckContentQualityResponse,
+  ReferenceUrlPreviewData,
+  ReferenceUrlSitePreviewData,
 } from '@/types';
 
 // Build query params from filters (page-based pagination)
@@ -71,6 +73,37 @@ export const projectsService = {
       '/api/v1/projects/check-content-quality',
       data,
       { timeout: LONG_REQUEST_TIMEOUT_MS }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Preview scraped content for a reference URL (screenshot + extracted text used for estimation).
+   */
+  getReferenceUrlPreview: async (
+    projectId: string,
+    url: string
+  ): Promise<ReferenceUrlPreviewData> => {
+    const params = new URLSearchParams({ url });
+    const response = await apiClient.get<ApiResponse<ReferenceUrlPreviewData>>(
+      `/api/v1/projects/${projectId}/reference-url-preview?${params.toString()}`,
+      { timeout: 60_000 }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Preview full site: crawl same-host pages from seed URL, then scrape each page (screenshot + text).
+   * Returns one screenshot and extracted text per page. May take 1–3 minutes for many pages.
+   */
+  getReferenceUrlSitePreview: async (
+    projectId: string,
+    url: string
+  ): Promise<ReferenceUrlSitePreviewData> => {
+    const params = new URLSearchParams({ url });
+    const response = await apiClient.get<ApiResponse<ReferenceUrlSitePreviewData>>(
+      `/api/v1/projects/${projectId}/reference-url-site-preview?${params.toString()}`,
+      { timeout: 300_000 }
     );
     return response.data.data;
   },

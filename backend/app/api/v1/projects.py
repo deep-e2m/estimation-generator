@@ -11,6 +11,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
+from app.config import get_settings
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -35,12 +36,19 @@ from app.schemas.project import (
     ProjectOwner,
     ProjectResponse,
     ProjectUpdate,
+    ReferenceUrlPreviewData,
+    ReferenceUrlPreviewResponse,
+    ReferenceUrlSitePreviewData,
+    ReferenceUrlSitePreviewResponse,
 )
 from app.services.ai.llm_service import get_llm_service
 from app.services.reference_url_context import (
     REFERENCE_URLS_HEADER,
     build_reference_url_context,
 )
+from app.services.site_crawl_service import crawl_site
+from app.services.url_extraction import extract_urls
+from app.services.url_scraping_service import scrape_urls
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +151,166 @@ async def check_content_quality(
         suggested_improvements=result.get("suggested_improvements", ""),
     )
     return CheckContentQualityResponse(success=True, data=data)
+
+
+@router.get(
+    "/{project_id}/reference-url-preview",
+    response_model=ReferenceUrlPreviewResponse,
+    summary="Preview scraped content for a reference URL",
+    description="Scrapes the given URL (screenshot + body text) and returns the content used for estimation. Requires project access.",
+    responses={
+        200: {"description": "Scraped content and screenshot"},
+        400: {"description": "Invalid or disallowed URL"},
+        404: {"description": "Project not found"},
+        503: {"description": "URL scraping is disabled"},
+    },
+)
+async def reference_url_preview(
+    project_id: UUID,
+    current_user: ActiveUser,
+    db: DbSession,
+    url: str = Query(..., min_length=1, max_length=2048, description="URL to scrape and preview"),
+) -> ReferenceUrlPreviewResponse:
+    """Scrape a single URL and return extracted text + screenshot for preview."""
+    await get_project_with_access(project_id, current_user, db)
+
+    settings = get_settings()
+    if not settings.ENABLE_URL_SCRAPING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "URL_SCRAPING_DISABLED",
+                "message": "Reference URL scraping is disabled.",
+            },
+        )
+
+    normalized = extract_urls(
+        url.strip(),
+        allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
+        max_urls=1,
+        reject_local_private=settings.is_production,
+    )
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_URL",
+                "message": "URL is not allowed (check scheme and host).",
+            },
+        )
+    target_url = normalized[0]
+
+    results = await scrape_urls(
+        [target_url],
+        timeout_per_url=settings.URL_SCRAPE_TIMEOUT_SEC,
+        max_urls=1,
+    )
+    if not results:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "SCRAPE_FAILED", "message": "Scraping produced no result."},
+        )
+    r = results[0]
+    return ReferenceUrlPreviewResponse(
+        success=True,
+        data=ReferenceUrlPreviewData(
+            url=r.url,
+            extracted_text=r.extracted_text or "",
+            screenshot_base64=r.screenshot_base64,
+            error=r.error,
+        ),
+    )
+
+
+@router.get(
+    "/{project_id}/reference-url-site-preview",
+    response_model=ReferenceUrlSitePreviewResponse,
+    summary="Preview full site (crawl + scrape all pages)",
+    description="Discovers same-host pages from the seed URL (sitemap + links), then scrapes each page (screenshot + extracted text). Returns one screenshot and text per page.",
+    responses={
+        200: {"description": "Scraped content for each discovered page"},
+        400: {"description": "Invalid or disallowed URL"},
+        404: {"description": "Project not found"},
+        503: {"description": "URL scraping or site crawl is disabled"},
+    },
+)
+async def reference_url_site_preview(
+    project_id: UUID,
+    current_user: ActiveUser,
+    db: DbSession,
+    url: str = Query(..., min_length=1, max_length=2048, description="Seed URL to crawl and scrape"),
+) -> ReferenceUrlSitePreviewResponse:
+    """Crawl site from seed URL, then scrape each discovered page; return list of screenshots + text (one per page)."""
+    await get_project_with_access(project_id, current_user, db)
+
+    settings = get_settings()
+    if not settings.ENABLE_URL_SCRAPING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "URL_SCRAPING_DISABLED",
+                "message": "Reference URL scraping is disabled.",
+            },
+        )
+    if not settings.SITE_CRAWL_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "SITE_CRAWL_DISABLED",
+                "message": "Full-site crawl is disabled.",
+            },
+        )
+
+    normalized = extract_urls(
+        url.strip(),
+        allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
+        max_urls=1,
+        reject_local_private=settings.is_production,
+    )
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_URL",
+                "message": "URL is not allowed (check scheme and host).",
+            },
+        )
+    seed_url = normalized[0]
+
+    urls_to_scrape = await crawl_site(
+        seed_url,
+        max_pages=settings.MAX_SITE_PAGES,
+        depth=settings.SITE_CRAWL_DEPTH,
+        timeout_sec=float(settings.SITE_CRAWL_TIMEOUT_SEC),
+        allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
+    )
+    if not urls_to_scrape:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "CRAWL_FAILED", "message": "No URLs discovered from seed."},
+        )
+
+    results = await scrape_urls(
+        urls_to_scrape,
+        timeout_per_url=settings.URL_SCRAPE_TIMEOUT_SEC,
+        max_urls=len(urls_to_scrape),
+    )
+    pages = [
+        ReferenceUrlPreviewData(
+            url=r.url,
+            extracted_text=r.extracted_text or "",
+            screenshot_base64=r.screenshot_base64,
+            error=r.error,
+        )
+        for r in results
+    ]
+    return ReferenceUrlSitePreviewResponse(
+        success=True,
+        data=ReferenceUrlSitePreviewData(
+            seed_url=seed_url,
+            pages=pages,
+        ),
+    )
 
 
 @router.post(
