@@ -2,6 +2,8 @@
 # Environment variables
 # ==========================================
 .env
+.env.*
+!.env.example
 .env.local
 .env.development
 .env.development.local
@@ -122,12 +124,24 @@ docker/init-db/*.sh
 .playwright/
 playwright-report/
 playwright/.cache/
+**/playwright-report/
+**/test-results/
 test-results/
 coverage/
+**/coverage/
 model_evaluation/
+# Playwright trace and video artifacts
+**/*.trace
+**/trace/
 # Snapshot test artifacts (Jest/Vitest)
 __snapshots__/
 *.snap
+# UAT and test result docs (keep local only)
+docs/UAT-*.md
+docs/*Test*Results*.md
+docs/*Performance*Samples*.md
+**/uat-results/
+**/test-results*.md
 
 # ==========================================
 # AI Tools / Coding Assistants
@@ -179,6 +193,19 @@ aider.conf.yml
 .ai/
 .llm/
 .gpt/
+
+# ==========================================
+# Secrets / Keys / Certs (never commit)
+# ==========================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+**/secrets/
+**/credentials/
+*.credentials
 
 # ==========================================
 # Project-specific

@@ -3,7 +3,7 @@
  * Display project information with estimate generation
  *
  * FIXED LAYOUT:
- * - Compact header bar with back, project name, badge, search, edit
+ * - Compact header bar with back, project name, badge, search
  * - 3 stat cards: Total Hours, Project Status, Complexity
  * - Uses EstimateChat component for actual AI-powered estimation
  * - Handles ?tab=chat query param for auto-generation flow
@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
-  Edit2,
   Clock,
   FileText,
   CheckCircle2,
@@ -379,16 +378,6 @@ export function ProjectDetailPage() {
           </div>
         </div>
 
-        <div className="project-detail-header-right">
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Edit2 style={{ width: 16, height: 16 }} />}
-            onClick={() => navigate(`/projects/${id}/edit`)}
-          >
-            Edit Project
-          </Button>
-        </div>
       </header>
 
       {/* Project Title Section - Compact Layout */}
