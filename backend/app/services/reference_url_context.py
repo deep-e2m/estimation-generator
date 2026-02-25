@@ -63,13 +63,58 @@ async def build_reference_url_context(
     if not settings.ENABLE_URL_SCRAPING:
         return "", []
 
+    # Normalize inputs so callers cannot break us (e.g. frontend sends list for crawl_site_from_url)
+    if crawl_site_from_url is not None:
+        if isinstance(crawl_site_from_url, str) and crawl_site_from_url.strip():
+            crawl_site_from_url = crawl_site_from_url.strip()
+        elif isinstance(crawl_site_from_url, list) and crawl_site_from_url:
+            first = crawl_site_from_url[0]
+            crawl_site_from_url = first.strip() if isinstance(first, str) and first.strip() else None
+        else:
+            crawl_site_from_url = None
+    if explicit_urls is not None:
+        if isinstance(explicit_urls, str):
+            explicit_urls = [explicit_urls.strip()] if explicit_urls.strip() else None
+        else:
+            explicit_urls = [u.strip() for u in explicit_urls if isinstance(u, str) and (u or "").strip()] or None
+
+    combined_parts: list[str] = []
+    if project_description and project_description.strip():
+        combined_parts.append(project_description.strip())
+    if additional_instructions and str(additional_instructions).strip():
+        combined_parts.append(str(additional_instructions).strip())
+    if document_summary and str(document_summary).strip():
+        combined_parts.append(str(document_summary).strip())
+    for t in document_plain_texts or []:
+        if t and str(t).strip():
+            combined_parts.append(str(t).strip())
+
+    # Determine crawl seed: explicit crawl_site_from_url, or first URL from content/explicit
+    crawl_seed: Optional[str] = None
+    if crawl_site_from_url and crawl_site_from_url.strip():
+        crawl_seed = crawl_site_from_url.strip()
+    elif getattr(settings, "SITE_CRAWL_ENABLED", False):
+        extracted_from_parts = extract_urls(
+            *combined_parts,
+            allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
+            max_urls=10,
+            reject_local_private=settings.is_production,
+        )
+        if extracted_from_parts:
+            crawl_seed = extracted_from_parts[0]
+        if not crawl_seed and explicit_urls:
+            for u in explicit_urls:
+                if u and u.strip():
+                    crawl_seed = u.strip()
+                    break
+
     urls_to_scrape: list[str] = []
     used_crawl = False
-    if crawl_site_from_url and crawl_site_from_url.strip() and getattr(settings, "SITE_CRAWL_ENABLED", False):
+    if crawl_seed and getattr(settings, "SITE_CRAWL_ENABLED", False):
         from app.services.site_crawl_service import crawl_site
 
         normalized = extract_urls(
-            crawl_site_from_url.strip(),
+            crawl_seed,
             allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
             max_urls=1,
             reject_local_private=settings.is_production,
@@ -85,20 +130,9 @@ async def build_reference_url_context(
             if urls_to_scrape:
                 used_crawl = True
         if not urls_to_scrape:
-            logger.warning("Crawl from %s produced no URLs; falling back to extracted/explicit", crawl_site_from_url)
+            logger.warning("Crawl from %s produced no URLs; falling back to extracted/explicit", crawl_seed)
 
     if not urls_to_scrape:
-        combined_parts: list[str] = []
-        if project_description and project_description.strip():
-            combined_parts.append(project_description.strip())
-        if additional_instructions and str(additional_instructions).strip():
-            combined_parts.append(str(additional_instructions).strip())
-        if document_summary and str(document_summary).strip():
-            combined_parts.append(str(document_summary).strip())
-        for t in document_plain_texts or []:
-            if t and str(t).strip():
-                combined_parts.append(str(t).strip())
-
         extracted = extract_urls(
             *combined_parts,
             allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
@@ -109,7 +143,7 @@ async def build_reference_url_context(
         if explicit_urls:
             seen = set(urls_to_scrape)
             for u in explicit_urls:
-                if u and u.strip() and u.strip() not in seen:
+                if isinstance(u, str) and u.strip() and u.strip() not in seen:
                     urls_to_scrape.append(u.strip())
                     seen.add(u.strip())
             urls_to_scrape = urls_to_scrape[: settings.MAX_REFERENCE_URLS]

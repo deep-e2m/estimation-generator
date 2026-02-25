@@ -46,6 +46,43 @@ def _normalize_base(url: str) -> str:
         return ""
 
 
+def _is_likely_sitemap_file(url: str) -> bool:
+    """True if URL looks like a sitemap/index file (e.g. .xml or path contains sitemap), not a real page."""
+    try:
+        parsed = urlparse(url.strip())
+        path = (parsed.path or "").lower()
+        return path.endswith(".xml") or "sitemap" in path
+    except Exception:
+        return False
+
+
+# Extensions and path segments that indicate static assets, feeds, or API endpoints (not content pages)
+_PAGE_LIKE_BAD_PATH_PARTS = ("/feed/", "/wp-json/", "/xmlrpc", "/oembed", "/comments/feed/")
+_PAGE_LIKE_BAD_EXTENSIONS = (
+    ".css", ".js", ".woff", ".woff2", ".ttf", ".otf", ".eot",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg",
+    ".pdf", ".zip", ".php",  # .php for xmlrpc.php, etc.
+)
+
+
+def _is_page_like_url(url: str) -> bool:
+    """True if URL looks like a content page (not a static asset, feed, or API endpoint)."""
+    try:
+        parsed = urlparse(url.strip())
+        path = (parsed.path or "/").lower()
+        if path == "/":
+            return True
+        for part in _PAGE_LIKE_BAD_PATH_PARTS:
+            if part in path:
+                return False
+        for ext in _PAGE_LIKE_BAD_EXTENSIONS:
+            if path.endswith(ext) or ext + "?" in path:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def _same_origin(base_origin: str, candidate: str) -> bool:
     """True if candidate URL has the same origin (scheme + netloc) as base."""
     if not base_origin or not candidate:
@@ -131,7 +168,8 @@ def _parse_sitemap_xml(text: str, base_origin: str) -> list[str]:
 
 
 async def _discover_via_sitemap(client: httpx.AsyncClient, base_origin: str, seed_url: str) -> list[str]:
-    """Try common sitemap paths and return same-origin URLs (seed first, then rest)."""
+    """Try common sitemap paths and return same-origin URLs (seed first, then rest).
+    If the sitemap is an index (lists other .xml sitemaps), fetch those and collect real page URLs."""
     candidates = [
         urljoin(seed_url, "/sitemap.xml"),
         urljoin(seed_url, "/sitemap_index.xml"),
@@ -143,14 +181,29 @@ async def _discover_via_sitemap(client: httpx.AsyncClient, base_origin: str, see
         if not text:
             continue
         urls = _parse_sitemap_xml(text, base_origin)
-        if urls:
-            # Seed first, then rest (dedupe)
-            seen = {seed_url}
-            ordered = [seed_url]
-            for u in urls:
-                if u not in seen:
-                    seen.add(u)
-                    ordered.append(u)
+        if not urls:
+            continue
+        # If we got sitemap index files (e.g. page-sitemap.xml), fetch them for real page URLs
+        sitemap_files = [u for u in urls if _is_likely_sitemap_file(u)]
+        page_urls = [u for u in urls if not _is_likely_sitemap_file(u)]
+        for child_url in sitemap_files:
+            child_text = await _fetch_text(client, child_url)
+            if child_text:
+                page_urls.extend(_parse_sitemap_xml(child_text, base_origin))
+        # Seed first, then rest (dedupe)
+        seen: set[str] = set()
+        ordered: list[str] = [seed_url]
+        n_seed = _normalize_absolute_url(seed_url)
+        if n_seed:
+            seen.add(n_seed)
+        for u in page_urls:
+            if _is_likely_sitemap_file(u) or not _is_page_like_url(u):
+                continue
+            n = _normalize_absolute_url(u)
+            if n and n not in seen:
+                seen.add(n)
+                ordered.append(u)
+        if ordered:
             return ordered
     return []
 
@@ -324,11 +377,23 @@ async def crawl_site(
     ) as client:
 
         async def _run() -> list[str]:
-            # 1) Try sitemap first
+            # 1) Try sitemap (may return 0 or many URLs; can include sitemap index .xml files)
             sitemap_urls = await _discover_via_sitemap(client, base_origin, seed_url)
-            if len(sitemap_urls) >= 1:
-                return sitemap_urls[:max_pages]
-            # 2) Discover via Playwright (JS-rendered links: nav, footers, etc.)
+            page_urls_from_sitemap = [u for u in sitemap_urls if not _is_likely_sitemap_file(u)]
+            # Only use sitemap alone when it found multiple real pages; else discover via Playwright/links
+            if len(page_urls_from_sitemap) > 1:
+                return page_urls_from_sitemap[:max_pages]
+            # 2) Discover via Playwright (JS-rendered links: nav, footers, etc.) so we get internal pages
+            seen: set[str] = set()
+            ordered: list[str] = [seed_url]
+            seen.add(_normalize_absolute_url(seed_url) or seed_url)
+            for u in sitemap_urls:
+                if _is_likely_sitemap_file(u):
+                    continue
+                n = _normalize_absolute_url(u)
+                if n and n not in seen:
+                    seen.add(n)
+                    ordered.append(u)
             playwright_timeout = min(timeout_sec, 75)
             try:
                 pw_urls = await asyncio.wait_for(
@@ -341,15 +406,38 @@ async def crawl_site(
                     ),
                     timeout=playwright_timeout,
                 )
-                if len(pw_urls) > 1:
-                    logger.info("Playwright discovery found %d URLs from %s", len(pw_urls), seed_url)
-                    return pw_urls
+                for u in pw_urls:
+                    if len(ordered) >= max_pages:
+                        break
+                    if not _is_page_like_url(u):
+                        continue
+                    n = _normalize_absolute_url(u)
+                    if n and n not in seen:
+                        seen.add(n)
+                        ordered.append(u)
+                if len(ordered) > 1:
+                    logger.info(
+                        "Playwright discovery found %d URLs from %s",
+                        len(ordered),
+                        seed_url,
+                    )
+                    return ordered[:max_pages]
             except asyncio.TimeoutError:
                 logger.debug("Playwright discovery timed out")
             except Exception as e:
                 logger.debug("Playwright discovery error: %s", e)
             # 3) Fallback: raw HTML link extraction (no JS)
-            return await _discover_via_links(client, base_origin, seed_url, max_pages, depth)
+            link_urls = await _discover_via_links(client, base_origin, seed_url, max_pages, depth)
+            for u in link_urls:
+                if len(ordered) >= max_pages:
+                    break
+                if not _is_page_like_url(u):
+                    continue
+                n = _normalize_absolute_url(u)
+                if n and n not in seen:
+                    seen.add(n)
+                    ordered.append(u)
+            return ordered[:max_pages]
 
         try:
             urls = await asyncio.wait_for(_run(), timeout=timeout_sec)

@@ -693,7 +693,7 @@ Additional WordPress expertise:
     brief = (project_brief or "").strip() or requirements
     user_content = f"""Generate a professional project quote. The ONLY basis for scope and deliverables is the following project brief (and any attached SOW/source document). Do not add scope not implied by this brief.
 
-If the brief contains a "Reference URLs (scraped content and visual description)" section: those URLs are typically Figma/design links or existing websites. Use them for design matching (layout, visual style, components), structure understanding (sections, navigation, pages), and content (copy, CTAs, features). Scope and hours must include achieving that design/structure/content where the client intends to match the reference.
+If the brief contains a "Reference URLs (scraped content and visual description)" section: those URLs are typically Figma/design links or existing websites. Use them for design matching (layout, visual style, components), structure understanding (sections, navigation, pages), and content (copy, CTAs, features). Use this reference context to shape development approach, scope, assumptions, and exclusions—scope and hours must include achieving that design/structure/content where the client intends to match the reference.
 
 ## Single source of truth (project brief)
 {brief}

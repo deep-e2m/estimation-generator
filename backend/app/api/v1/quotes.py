@@ -564,14 +564,31 @@ async def generate_quote(
             logger.warning("Could not load project documents for brief: %s", e)
 
     # Reference URL context (scraped content + vision descriptions when ENABLE_URL_SCRAPING)
+    # Normalize project_context so reference_urls is list[str] and crawl_site_from_url is str (no break if frontend sends wrong types)
     ref_ctx = request.project_context or {}
+    _explicit_urls = ref_ctx.get("reference_urls")
+    if isinstance(_explicit_urls, str) and _explicit_urls.strip():
+        explicit_urls_normalized: Optional[list[str]] = [_explicit_urls.strip()]
+    elif isinstance(_explicit_urls, list):
+        explicit_urls_normalized = [u for u in _explicit_urls if isinstance(u, str) and (u or "").strip()]
+    else:
+        explicit_urls_normalized = None
+    _crawl_seed = ref_ctx.get("crawl_site_from_url")
+    crawl_site_from_url_normalized: Optional[str] = None
+    if isinstance(_crawl_seed, str) and _crawl_seed.strip():
+        crawl_site_from_url_normalized = _crawl_seed.strip()
+    elif isinstance(_crawl_seed, list) and _crawl_seed:
+        first = _crawl_seed[0]
+        if isinstance(first, str) and first.strip():
+            crawl_site_from_url_normalized = first.strip()
+
     reference_url_context, reference_urls_used = await build_reference_url_context(
         project_description,
         additional_instructions,
         document_summary,
         doc_texts,
-        explicit_urls=ref_ctx.get("reference_urls"),
-        crawl_site_from_url=ref_ctx.get("crawl_site_from_url"),
+        explicit_urls=explicit_urls_normalized,
+        crawl_site_from_url=crawl_site_from_url_normalized,
     )
     if reference_url_context:
         parts.append(f"{REFERENCE_URLS_HEADER}\n{reference_url_context}")

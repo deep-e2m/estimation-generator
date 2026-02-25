@@ -553,9 +553,9 @@ export function ProjectDetailPage() {
         <DialogContent
           className="reference-url-preview-dialog"
           style={{
-            maxWidth: '90vw',
-            width: previewSiteData ? 860 : 720,
-            maxHeight: '90vh',
+            maxWidth: '95vw',
+            width: 1120,
+            maxHeight: '78vh',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
@@ -648,23 +648,51 @@ export function ProjectDetailPage() {
                   const page = previewSiteData.pages[previewPageIndex];
                   if (!page) return null;
                   return (
-                    <>
-                      {page.screenshot_base64 && (
-                        <div className="reference-url-preview-screenshot" style={{ marginBottom: 16 }}>
-                          <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
-                            Screenshot (used for estimation)
-                          </p>
-                          <img
-                            src={`data:image/png;base64,${page.screenshot_base64}`}
-                            alt={`Screenshot of ${page.url}`}
-                            style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--color-border)' }}
-                          />
-                        </div>
-                      )}
-                      {page.error && !page.screenshot_base64 && (
-                        <p style={{ color: 'var(--color-warning)', marginBottom: 12 }}>{page.error}</p>
-                      )}
-                      <div className="reference-url-preview-text">
+                    <div
+                      className="reference-url-preview-columns"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: 16,
+                        alignItems: 'flex-start',
+                        minHeight: 0,
+                      }}
+                    >
+                      <div
+                        className="reference-url-preview-screenshot"
+                        style={{
+                          flex: '1 1 0',
+                          minWidth: 0,
+                          maxWidth: '50%',
+                          maxHeight: '65vh',
+                          overflow: 'auto',
+                        }}
+                      >
+                        {page.screenshot_base64 ? (
+                          <>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                              Screenshot (used for estimation)
+                            </p>
+                            <img
+                              src={`data:image/png;base64,${page.screenshot_base64}`}
+                              alt={`Screenshot of ${page.url}`}
+                              style={{
+                                maxWidth: '100%',
+                                height: 'auto',
+                                display: 'block',
+                                borderRadius: 8,
+                                border: '1px solid var(--color-border)',
+                              }}
+                            />
+                          </>
+                        ) : page.error ? (
+                          <p style={{ color: 'var(--color-warning)' }}>{page.error}</p>
+                        ) : null}
+                      </div>
+                      <div
+                        className="reference-url-preview-text"
+                        style={{ flex: '1 1 0', minWidth: 0, maxWidth: '50%' }}
+                      >
                         <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
                           Extracted text (used for estimation)
                         </p>
@@ -683,29 +711,57 @@ export function ProjectDetailPage() {
                           {page.extracted_text || '(No text extracted)'}
                         </pre>
                       </div>
-                    </>
+                    </div>
                   );
                 })()}
               </>
             )}
             {!previewLoading && previewData && !previewSiteData && (
-              <>
-                {previewData.screenshot_base64 && (
-                  <div className="reference-url-preview-screenshot" style={{ marginBottom: 16 }}>
-                    <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
-                      Screenshot (used for estimation)
-                    </p>
-                    <img
-                      src={`data:image/png;base64,${previewData.screenshot_base64}`}
-                      alt="Screenshot of reference URL"
-                      style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--color-border)' }}
-                    />
-                  </div>
-                )}
-                {previewData.error && !previewData.screenshot_base64 && (
-                  <p style={{ color: 'var(--color-warning)', marginBottom: 12 }}>{previewData.error}</p>
-                )}
-                <div className="reference-url-preview-text">
+              <div
+                className="reference-url-preview-columns"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: 16,
+                  alignItems: 'flex-start',
+                  minHeight: 0,
+                }}
+              >
+                <div
+                  className="reference-url-preview-screenshot"
+                  style={{
+                    flex: '1 1 0',
+                    minWidth: 0,
+                    maxWidth: '50%',
+                    maxHeight: '65vh',
+                    overflow: 'auto',
+                  }}
+                >
+                  {previewData.screenshot_base64 ? (
+                    <>
+                      <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                        Screenshot (used for estimation)
+                      </p>
+                      <img
+                        src={`data:image/png;base64,${previewData.screenshot_base64}`}
+                        alt="Screenshot of reference URL"
+                        style={{
+                          maxWidth: '100%',
+                          height: 'auto',
+                          display: 'block',
+                          borderRadius: 8,
+                          border: '1px solid var(--color-border)',
+                        }}
+                      />
+                    </>
+                  ) : previewData.error ? (
+                    <p style={{ color: 'var(--color-warning)' }}>{previewData.error}</p>
+                  ) : null}
+                </div>
+                <div
+                  className="reference-url-preview-text"
+                  style={{ flex: '1 1 0', minWidth: 0, maxWidth: '50%' }}
+                >
                   <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
                     Extracted text (used for estimation)
                   </p>
@@ -724,7 +780,7 @@ export function ProjectDetailPage() {
                     {previewData.extracted_text || '(No text extracted)'}
                   </pre>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </DialogContent>
