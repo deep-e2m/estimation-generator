@@ -200,6 +200,19 @@ class Settings(BaseSettings):
         le=32000,
         description="Maximum character length for RAG context",
     )
+    # Reference estimates (similar quotes) for calibration band and context
+    RAG_REFERENCE_TOP_K: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Number of similar quotes to retrieve for reference estimates and calibration band",
+    )
+    RAG_REFERENCE_SIMILARITY_THRESHOLD: float = Field(
+        default=0.65,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score for reference-estimates RAG retrieval (similar quotes)",
+    )
 
     # ==================== Knowledge Base Settings ====================
     # Path to knowledge base files (relative to project root)

@@ -17,11 +17,14 @@ interface UseQuoteRefinementReturn {
 }
 
 /**
- * Hook for managing quote refinement through conversational interface
+ * Hook for managing quote refinement through conversational interface.
+ * getCurrentContent should return the current editor content (e.g. BlockNote JSON)
+ * so refinement uses the latest state and does not overwrite unsaved edits.
  */
 export function useQuoteRefinement(
   projectId: string,
   quoteId: string,
+  getCurrentContent: () => string | undefined,
   onQuoteUpdated: (
     quote: Quote,
     changes: ChangeDescription[],
@@ -51,11 +54,13 @@ export function useQuoteRefinement(
       setMessages((prev) => [...prev, userMessage]);
 
       try {
-        // Call refinement API
+        // Call refinement API with current editor content so backend refines from latest state
+        const currentContent = getCurrentContent();
         const response = await quoteRefinementService.refineQuote(
           projectId,
           quoteId,
-          text
+          text,
+          currentContent
         );
 
         // Add AI response message
@@ -93,7 +98,7 @@ export function useQuoteRefinement(
         setIsProcessing(false);
       }
     },
-    [projectId, quoteId, isProcessing, onQuoteUpdated]
+    [projectId, quoteId, getCurrentContent, isProcessing, onQuoteUpdated]
   );
 
   const clearMessages = useCallback(() => {

@@ -17,20 +17,34 @@ interface EstimationChatPanelProps {
   project: Project;
   quote: Quote;
   onQuoteUpdated: (quote: Quote, changes: ChangeDescription[]) => void;
+  /** When provided, used as the source for refinement so latest editor content (including unsaved) is sent. */
+  getCurrentContent?: () => string | undefined;
 }
 
 export function EstimationChatPanel({
   project,
   quote,
   onQuoteUpdated,
+  getCurrentContent: getCurrentContentProp,
 }: EstimationChatPanelProps) {
   const [messageInput, setMessageInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const getCurrentContentFromQuote = useCallback(() => {
+    const summary = quote?.content?.executive_summary;
+    return typeof summary === 'string' ? summary : undefined;
+  }, [quote?.content?.executive_summary]);
+
+  const getCurrentContent = useCallback(
+    () => getCurrentContentProp?.() ?? getCurrentContentFromQuote(),
+    [getCurrentContentProp, getCurrentContentFromQuote]
+  );
+
   const { messages, isProcessing, sendMessage } = useQuoteRefinement(
     project.id,
     quote.id,
+    getCurrentContent,
     onQuoteUpdated
   );
 

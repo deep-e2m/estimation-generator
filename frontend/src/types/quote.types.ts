@@ -289,6 +289,8 @@ export interface ChangeDescription {
 
 export interface RefineQuoteRequest {
   message: string;
+  /** Current quote content from editor (e.g. BlockNote JSON); when sent, refinement uses it so unsaved edits are not lost. */
+  current_content?: string | null;
 }
 
 /** Project fields updated via refine chat (name/description). */

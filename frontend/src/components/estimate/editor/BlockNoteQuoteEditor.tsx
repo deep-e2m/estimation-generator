@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import '@blocknote/core/style.css';
 import '@blocknote/mantine/style.css';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -12,6 +12,32 @@ import {
 import './inline-editor.css';
 import { cn } from '@/lib/utils';
 import type { Quote } from '@/types';
+
+/** Parse quote executive_summary into BlockNote blocks (same shape as initialContent). */
+function quoteSummaryToBlocks(quote: Quote): unknown[] | undefined {
+  const summary = quote.content?.executive_summary;
+  if (!summary) return undefined;
+  try {
+    const parsed = JSON.parse(summary) as unknown;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return JSON.parse(JSON.stringify(parsed)) as unknown[];
+    }
+  } catch {
+    const trimmed = (typeof summary === 'string' ? summary : String(summary)).trim();
+    if (trimmed.length > 0) {
+      const blocks: Array<{ type: 'paragraph'; content: Array<{ type: 'text'; text: string; styles: object }> }> = [];
+      for (const line of trimmed.split(/\n/)) {
+        const t = line.trimEnd();
+        blocks.push({
+          type: 'paragraph',
+          content: [{ type: 'text', text: t.length > 0 ? t : ' ', styles: {} }],
+        });
+      }
+      if (blocks.length > 0) return blocks as unknown[];
+    }
+  }
+  return undefined;
+}
 
 export interface BlockNoteQuoteEditorProps {
   /** The quote whose content should be displayed in the editor */
@@ -71,8 +97,15 @@ export function BlockNoteQuoteEditor({
   }, [quote]);
 
   const editor = useCreateBlockNote({
-    initialContent,
+    // BlockNote expects PartialBlock[]; quote content is same schema (BlockNote JSON).
+    initialContent: initialContent as undefined | Record<string, unknown>[],
   });
+
+  // When we apply external content (WebSocket/refine/other tab), skip the next onChange
+  // so we don't trigger onContentChange and unnecessary save.
+  const isExternalUpdate = useRef(false);
+  // Track last quote we synced from (id + updated_at) to avoid re-applying same content.
+  const lastSyncedQuoteKey = useRef<string>('');
 
   // Notify parent when editor is ready.
   useEffect(() => {
@@ -84,12 +117,50 @@ export function BlockNoteQuoteEditor({
     }
   }, [editor, onEditorReady]);
 
+  // Sync external quote updates into the editor without remounting (e.g. WebSocket, refine, other tab).
+  // Skip when content is unchanged (e.g. our own save echo) to preserve cursor and scroll.
+  useEffect(() => {
+    if (!editor || !quote) return;
+
+    const quoteKey = `${quote.id}-${quote.updated_at ?? ''}`;
+    const newBlocks = quoteSummaryToBlocks(quote);
+    if (newBlocks === undefined || newBlocks.length === 0) return;
+
+    const newSerialized = JSON.stringify(newBlocks);
+    let currentSerialized: string;
+    try {
+      currentSerialized = JSON.stringify(editor.document);
+    } catch {
+      return;
+    }
+
+    if (newSerialized === currentSerialized) {
+      lastSyncedQuoteKey.current = quoteKey;
+      return;
+    }
+    if (lastSyncedQuoteKey.current === quoteKey) return;
+    lastSyncedQuoteKey.current = quoteKey;
+
+    isExternalUpdate.current = true;
+    try {
+      // BlockNote expects PartialBlock[]; content from API is the same schema (BlockNote JSON).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      editor.replaceBlocks(editor.document, newBlocks as any);
+    } catch (error) {
+      console.error('Failed to sync external content into BlockNote', error);
+    }
+  }, [quote, editor]);
+
   // Wire BlockNote changes into the existing autosave pipeline by
   // serializing the full document to a string.
   useEffect(() => {
     if (!editor) return;
 
     return editor.onChange(() => {
+      if (isExternalUpdate.current) {
+        isExternalUpdate.current = false;
+        return;
+      }
       try {
         const serialized = JSON.stringify(editor.document);
         onContentChange(serialized);

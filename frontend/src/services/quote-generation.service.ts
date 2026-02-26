@@ -216,6 +216,8 @@ class QuoteGenerationService {
       generation_time_ms?: number;
       analysis?: AnalysisMeta;
       validation_warnings?: string[];
+      calibration_band?: { min_hours: number; max_hours: number; median_hours: number };
+      requirements_coverage_warnings?: string[];
       company_stack_used?: boolean;
       company_stack_fallback?: string | null;
     };

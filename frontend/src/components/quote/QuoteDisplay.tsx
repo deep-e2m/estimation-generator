@@ -20,6 +20,7 @@ import {
   FileText,
   Link as LinkIcon,
   Edit2,
+  Info,
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../../lib/utils';
 import type {
@@ -575,8 +576,61 @@ interface QuoteFooterProps {
 }
 
 const QuoteFooter: React.FC<QuoteFooterProps> = ({ quote }) => {
+  const meta = quote.generation_metadata as {
+    generation_time_seconds?: number;
+    confidence_score?: number;
+    knowledge_docs_used?: string[];
+    calibration_band?: { min_hours: number; max_hours: number; median_hours: number };
+    validation_warnings?: string[];
+    requirements_coverage_warnings?: string[];
+  } | undefined;
+  const calibrationBand = meta?.calibration_band ?? (quote.metadata as { calibration_band?: { min_hours: number; max_hours: number; median_hours: number } })?.calibration_band;
+  const validationWarnings = meta?.validation_warnings ?? (quote.metadata as { validation_warnings?: string[] })?.validation_warnings ?? [];
+  const requirementsCoverage = meta?.requirements_coverage_warnings ?? (quote.metadata as { requirements_coverage_warnings?: string[] })?.requirements_coverage_warnings ?? [];
+
   return (
     <div className="px-6 py-4 bg-gray-50 rounded-b-lg border-t border-gray-200">
+      {(calibrationBand || validationWarnings.length > 0 || requirementsCoverage.length > 0) && (
+        <div className="mb-4 space-y-3">
+          {calibrationBand && (
+            <p className="flex items-center gap-2 text-sm text-gray-700">
+              <Info className="h-4 w-4 shrink-0 text-gray-500" />
+              Similar projects: {Math.round(calibrationBand.min_hours)}–{Math.round(calibrationBand.max_hours)} hours (median {Math.round(calibrationBand.median_hours)}).
+            </p>
+          )}
+          {validationWarnings.length > 0 && (
+            <div className="space-y-2">
+              {validationWarnings.map((msg, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex items-start gap-2 rounded-md border p-2 text-sm',
+                    msg.toLowerCase().includes('typical range') || msg.toLowerCase().includes('similar projects')
+                      ? 'border-amber-400 bg-amber-50 text-amber-900'
+                      : 'border-amber-200 bg-amber-50/50 text-gray-800'
+                  )}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  <span>{msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {requirementsCoverage.length > 0 && (
+            <div>
+              <h4 className="mb-1 text-sm font-semibold text-gray-800">Requirements to verify</h4>
+              <ul className="list-inside list-disc space-y-0.5 text-sm text-gray-700">
+                {requirementsCoverage.slice(0, 8).map((phrase, i) => (
+                  <li key={i}>{phrase}</li>
+                ))}
+                {requirementsCoverage.length > 8 && (
+                  <li className="text-gray-500">+{requirementsCoverage.length - 8} more</li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-gray-500">
         <div className="flex items-center gap-4">
           {quote.generation_metadata && (

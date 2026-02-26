@@ -48,7 +48,7 @@ from app.schemas.quote import (
     RefineQuoteResponse,
 )
 from app.services.ai.knowledge_service import get_knowledge_service
-from app.services.ai.llm_service import LLMService, get_llm_service
+from app.services.ai.llm_service import LLMService, get_llm_service, run_quote_validations
 from app.services.ai.rag_service import RAGService, get_rag_service
 from app.services.blocknote import (
     apply_blocknote_text_replacements,
@@ -182,6 +182,8 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
     Parses the content to count requirements, tasks, sections, and pages.
     Requirements count is derived from the requirements text so it stays
     consistent between live analysis and project detail.
+
+    Used for dashboard and UI only; not an accuracy or validation metric.
     """
     import re
 
@@ -738,6 +740,8 @@ async def generate_quote(
             "company_stack_used": True,
             "company_stack_fallback": "builtin" if not company_stack_from_rag else None,
             "validation_warnings": getattr(result, "validation_warnings", None) or [],
+            "calibration_band": calibration_band,
+            "requirements_coverage_warnings": getattr(result, "requirements_coverage_warnings", None) or [],
             "resolved_stack": getattr(result, "resolved_stack", None),
             "breakdown": result.breakdown,
             "assumptions": result.assumptions,
@@ -808,6 +812,8 @@ async def generate_quote(
                 generation_time_ms=generation_time_ms,
                 analysis=analysis_metadata,
                 validation_warnings=getattr(result, "validation_warnings", None) or [],
+                calibration_band=project_context_for_llm.get("calibration_band"),
+                requirements_coverage_warnings=getattr(result, "requirements_coverage_warnings", None) or [],
                 company_stack_used=True,
                 company_stack_fallback="builtin" if not company_stack_from_rag else None,
             ),
@@ -1644,8 +1650,17 @@ async def refine_quote(
             logger.warning("WordPress stack research for refinement failed; continuing without it: %s", e)
 
     # Process refinement request (pass project context for project_updates / hours behavior)
+    # Use client-provided current_content when present so refinement is based on latest editor
+    # state and unsaved BlockNote edits are not lost.
+    content_for_refinement = (
+        request.current_content.strip()
+        if request.current_content and request.current_content.strip()
+        else None
+    )
+    if content_for_refinement is not None:
+        logger.info("Refining from client-provided current_content (len=%d)", len(content_for_refinement))
     # Detect BlockNote-backed quotes so we can keep the editor layout stable.
-    is_blocknote = is_blocknote_json(quote.content)
+    is_blocknote = is_blocknote_json(content_for_refinement or quote.content)
 
     try:
         refinement_service = get_refinement_service()
@@ -1665,6 +1680,7 @@ async def refine_quote(
             project_description=project.description,
             project_context=project_context,
             is_blocknote=is_blocknote,
+            content_override=content_for_refinement,
         )
     except Exception as e:
         logger.error("Quote refinement failed: %s", str(e))
@@ -1719,8 +1735,19 @@ async def refine_quote(
         breakdown=breakdown_for_analysis,
     )
 
-    # Update extra_data to track refinement and analysis
+    # Re-run validations (calibration band, placeholders, scope, stack) and update metadata
+    calibration_band = (quote.extra_data or {}).get("calibration_band")
+    wordpress_stack = project_context.get("wordpress_stack") or (quote.extra_data or {}).get("resolved_stack")
+    project_brief = f"Project: {project.name or ''}\n{project.description or ''}"
+    validation_warnings = run_quote_validations(
+        content_for_analysis,
+        float(quote.total_hours) if quote.total_hours is not None else None,
+        project_brief,
+        calibration_band,
+        wordpress_stack,
+    )
     existing_metadata = quote.extra_data or {}
+    existing_metadata["validation_warnings"] = validation_warnings
     refinement_history = existing_metadata.get("refinement_history", [])
     refinement_history.append(
         {

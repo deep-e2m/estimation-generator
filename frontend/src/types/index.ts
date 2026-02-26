@@ -184,6 +184,10 @@ export interface Quote extends QuoteSummary {
     knowledge_docs_used: string[];
     confidence_score: number;
     generation_time_seconds: number;
+    /** Similar projects hour range (min_hours, max_hours, median_hours). */
+    calibration_band?: { min_hours: number; max_hours: number; median_hours: number };
+    validation_warnings?: string[];
+    requirements_coverage_warnings?: string[];
   };
 }
 

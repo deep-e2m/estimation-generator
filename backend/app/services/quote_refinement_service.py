@@ -13,6 +13,7 @@ from typing import Any, Optional
 from app.models.quote import ContentFormat, Quote
 from app.schemas.quote import ChangeDescription
 from app.services.ai.llm_service import LLMService, get_llm_service
+from app.services.blocknote import blocknote_json_to_markdown, is_blocknote_json
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class QuoteRefinementService:
         project_description: Optional[str] = None,
         project_context: Optional[dict[str, Any]] = None,
         is_blocknote: bool = False,
+        content_override: Optional[str] = None,
     ) -> tuple[
         str,
         str,
@@ -69,6 +71,8 @@ class QuoteRefinementService:
             user_message: Natural language request from the user.
             project_name: Current project name (so LLM can return project_updates if user asks).
             project_description: Current project description (same).
+            content_override: When set, use this as the quote content for refinement instead of
+                quote.content (so client can send current editor content and avoid losing unsaved edits).
 
         Returns:
             Tuple of (updated_content, ai_explanation, changes_list, new_total_hours, project_updates,
@@ -76,6 +80,8 @@ class QuoteRefinementService:
             text_replacements: list of {"old": "...", "new": "..."} for applying changes to structured (BlockNote) content.
         """
         logger.info("Processing quote refinement request: quote_id=%s", quote.id)
+
+        content_for_refinement = (content_override.strip() if content_override and content_override.strip() else None) or quote.content
 
         # Detect when the quote content is HTML so we can keep the refinement
         # operation surgical (only adjust numeric hours) and avoid disturbing
@@ -91,6 +97,7 @@ class QuoteRefinementService:
             is_html=is_html,
             is_blocknote=is_blocknote,
             project_context=project_context,
+            content_override=content_for_refinement,
         )
 
         try:
@@ -105,7 +112,7 @@ class QuoteRefinementService:
 
             result = json.loads(response.content)
 
-            updated_content = result.get("updated_content", quote.content)
+            updated_content = result.get("updated_content", content_for_refinement)
             ai_message = result.get("explanation", "Quote updated successfully.")
             changes_raw = result.get("changes", [])
 
@@ -239,7 +246,14 @@ Rules:
         # Markdown / plain-text mode (tightened for minimal, targeted edits)
         blocknote_intro = ""
         if is_blocknote:
-            blocknote_intro = """BLOCKNOTE MODE - The document is stored as structured BlockNote. The content you see below is a flattened view. Your "updated_content" will be used to rebuild the full document, so you CAN add sections, remove sections, or reorder them. Use markdown with # section headings. Preferred section headings (use these when present so the estimate stays consistent):
+            blocknote_intro = """BLOCKNOTE MODE - The document is stored as structured BlockNote. The content you see below is markdown with # section headings and - for list items. Your "updated_content" will be used to rebuild the full document, so you CAN add sections, remove sections, or reorder them.
+
+CRITICAL - Preserve list structure:
+- Use "# Section Title" for headings.
+- For list items (e.g. under Assumptions & Client Responsibilities, Exclusions), use a single "- " prefix per line (e.g. "- The Brand Guide will be completed before design."). Do NOT output those as plain paragraphs or the bullets will be lost.
+- Keep the same - prefixed format for any bullet list that appears in the input.
+
+Preferred section headings (use these when present so the estimate stays consistent):
 - Project Overview
 - Website Structure & Page Scope
 - Development Approach
@@ -350,9 +364,11 @@ Rules:
         is_html: bool = False,
         is_blocknote: bool = False,
         project_context: Optional[dict[str, Any]] = None,
+        content_override: Optional[str] = None,
     ) -> str:
         """Build the user prompt with quote and project context."""
-        content = self._flatten_quote_content(quote.content)
+        raw_content = content_override if content_override is not None else quote.content
+        content = self._flatten_quote_content(raw_content)
         header_lines: list[str] = []
         if is_html:
             header_lines.append(
@@ -502,11 +518,16 @@ Rules:
         - HTML (from the editor)
         - legacy flat dict (key-value sections)
 
+        For BlockNote we convert to markdown with # headings and - for list items
+        so the LLM round-trip preserves structure (bullets in Assumptions/Exclusions).
         For flat dict we output "key: value" per section.
-        For BlockNote/other JSON we extract human-readable text segments.
+        For other JSON we fall back to extracting text segments.
         """
         if not content:
             return content
+
+        if is_blocknote_json(content):
+            return blocknote_json_to_markdown(content)
 
         try:
             parsed = json.loads(content)

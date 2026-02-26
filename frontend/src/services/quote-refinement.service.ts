@@ -25,16 +25,23 @@ interface RefineQuoteApiResponse {
  */
 export class QuoteRefinementService {
   /**
-   * Refine a quote using natural language
+   * Refine a quote using natural language.
+   * Pass currentContent (e.g. from the BlockNote editor) so refinement uses the latest
+   * state and unsaved edits are not overwritten.
    */
   async refineQuote(
     projectId: string,
     quoteId: string,
-    message: string
+    message: string,
+    currentContent?: string | null
   ): Promise<RefineQuoteResponse> {
+    const body: RefineQuoteRequest = { message };
+    if (currentContent != null && currentContent.trim() !== '') {
+      body.current_content = currentContent.trim();
+    }
     const response = await apiClient.post<ApiResponse<RefineQuoteApiResponse>>(
       `/api/v1/projects/${projectId}/quotes/${quoteId}/refine`,
-      { message } as RefineQuoteRequest,
+      body,
       { timeout: LONG_REQUEST_TIMEOUT_MS }
     );
 

@@ -28,6 +28,8 @@ interface EstimationPreviewPanelProps {
   onQuoteSaved?: (updatedQuote: Quote) => void;
   /** Notify parent when the editor is saving or has saved */
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
+  /** Called on every editor change so parent can pass latest content to refinement (avoids stale content when user chats without saving). */
+  onEditorContentSnapshot?: (serialized: string) => void;
 }
 
 /** Debounce delay for auto-save in milliseconds */
@@ -63,6 +65,7 @@ export function EstimationPreviewPanel({
   recentChanges,
   onQuoteSaved,
   onSaveStatusChange,
+  onEditorContentSnapshot,
 }: EstimationPreviewPanelProps) {
   // Save state
   const [isSaving, setIsSaving] = useState(false);
@@ -144,6 +147,9 @@ export function EstimationPreviewPanel({
         onSaveStatusChange('saving');
       }
 
+      // Snapshot for refinement so chat uses latest editor content (avoids reverting manual edits)
+      onEditorContentSnapshot?.(serialized);
+
       // Optimistically update quote content in parent so Export preview
       // reflects formatting changes (e.g. bold bullets) immediately,
       // even before the debounced save completes. Do NOT change updated_at
@@ -170,7 +176,7 @@ export function EstimationPreviewPanel({
         handleSave(serialized);
       }, AUTO_SAVE_DELAY);
     },
-    [handleSave, onQuoteSaved, onSaveStatusChange, quote]
+    [handleSave, onQuoteSaved, onEditorContentSnapshot, onSaveStatusChange, quote]
   );
 
   // Clean up auto-save timer on unmount
@@ -283,12 +289,11 @@ export function EstimationPreviewPanel({
             </div>
           </div>
 
-          {/* Editable content: BlockNote editor (content is always BlockNote JSON or legacy text).
-              Key on quote.id + updated_at so that when the server returns new content (refine,
-              save, or WebSocket), the editor remounts and shows the new content in real time.
-              Local typing does not change updated_at until save, so focus is preserved. */}
+          {/* Editable content: BlockNote editor. Key on quote.id only so the editor does not
+              remount on save (updated_at change), preserving scroll and cursor. External updates
+              (refine, WebSocket, other tab) are synced in-place by BlockNoteQuoteEditor. */}
           <BlockNoteQuoteEditor
-            key={`${quote.id}-${quote.updated_at ?? ''}`}
+            key={quote.id}
             quote={quote}
             onContentChange={handleContentChange}
             onSave={handleEditorSave}

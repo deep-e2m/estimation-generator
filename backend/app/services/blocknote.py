@@ -218,6 +218,52 @@ def is_blocknote_json(content: str) -> bool:
     return isinstance(first, dict) and "type" in first and "content" in first
 
 
+def _inline_content_to_plain_text(content: list[Any]) -> str:
+    """Extract plain text from BlockNote inline content (for markdown flattening)."""
+    parts: list[str] = []
+    for item in content or []:
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        parts.append(str(item.get("text") or ""))
+    return "".join(parts).strip()
+
+
+def blocknote_json_to_markdown(content: str) -> str:
+    """
+    Convert BlockNote JSON to markdown so the LLM sees and returns structure-preserving text.
+
+    Headings become "# Title", bulletListItem become "- item", paragraphs become plain lines.
+    This allows refinement to round-trip: LLM returns markdown with - for lists,
+    and markdown_sections_to_blocknote_json converts it back to BlockNote with bulletListItem.
+    """
+    if not is_blocknote_json(content):
+        return content
+    try:
+        blocks = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+    if not isinstance(blocks, list):
+        return content
+
+    lines: list[str] = []
+    for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+        block_type = blk.get("type") or "paragraph"
+        text = _inline_content_to_plain_text(blk.get("content") or [])
+        if not text:
+            if block_type == "heading":
+                lines.append("")
+            continue
+        if block_type == "heading":
+            lines.append(f"# {text}")
+        elif block_type == "bulletListItem":
+            lines.append(f"- {text}")
+        else:
+            lines.append(text)
+    return "\n".join(lines)
+
+
 def apply_blocknote_text_replacements(
     content: str,
     replacements: list[dict[str, str]],

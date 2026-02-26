@@ -18,12 +18,21 @@ import {
   Clock,
   ListTodo,
   ArrowRight,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { documentsService } from '@/services/documents.service';
 import { quoteService } from '@/services/quote-generation.service';
 import type { Project, Quote } from '@/types';
 import type { GenerateQuoteRequest } from '@/types/quote.types';
+
+/** Calibration band from similar projects (for UI guardrail display). */
+export interface CalibrationBand {
+  min_hours: number;
+  max_hours: number;
+  median_hours: number;
+}
 
 /** Backend metadata returned after generation (same shape as API generation_metadata). */
 export interface GenerationMetadataResult {
@@ -34,6 +43,8 @@ export interface GenerationMetadataResult {
   generation_time_ms?: number;
   analysis?: { requirements_count?: number; tasks_count?: number };
   validation_warnings?: string[];
+  calibration_band?: CalibrationBand;
+  requirements_coverage_warnings?: string[];
   company_stack_used?: boolean;
   company_stack_fallback?: string | null;
   reference_urls_used?: string[];
@@ -604,6 +615,56 @@ export function EstimationGenerationUI({
             <p className="estimation-gen-reference-urls-used">
               Reference URLs ({referenceUrlsUsed.length}) were used for this estimate.
             </p>
+          )}
+
+          {/* Calibration band + validation warnings + requirements to verify */}
+          {!isGenerating && generationMetadata && (
+            <div className="estimation-gen-validation-section">
+              {generationMetadata.calibration_band && (
+                <p className="estimation-gen-calibration-band">
+                  <Info className="w-4 h-4 shrink-0" />
+                  Similar projects: {Math.round(generationMetadata.calibration_band.min_hours)}–
+                  {Math.round(generationMetadata.calibration_band.max_hours)} hours (median{' '}
+                  {Math.round(generationMetadata.calibration_band.median_hours)}).
+                </p>
+              )}
+              {generationMetadata.validation_warnings && generationMetadata.validation_warnings.length > 0 && (
+                <div className="estimation-gen-warnings">
+                  {generationMetadata.validation_warnings.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        'estimation-gen-warning-item',
+                        msg.toLowerCase().includes('typical range') || msg.toLowerCase().includes('similar projects')
+                          ? 'estimation-gen-warning-calibration'
+                          : ''
+                      )}
+                    >
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{msg}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {generationMetadata.requirements_coverage_warnings &&
+                generationMetadata.requirements_coverage_warnings.length > 0 && (
+                  <div className="estimation-gen-requirements-verify">
+                    <h4 className="estimation-gen-requirements-verify-title">
+                      Requirements to verify
+                    </h4>
+                    <ul className="estimation-gen-requirements-verify-list">
+                      {generationMetadata.requirements_coverage_warnings.slice(0, 10).map((phrase, i) => (
+                        <li key={i}>{phrase}</li>
+                      ))}
+                      {generationMetadata.requirements_coverage_warnings.length > 10 && (
+                        <li className="text-muted-foreground">
+                          +{generationMetadata.requirements_coverage_warnings.length - 10} more
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+            </div>
           )}
 
           {/* Project info card */}

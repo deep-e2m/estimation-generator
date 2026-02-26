@@ -462,20 +462,22 @@ class RAGService:
         """
         Build RAG context from similar quotes only (reference estimates for structure and hours).
 
-        Uses search_knowledge with source_types=["quote"] so that only approved/similar
-        quote chunks are included, not guidelines or training docs.
+        Uses search_knowledge with source_types=["quote", "training_quote"] so that
+        approved/similar quote chunks and curated training quotes are included.
 
         Returns:
             (context_string, calibration_band). calibration_band is None or
             {"min_hours": float, "max_hours": float, "median_hours": float} when
             at least 2 similar quotes have total_hours (for guardrail warnings).
         """
+        ref_top_k = getattr(settings, "RAG_REFERENCE_TOP_K", 5)
+        ref_threshold = getattr(settings, "RAG_REFERENCE_SIMILARITY_THRESHOLD", 0.65)
         try:
             results = await self.search_knowledge(
                 query=query,
-                source_types=["quote"],
-                top_k=top_k,
-                similarity_threshold=0.65,
+                source_types=["quote", "training_quote"],
+                top_k=ref_top_k,
+                similarity_threshold=ref_threshold,
                 db_session=db_session,
                 use_cache=use_cache,
             )

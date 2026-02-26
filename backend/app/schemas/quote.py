@@ -181,6 +181,14 @@ class RefineQuoteRequest(BaseModel):
             "Update the executive summary to mention mobile responsiveness",
         ],
     )
+    current_content: Optional[str] = Field(
+        default=None,
+        max_length=500_000,
+        description=(
+            "Optional current quote content (e.g. BlockNote JSON or markdown) from the client. "
+            "When provided, refinement uses this instead of DB content so unsaved editor changes are not lost."
+        ),
+    )
 
 
 class ChangeDescription(BaseModel):
@@ -324,9 +332,15 @@ class RefineQuoteResponse(BaseModel):
 
 
 class AnalysisMetadata(BaseModel):
-    """Metadata about the analysis performed during quote generation."""
+    """Metadata about the analysis performed during quote generation.
 
-    requirements_count: int = Field(default=0, description="Number of requirements identified")
+    Used for dashboard and UI only; not an accuracy or validation metric.
+    """
+
+    requirements_count: int = Field(
+        default=0,
+        description="Number of requirements identified (for dashboard/UI only; not used for estimation accuracy)",
+    )
     tasks_count: int = Field(default=0, description="Number of tasks/deliverables identified")
     sections_count: int = Field(default=0, description="Number of sections in the quote")
     pages_count: int = Field(default=0, description="Number of pages identified")
@@ -360,6 +374,14 @@ class QuoteGenerationMetadata(BaseModel):
     validation_warnings: list[str] = Field(
         default_factory=list,
         description="Content or stack validation warnings from generation",
+    )
+    calibration_band: Optional[dict[str, Any]] = Field(
+        None,
+        description="Similar projects hour range: min_hours, max_hours, median_hours (for UI guardrail display)",
+    )
+    requirements_coverage_warnings: list[str] = Field(
+        default_factory=list,
+        description="Requirement phrases with no or low coverage in the quote (for user verification)",
     )
     company_stack_used: bool = Field(
         default=True,

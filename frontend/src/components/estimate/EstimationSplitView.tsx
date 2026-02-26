@@ -67,6 +67,8 @@ export function EstimationSplitView({
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const quoteWsRef = useRef<WebSocket | null>(null);
+  /** Latest editor content (BlockNote JSON) so refinement uses it and does not overwrite unsaved or recently made edits. */
+  const latestEditorContentRef = useRef<string | null>(null);
 
   const handleQuoteUpdate = useCallback(
     (
@@ -76,6 +78,11 @@ export function EstimationSplitView({
     ) => {
       setCurrentQuote(updatedQuote);
       setRecentChanges(changes);
+
+      // Keep ref in sync so next refinement uses the updated content, not pre-refinement editor state
+      const summary = updatedQuote?.content?.executive_summary;
+      latestEditorContentRef.current =
+        typeof summary === 'string' ? summary : null;
 
       // Clear recent changes highlight after animation
       setTimeout(() => {
@@ -132,6 +139,13 @@ export function EstimationSplitView({
     [currentQuote, onQuoteUpdated, onSaveStatusChange, project.id, project.name]
   );
 
+  const handleQuoteSavedRef = useRef(handleQuoteSaved);
+  const projectRef = useRef(project);
+  const navigateRef = useRef(navigate);
+  handleQuoteSavedRef.current = handleQuoteSaved;
+  projectRef.current = project;
+  navigateRef.current = navigate;
+
   // Handle responsive layout
   useEffect(() => {
     const checkMobile = () => {
@@ -171,23 +185,21 @@ export function EstimationSplitView({
         quoteWsRef.current = null;
       }
 
-      const ws = quotesRealtimeService.connect(currentQuote.id, {
+      const quoteIdForSub = currentQuote.id;
+      const ws = quotesRealtimeService.connect(quoteIdForSub, {
         onSync: (quote) => {
-          // Initial snapshot when a new subscriber connects
-          handleQuoteSaved(quote);
+          handleQuoteSavedRef.current(quote);
         },
         onQuoteUpdated: (quote) => {
-          // Another tab/user edited the quote
-          handleQuoteSaved(quote);
+          handleQuoteSavedRef.current(quote);
         },
         onStatusChanged: (quote) => {
-          handleQuoteSaved(quote);
+          handleQuoteSavedRef.current(quote);
         },
         onDeleted: (quoteId) => {
-          if (quoteId === currentQuote.id) {
+          if (quoteId === quoteIdForSub) {
             toast.info('This estimate was deleted in another session.');
-            // Navigate back to project detail if possible
-            navigate(`/projects/${project.id}`);
+            navigateRef.current(`/projects/${projectRef.current.id}`);
           }
         },
         onError: (error) => {
@@ -217,8 +229,7 @@ export function EstimationSplitView({
         }
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuote?.id, project.id, navigate, handleQuoteSaved]);
+  }, [currentQuote?.id, project.id]);
 
   // Direct export (PDF or DOCX) via backend; triggers download
   const handleExportDirect = useCallback(
@@ -357,6 +368,12 @@ export function EstimationSplitView({
                 project={project}
                 quote={currentQuote}
                 onQuoteUpdated={handleQuoteUpdate}
+                getCurrentContent={() =>
+                  latestEditorContentRef.current ??
+                  (typeof currentQuote?.content?.executive_summary === 'string'
+                    ? currentQuote.content.executive_summary
+                    : undefined)
+                }
               />
             </div>
 
@@ -382,6 +399,9 @@ export function EstimationSplitView({
                   recentChanges={recentChanges}
                   onQuoteSaved={handleQuoteSaved}
                   onSaveStatusChange={onSaveStatusChange}
+                  onEditorContentSnapshot={(s) => {
+                    latestEditorContentRef.current = s;
+                  }}
                 />
               </div>
             </div>
@@ -521,6 +541,9 @@ export function EstimationSplitView({
                   recentChanges={recentChanges}
                   onQuoteSaved={handleQuoteSaved}
                   onSaveStatusChange={onSaveStatusChange}
+                  onEditorContentSnapshot={(s) => {
+                    latestEditorContentRef.current = s;
+                  }}
                 />
               </motion.div>
             )}

@@ -190,6 +190,111 @@ def _check_scope_signals(brief: str, quote_content: str) -> List[str]:
     return warnings[:5]  # Cap to avoid noise
 
 
+# Stopwords for requirements-coverage check (significant words only)
+_REQUIREMENTS_STOPWORDS = {
+    "the", "and", "for", "with", "this", "that", "from", "will", "are", "has", "have",
+    "been", "was", "were", "but", "not", "can", "all", "about", "into", "through",
+    "our", "your", "their", "which", "when", "where", "who", "what", "how", "should",
+    "would", "could", "may", "might", "must", "shall", "need", "want", "like", "also",
+}
+
+
+def _derive_requirement_phrases(requirements: str, max_phrases: int = 50) -> List[str]:
+    """
+    Derive a list of requirement phrases from requirements text (bullets, lines, sentences).
+    Filters very short and noise; returns up to max_phrases.
+    """
+    if not requirements or not requirements.strip():
+        return []
+    phrases: List[str] = []
+    # Split on newlines and common bullet/number patterns
+    raw_lines = re.split(r"\n|\r\n", requirements)
+    for line in raw_lines:
+        line = re.sub(r"^\s*[-•*]\s+", "", line.strip())
+        line = re.sub(r"^\s*\d+[.)]\s+", "", line)
+        line = line.strip()
+        if not line or line.startswith("#") or len(line) < 8:
+            continue
+        # Optionally split long lines by sentence
+        if len(line) > 120:
+            for sent in re.split(r"[.!?]\s+", line):
+                sent = sent.strip()
+                if len(sent) >= 8:
+                    phrases.append(sent[:500])
+        else:
+            phrases.append(line[:500])
+    # Dedupe and cap
+    seen: set = set()
+    out: List[str] = []
+    for p in phrases:
+        key = p.lower().strip()
+        if key in seen or len(key) < 6:
+            continue
+        seen.add(key)
+        out.append(p)
+        if len(out) >= max_phrases:
+            break
+    return out
+
+
+def _check_requirements_coverage(
+    requirements: str,
+    validation_text: str,
+    min_significant_words: int = 2,
+    max_warnings: int = 25,
+) -> List[str]:
+    """
+    Return requirement phrases that have no or low coverage in validation_text
+    (quote content). A phrase is "covered" if at least min_significant_words
+    significant (non-stopword) words from it appear in the quote.
+    """
+    phrases = _derive_requirement_phrases(requirements, max_phrases=50)
+    if not phrases or not validation_text:
+        return []
+    validation_lower = validation_text.lower()
+    validation_words = {
+        w for w in re.findall(r"\b\w+\b", validation_lower)
+        if len(w) > 2 and w not in _REQUIREMENTS_STOPWORDS
+    }
+    missing: List[str] = []
+    for phrase in phrases:
+        words = [
+            w for w in re.findall(r"\b\w+\b", phrase.lower())
+            if len(w) > 2 and w not in _REQUIREMENTS_STOPWORDS
+        ]
+        if len(words) < 2:
+            continue
+        in_quote = sum(1 for w in words if w in validation_words)
+        if in_quote < min_significant_words:
+            missing.append(phrase.strip())
+        if len(missing) >= max_warnings:
+            break
+    return missing
+
+
+def run_quote_validations(
+    quote_content_flat: str,
+    total_hours: Optional[float],
+    project_brief: str,
+    calibration_band: Optional[Dict[str, Any]],
+    wordpress_stack: Optional[Dict[str, Any]],
+) -> List[str]:
+    """
+    Run all quote validations and return combined list of warning strings.
+    Used after generation and after refinement to keep validation_warnings up to date.
+    """
+    warnings: List[str] = []
+    warnings.extend(
+        _validate_quote_against_stack(quote_content_flat, wordpress_stack)
+    )
+    warnings.extend(_detect_placeholders(quote_content_flat))
+    cal_warn = _check_calibration_band(total_hours, calibration_band)
+    if cal_warn:
+        warnings.append(cal_warn)
+    warnings.extend(_check_scope_signals(project_brief, quote_content_flat))
+    return warnings
+
+
 class QuoteGenerationResult:
     """
     Structured result from quote generation.
@@ -223,6 +328,7 @@ class QuoteGenerationResult:
         generation_cost: float = 0.0,
         validation_warnings: Optional[List[str]] = None,
         resolved_stack: Optional[Dict[str, Any]] = None,
+        requirements_coverage_warnings: Optional[List[str]] = None,
     ):
         self.content = content
         self.total_hours = total_hours
@@ -237,6 +343,7 @@ class QuoteGenerationResult:
         self.generation_cost = generation_cost
         self.validation_warnings = validation_warnings or []
         self.resolved_stack = resolved_stack
+        self.requirements_coverage_warnings = requirements_coverage_warnings or []
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
@@ -254,6 +361,7 @@ class QuoteGenerationResult:
             "generation_cost": self.generation_cost,
             "validation_warnings": self.validation_warnings,
             "resolved_stack": self.resolved_stack,
+            "requirements_coverage_warnings": self.requirements_coverage_warnings,
         }
 
 
@@ -452,6 +560,7 @@ class LLMService:
                 )
             )
             result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
+            result.requirements_coverage_warnings = _check_requirements_coverage(requirements, content)
             return result
 
         estimation_outcomes = parsed.get("estimation_outcomes") or {}
@@ -576,6 +685,7 @@ class LLMService:
             )
         )
         result.resolved_stack = _resolved_stack_summary(enriched_project_context.get("wordpress_stack"))
+        result.requirements_coverage_warnings = _check_requirements_coverage(requirements, validation_text)
 
         logger.info(
             "Quote generated: hours=%s, model=%s, tokens=%d",

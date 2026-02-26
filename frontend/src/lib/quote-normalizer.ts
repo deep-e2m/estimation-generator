@@ -241,6 +241,13 @@ export function normalizeQuoteFromApi(
           knowledge_docs_used: (api.metadata.knowledge_docs_used as string[]) ?? [],
           confidence_score: numeric(Number(api.metadata.confidence_score)),
           generation_time_seconds: numeric(Number(api.metadata.generation_time_ms)) / 1000,
+          calibration_band: api.metadata.calibration_band as
+            | { min_hours: number; max_hours: number; median_hours: number }
+            | undefined,
+          validation_warnings: (api.metadata.validation_warnings as string[] | undefined) ?? undefined,
+          requirements_coverage_warnings: (api.metadata.requirements_coverage_warnings as
+            | string[]
+            | undefined) ?? undefined,
         }
       : undefined,
   };
