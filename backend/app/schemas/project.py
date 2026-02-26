@@ -63,6 +63,10 @@ class ProjectBase(BaseModel):
         description="Target e-commerce platform (defaults to WordPress)",
         examples=[Platform.WORDPRESS],
     )
+    reference_urls: Optional[list[str]] = Field(
+        default=None,
+        description="Reference URLs (e.g. Figma design links) to scrape and include in the estimation brief",
+    )
 
 
 class ProjectCreate(ProjectBase):
@@ -113,6 +117,10 @@ class ProjectUpdate(BaseModel):
         default=None,
         description="Project status",
     )
+    reference_urls: Optional[list[str]] = Field(
+        default=None,
+        description="Reference URLs (e.g. Figma) for estimation",
+    )
 
 
 # =============================================================================
@@ -136,6 +144,10 @@ class ProjectResponse(BaseModel):
     quotes_count: int = Field(
         default=0,
         description="Number of quotes associated with this project",
+    )
+    reference_urls: Optional[list[str]] = Field(
+        default=None,
+        description="Reference URLs (e.g. Figma) for estimation",
     )
     # Client information (from relationship)
     client: ClientResponse | None = Field(None, description="Associated client (optional)")

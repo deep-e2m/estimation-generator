@@ -695,7 +695,7 @@ Additional WordPress expertise:
     brief = (project_brief or "").strip() or requirements
     user_content = f"""Generate a professional project quote. The ONLY basis for scope and deliverables is the following project brief (and any attached SOW/source document). Do not add scope not implied by this brief.
 
-If the brief contains a "Reference URLs (scraped content and visual description)" section: those URLs are typically Figma/design links or existing websites. Use them for design matching (layout, visual style, components), structure understanding (sections, navigation, pages), and content (copy, CTAs, features). Use this reference context to shape development approach, scope, assumptions, and exclusions—scope and hours must include achieving that design/structure/content where the client intends to match the reference.
+If the brief contains a "Reference URLs (scraped content and visual description)" section: those URLs are typically Figma/design links or existing websites. Use them for design matching (layout, visual style, components), structure understanding (sections, navigation, pages), and content (copy, CTAs, features). Use this reference context to shape development approach, scope, assumptions, and exclusions—scope and hours must include achieving that design/structure/content where the client intends to match the reference. When the brief includes "Design inference" or "Theme/plugin implications" or "Visual reference" for a reference URL, use that to set the design level (simple/medium/premium) and to select theme and plugins in the Development Approach (e.g. Elementor Pro vs free, which form plugin, whether e-commerce)—so the estimate matches the reference site's design level and tooling. **Website structure / sitemap (CRITICAL)**: When the brief includes "Pages and frames (full sitemap)" (from a Figma or design file), the **website_structure** section MUST list every page and frame from that sitemap using their exact names (e.g. "Location overview page", "Individual Location Pages", "Products Overview Page", "Individual Product Pages", "Services Page", "Warranty Information", "FR guide (FRs only)", "Contact Us", "About the company"). You MUST NOT output a generic sitemap (Home, About, Services, Products, Contact, Privacy Policy) when the reference provides a specific list—that would be wrong. When the brief has scraped content or visual descriptions but no explicit "Pages and frames" list, still derive the sitemap from the reference's actual page/section names; do not substitute generic placeholders unless those exact names appear in the reference.
 
 **Reference URLs and competitor/opposition content (CRITICAL)**: If the client's additional instructions in the brief say not to use competitor, opposition, or third-party company content as their website content, then do NOT use scraped content from any reference URL as the client's own website content. Use reference URLs only for structure/design inspiration where appropriate; never copy or attribute competitor or opposition content to the client. When in doubt, treat reference URL content as inspiration only, not as the client's copy or scope.
 
@@ -874,7 +874,7 @@ You MUST respond with a single JSON object (no markdown, no code fence) with thi
 {
   "estimation_outcomes": {
     "project_overview": "2-4 sentence summary of the project, key features, and goal.",
-    "website_structure": "Full section 2: Website Structure & Page Scope. This section is used by developers, PMs, and clients—every item must be clear. Start with 1-2 sentences explaining the section. Then list each page/section with a brief description: use the form 'Page name – Short description of what it is' (e.g. 'Home – Main landing page introducing the brand and key offerings.' or 'Apply to be a contractor – Application form and process for new contractors.'). Do not list bare names only. Main nav in logical order using the source's exact names; product sub-areas (e.g. Invisibeam System, Carbon Corner) under Products. The result must be a professional, self-explanatory sitemap.",
+    "website_structure": "Full section 2: Website Structure & Page Scope. CRITICAL: When the brief contains 'Pages and frames (full sitemap)' (e.g. from a Figma file), you MUST list every page and frame from that list by their exact names—e.g. 'Location overview page', 'Individual Location Pages', 'Products Overview Page', 'Individual Product Pages', 'Services Page', 'Warranty Information', 'FR guide (FRs only)', 'Contact Us', 'About the company'. Do NOT substitute a generic sitemap (Home, About, Services, Products, Contact, Privacy Policy) when the reference provides a specific list; that would be incorrect. When no such list exists, derive from other reference content or the brief. Start with 1-2 sentences; then list each page/section as 'Page name – Short description'. Use the reference's exact names throughout.",
     "development_approach": "Full section 6 content: Development approach, tech stack, responsive, QA. The Development Approach section MUST list the exact theme, page builder, and every plugin that will be used, each by name with its official URL in the form **Name** (URL: https://...). Do not write generic phrases like 'a form plugin' or 'WordPress and WooCommerce' without naming the theme, page builder, and key plugins with URLs. Use the locked-in and recommended tools provided in the WordPress Stack section when present; otherwise use company-approved defaults and include their URLs.",
     "estimated_effort_timeline": "Full section 7: Primary figures are YOUR scope-based estimate. Include 'Estimated Total Effort: X–Y hours (approximately Z business days)' where X–Y and Z are derived from your scope analysis (Z = total_hours ÷ 8). Then 'Estimated Timeline: ...' (e.g. N weeks) consistent with Z. If the brief or SOW states a duration or hours (e.g. 'Total Project Duration: ~90 business days'), add one line in italic as a note only, e.g. '*Note: Client/SOW referenced timeline: ~90 business days.*' Your estimated hours and days remain the main timeline.",
     "assumptions": "Full section 8: Assumptions & Client Responsibilities. The quote is read by developers, PMs, and clients—every bullet must be a full sentence. Start with a short intro (e.g. 'The following are assumed for this estimate.'). Then list each assumption from the brief as a complete sentence (e.g. 'The brand book will be finalized before design work begins.' not 'Brand book finalized before design.'). Include: brand book, logo, content approvals, hosting, revision rounds (use the source's exact wording for revision rounds if stated). If the brief does not specify theme/plugins, add a full sentence (e.g. 'Company-approved plugins and themes will be used unless the SOW specifies otherwise.'). No fragments or shorthand.",
@@ -888,7 +888,7 @@ Rules:
 - Use plain text inside each value (no markdown tables, no emojis).
 - Structure each value for readability: separate paragraphs with a blank line. For lists, put each item on its own line and start the line with "- " (e.g. "- Item one"). Do not put multiple list items on the same line.
 - Audience: The estimation quote is a key document for developers (implementation), project managers (planning and handoff), and clients (scope and sign-off). Every section must be self-explanatory so all three can use it as the single reference for scope and boundaries.
-- Website Structure: Start with a brief intro; then list each page/section with a short description (e.g. "Home – Main landing page." or "Apply to be a contractor – Application form for new contractors."). No bare names only. Main nav in order; product sub-areas under Products. The section must be explainable at a glance for dev, PM, and client.
+- Website Structure: Start with a brief intro; then list each page/section with a short description. When the brief includes "Pages and frames (full sitemap)" (Figma or design reference), list every item from that list by exact name—never replace with generic "Home, About, Services, Products, Contact, Privacy Policy" when the reference gives different names (e.g. Location overview page, Individual Product Pages, Services Page, Warranty Information, FR guide, Contact Us, About the company). No bare names only; use "Page name – Short description". The section must be explainable at a glance for dev, PM, and client.
 - Assumptions and Exclusions: Each section starts with a short intro. Every list item must be a full sentence (subject + verb + clear meaning)—e.g. "The brand book will be finalized before design begins." and "Advanced recommendation engines are out of scope." No sentence fragments, shorthand, or single-word bullets. This ensures the quote is properly understandable by developers, PMs, and clients.
 - total_hours must be a number derived from your scope-based estimate (deliverables, phases, complexity) for this project brief only. Do not copy hour totals or ranges from reference estimates or generic benchmarks. Do not override with the client/SOW-stated duration. Set days = total_hours ÷ 8 (business days) so the timeline is consistent and accurate.
 - estimated_effort_timeline must show your estimated hours and (approximately N business days) as the primary timeline. If the source document or project mentions a duration or hours, add a single italic note in that section, e.g. *Note: Client/SOW stated: ~90 business days.*
@@ -1398,6 +1398,10 @@ Context: {context}
 - **Design**: Layout, visual style, and components that would need to be matched or recreated.
 - **Content**: Key content types, copy, forms, filters, galleries—anything that affects scope.
 
+**You MUST include these so the estimator can match design level and pick theme/plugins:**
+- **Design level**: Simple (basic layout, minimal custom styling), Medium (custom sections, clear visual hierarchy, some animations), or Premium (highly custom layout, strong visuals, video/hero, polished UI). One sentence.
+- **Theme/plugin implications**: What would typically be needed in WordPress to replicate this: e.g. "Elementor Pro or equivalent for full-width sections and custom blocks; contact form plugin; no e-commerce" or "Simple theme + Elementor free; one contact form; standard blog layout." Be specific so the estimate can name theme and plugins.
+
 **Always end with:** Implications for estimation: pages/features to build or match, complexity (simple/medium/complex), and rough effort to achieve similar design and functionality. Call out design-matching effort when the client wants "same design" or "like this site."
 
 Context (URL or source): {context}
@@ -1409,6 +1413,36 @@ Context (URL or source): {context}
     }
 
     return prompts.get(analysis_type, prompts["ui_mockup"])
+
+
+# Max characters of reference text to send for design inference (to control token use)
+DESIGN_INFERENCE_TEXT_MAX_CHARS = 8000
+
+
+def build_design_inference_from_text_prompt(extracted_text: str, url: str) -> str:
+    """
+    Build prompt for inferring design level and theme/plugin implications from
+    reference site content when no screenshot is available (e.g. HTTP fallback).
+    """
+    text = (extracted_text or "").strip()
+    if len(text) > DESIGN_INFERENCE_TEXT_MAX_CHARS:
+        text = text[:DESIGN_INFERENCE_TEXT_MAX_CHARS] + "\n\n[... truncated ...]"
+    return f"""You are an expert at estimating WordPress projects. The following is extracted text/content from a reference website the client wants to match or replicate. No screenshot is available—only this content.
+
+Reference URL: {url}
+
+Extracted content from the reference site:
+---
+{text}
+---
+
+Based only on this content, provide a short "Design inference" block that the estimator will use to match design level and choose theme/plugins. Include:
+
+1. **Design level**: Simple (basic layout, minimal custom), Medium (custom sections, clear hierarchy), or Premium (highly custom, strong visuals, video/hero). One sentence with brief justification.
+2. **Site type**: e.g. marketing/landing, corporate, product showcase, e-commerce, blog-heavy.
+3. **Theme/plugin implications**: What would typically be needed in WordPress to replicate this: page builder (e.g. Elementor Pro vs free), form plugin if contact/forms appear, e-commerce (yes/no), any special needs (video, gallery, multi-section landing). Be specific so the estimate can name theme and plugins.
+
+Keep the response under 250 words. Output only the design inference block—no preamble."""
 
 
 def format_rag_context(

@@ -19,6 +19,7 @@ from app.services.ai.prompts import (
     build_chat_response_prompt,
     build_clarification_prompt,
     build_content_quality_prompt,
+    build_design_inference_from_text_prompt,
     build_quote_generation_prompt,
     build_quote_generation_prompt_json,
     build_quote_refinement_prompt,
@@ -1097,6 +1098,34 @@ class LLMService:
             "model_used": response.model,
             "tokens_used": response.usage.total_tokens,
         }
+
+    async def infer_reference_design_from_text(
+        self,
+        extracted_text: str,
+        url: str,
+    ) -> Optional[str]:
+        """
+        Infer design level and theme/plugin implications from reference site content
+        when no screenshot is available (e.g. after HTTP fallback). Used so the
+        estimator can still recommend an appropriate theme and plugins.
+        """
+        if not (extracted_text or "").strip():
+            return None
+        prompt = build_design_inference_from_text_prompt(
+            extracted_text=extracted_text,
+            url=url,
+        )
+        try:
+            response = await self.client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                model="default",
+                temperature=0.3,
+                max_tokens=512,
+            )
+            return (response.content or "").strip() or None
+        except Exception as e:
+            logger.warning("Design inference from text failed for %s: %s", url, e)
+            return None
 
     async def describe_document_image(
         self,

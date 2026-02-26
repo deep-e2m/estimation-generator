@@ -1,5 +1,6 @@
 /**
  * Timeout for long-running API requests (AI generation, refinement, export).
- * 3 minutes to stay above backend LLM_REQUEST_TIMEOUT (default 120s) and allow exports.
+ * 5 minutes to accommodate ref URL scraping + RAG + LLM (quote + optional stack research).
+ * Backend may take 2–4 minutes; avoid frontend timeout before completion.
  */
-export const LONG_REQUEST_TIMEOUT_MS = 180000;
+export const LONG_REQUEST_TIMEOUT_MS = 300000;

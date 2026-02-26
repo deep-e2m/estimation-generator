@@ -2,7 +2,7 @@
 Site crawl service: discover same-host URLs from a seed URL.
 
 Used for "full site" reference preview: find all (or N) pages on a site via
-sitemap.xml, JS-rendered links (Playwright), or raw HTML links, then scrape each
+sitemap.xml, JS-rendered links (Selenium), or raw HTML links, then scrape each
 with the URL scraping service so every internal page gets a screenshot and content.
 """
 
@@ -18,8 +18,8 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Wait after page load so JS-rendered links appear in the DOM (Playwright discovery)
-_PLAYWRIGHT_WAIT_AFTER_LOAD_MS = 2500
+# Wait after page load so JS-rendered links appear in the DOM (Selenium discovery)
+_SELENIUM_WAIT_AFTER_LOAD_MS = 2500
 
 # Sitemap namespace (common)
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -247,87 +247,116 @@ async def _discover_via_links(
     return ordered[:max_pages]
 
 
-async def _discover_via_playwright(
+def _discover_via_selenium_sync(
+    seed_url: str,
+    base_origin: str,
+    max_pages: int,
+    depth: int,
+    page_load_timeout_sec: int = 20,
+) -> list[str]:
+    """
+    Discover same-origin URLs by loading the seed page in Chrome (Selenium) so
+    JS-rendered links are present. Returns seed first, then discovered links.
+    Synchronous; run via run_in_executor from async code.
+    """
+    import time
+
+    from selenium import webdriver
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+
+    js_collect_links = """
+    return Array.from(document.querySelectorAll('a[href]'))
+        .map(a => a.href)
+        .filter(h => h && typeof h === 'string' && !h.startsWith('javascript:') && !h.startsWith('#') && (h.startsWith('http:') || h.startsWith('https:')));
+    """
+    ordered: list[str] = [seed_url]
+    seen: set[str] = {_normalize_absolute_url(seed_url) or seed_url}
+
+    import os
+
+    try:
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1280,720")
+        for chromium_bin in ("/usr/bin/chromium", "/usr/bin/chromium-browser"):
+            if os.path.isfile(chromium_bin):
+                options.binary_location = chromium_bin
+                break
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(page_load_timeout_sec)
+        try:
+            driver.get(seed_url)
+            time.sleep(_SELENIUM_WAIT_AFTER_LOAD_MS / 1000.0)
+            raw_urls: list[str] = driver.execute_script(js_collect_links)
+            for raw in raw_urls or []:
+                if len(ordered) >= max_pages:
+                    break
+                norm = _normalize_absolute_url(raw)
+                if not norm or not _same_origin(base_origin, norm) or norm in seen:
+                    continue
+                seen.add(norm)
+                ordered.append(norm)
+
+            if depth >= 2 and len(ordered) > 1:
+                to_visit = [u for u in ordered[1:] if len(ordered) < max_pages]
+                for url in to_visit:
+                    if len(ordered) >= max_pages:
+                        break
+                    try:
+                        driver.get(url)
+                        time.sleep(_SELENIUM_WAIT_AFTER_LOAD_MS / 1000.0)
+                        extra: list[str] = driver.execute_script(js_collect_links)
+                        for raw in extra or []:
+                            if len(ordered) >= max_pages:
+                                break
+                            norm = _normalize_absolute_url(raw)
+                            if not norm or not _same_origin(base_origin, norm) or norm in seen:
+                                continue
+                            seen.add(norm)
+                            ordered.append(norm)
+                    except Exception as e:
+                        logger.debug("Selenium discovery: skip subpage %s: %s", url, e)
+            return ordered[:max_pages]
+        finally:
+            driver.quit()
+    except TimeoutException as e:
+        logger.warning("Selenium discovery: seed page load timeout: %s", e)
+        return ordered
+    except WebDriverException as e:
+        logger.warning("Selenium discovery: browser failed: %s", e)
+        return ordered
+    except Exception as e:
+        logger.warning("Selenium discovery failed: %s", e)
+        return ordered
+
+
+async def _discover_via_selenium(
     seed_url: str,
     base_origin: str,
     max_pages: int,
     depth: int,
     page_load_timeout_ms: int = 20000,
 ) -> list[str]:
-    """
-    Discover same-origin URLs by loading the seed page in a browser so JS-rendered
-    links (e.g. React/Vue nav) are present. Returns seed first, then discovered links.
-    """
-    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
-
-    js_collect_links = """
-    () => {
-        const links = Array.from(document.querySelectorAll('a[href]'))
-            .map(a => a.href)
-            .filter(h => h && typeof h === 'string' && !h.startsWith('javascript:') && !h.startsWith('#') && (h.startsWith('http:') || h.startsWith('https:')));
-        return [...new Set(links)];
-    }
-    """
-    ordered: list[str] = [seed_url]
-    seen: set[str] = {seed_url}
-
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"],
-            )
-            try:
-                page = await browser.new_page(
-                    viewport={"width": 1280, "height": 720},
-                    ignore_https_errors=True,
-                )
-                try:
-                    await page.goto(seed_url, wait_until="load", timeout=page_load_timeout_ms)
-                    await page.wait_for_timeout(_PLAYWRIGHT_WAIT_AFTER_LOAD_MS)
-                    raw_urls: list[str] = await page.evaluate(js_collect_links)
-                except PlaywrightTimeoutError as e:
-                    logger.warning("Playwright discovery: seed page load timeout: %s", e)
-                    return ordered
-                except Exception as e:
-                    logger.warning("Playwright discovery: seed page failed: %s", e)
-                    return ordered
-
-                for raw in raw_urls:
-                    if len(ordered) >= max_pages:
-                        break
-                    norm = _normalize_absolute_url(raw)
-                    if not norm or not _same_origin(base_origin, norm) or norm in seen:
-                        continue
-                    seen.add(norm)
-                    ordered.append(norm)
-
-                if depth >= 2 and len(ordered) > 1:
-                    to_visit = [u for u in ordered[1:] if len(ordered) < max_pages]
-                    for url in to_visit:
-                        if len(ordered) >= max_pages:
-                            break
-                        try:
-                            await page.goto(url, wait_until="load", timeout=page_load_timeout_ms)
-                            await page.wait_for_timeout(_PLAYWRIGHT_WAIT_AFTER_LOAD_MS)
-                            extra: list[str] = await page.evaluate(js_collect_links)
-                            for raw in extra:
-                                if len(ordered) >= max_pages:
-                                    break
-                                norm = _normalize_absolute_url(raw)
-                                if not norm or not _same_origin(base_origin, norm) or norm in seen:
-                                    continue
-                                seen.add(norm)
-                                ordered.append(norm)
-                        except Exception as e:
-                            logger.debug("Playwright discovery: skip subpage %s: %s", url, e)
-                            continue
-                return ordered[:max_pages]
-            finally:
-                await browser.close()
-    except Exception as e:
-        logger.warning("Playwright discovery failed: %s", e)
-        return ordered
+    """Async wrapper: run Selenium discovery in executor."""
+    loop = asyncio.get_event_loop()
+    timeout_sec = max(1, page_load_timeout_ms // 1000)
+    return await loop.run_in_executor(
+        None,
+        lambda: _discover_via_selenium_sync(
+            seed_url,
+            base_origin,
+            max_pages,
+            depth,
+            page_load_timeout_sec=timeout_sec,
+        ),
+    )
 
 
 async def crawl_site(
@@ -380,10 +409,10 @@ async def crawl_site(
             # 1) Try sitemap (may return 0 or many URLs; can include sitemap index .xml files)
             sitemap_urls = await _discover_via_sitemap(client, base_origin, seed_url)
             page_urls_from_sitemap = [u for u in sitemap_urls if not _is_likely_sitemap_file(u)]
-            # Only use sitemap alone when it found multiple real pages; else discover via Playwright/links
+            # Only use sitemap alone when it found multiple real pages; else discover via Selenium/links
             if len(page_urls_from_sitemap) > 1:
                 return page_urls_from_sitemap[:max_pages]
-            # 2) Discover via Playwright (JS-rendered links: nav, footers, etc.) so we get internal pages
+            # 2) Discover via Selenium (JS-rendered links: nav, footers, etc.) so we get internal pages
             seen: set[str] = set()
             ordered: list[str] = [seed_url]
             seen.add(_normalize_absolute_url(seed_url) or seed_url)
@@ -394,19 +423,19 @@ async def crawl_site(
                 if n and n not in seen:
                     seen.add(n)
                     ordered.append(u)
-            playwright_timeout = min(timeout_sec, 75)
+            selenium_timeout = min(timeout_sec, 75)
             try:
-                pw_urls = await asyncio.wait_for(
-                    _discover_via_playwright(
+                sel_urls = await asyncio.wait_for(
+                    _discover_via_selenium(
                         seed_url,
                         base_origin,
                         max_pages,
                         depth,
                         page_load_timeout_ms=20000,
                     ),
-                    timeout=playwright_timeout,
+                    timeout=selenium_timeout,
                 )
-                for u in pw_urls:
+                for u in sel_urls:
                     if len(ordered) >= max_pages:
                         break
                     if not _is_page_like_url(u):
@@ -417,15 +446,15 @@ async def crawl_site(
                         ordered.append(u)
                 if len(ordered) > 1:
                     logger.info(
-                        "Playwright discovery found %d URLs from %s",
+                        "Selenium discovery found %d URLs from %s",
                         len(ordered),
                         seed_url,
                     )
                     return ordered[:max_pages]
             except asyncio.TimeoutError:
-                logger.debug("Playwright discovery timed out")
+                logger.debug("Selenium discovery timed out")
             except Exception as e:
-                logger.debug("Playwright discovery error: %s", e)
+                logger.debug("Selenium discovery error: %s", e)
             # 3) Fallback: raw HTML link extraction (no JS)
             link_urls = await _discover_via_links(client, base_origin, seed_url, max_pages, depth)
             for u in link_urls:

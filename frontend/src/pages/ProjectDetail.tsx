@@ -225,7 +225,11 @@ export function ProjectDetailPage() {
 
   const referenceUrlsUsed = (quote?.metadata as { reference_urls_used?: string[] } | undefined)
     ?.reference_urls_used;
-  const referenceUrlsCount = Array.isArray(referenceUrlsUsed) ? referenceUrlsUsed.length : 0;
+  // Show project's saved reference URLs (e.g. Figma) when set; otherwise URLs used in last quote
+  const referenceUrlsToShow = (project?.reference_urls?.length
+    ? project.reference_urls
+    : referenceUrlsUsed) ?? [];
+  const referenceUrlsCount = referenceUrlsToShow.length;
 
   const openUrlPreview = useCallback(
     (url: string, mode: 'page' | 'site' = 'page') => {
@@ -306,8 +310,8 @@ export function ProjectDetailPage() {
             : `${referenceUrlsCount} links`,
       icon: <Link2 style={{ width: 14, height: 14 }} />,
       iconClass: 'urls' as const,
-      ...(referenceUrlsCount > 0 && referenceUrlsUsed
-        ? { urls: referenceUrlsUsed as string[] }
+      ...(referenceUrlsCount > 0 && referenceUrlsToShow.length > 0
+        ? { urls: referenceUrlsToShow }
         : {}),
     },
   ];
@@ -484,10 +488,10 @@ export function ProjectDetailPage() {
                 );
               })}
             </div>
-            {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsUsed && (
+            {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsToShow.length > 0 && (
               <>
                 <div className="project-detail-reference-urls-list">
-                  {referenceUrlsUsed.map((url) => (
+                  {referenceUrlsToShow.map((url) => (
                     <div key={url} className="project-detail-reference-url-item-row">
                       <a
                         href={url}
@@ -531,8 +535,8 @@ export function ProjectDetailPage() {
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
             onSaveStatusChange={handleSaveStatusChange}
-            referenceUrls={referenceUrlsUsed ?? undefined}
-            crawlSiteFromUrl={referenceUrlsUsed?.[0]}
+            referenceUrls={project?.reference_urls?.length ? project.reference_urls : (referenceUrlsUsed ?? undefined)}
+            crawlSiteFromUrl={(project?.reference_urls ?? referenceUrlsUsed)?.[0]}
           />
         )}
       </div>

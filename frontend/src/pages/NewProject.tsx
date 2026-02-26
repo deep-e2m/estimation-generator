@@ -174,7 +174,8 @@ export function NewProjectPage() {
     }))
   }, [])
 
-  // Create project (shared logic after quality check or "submit anyway")
+  // Create project (shared logic after quality check or "submit anyway").
+  // Reference URLs are auto-extracted by the backend from description, additional inputs, and documents.
   const createProjectAndContinue = useCallback(async () => {
     const projectData: ProjectCreate = {
       name: formData.name.trim(),
@@ -511,7 +512,7 @@ export function NewProjectPage() {
                 </span>
               ))}
               <p className="new-project-form-hint">
-                Optional. These will be used during estimation if provided.
+                Optional. URLs in this field or in your description and documents are detected automatically and used for the estimate.
               </p>
             </div>
 

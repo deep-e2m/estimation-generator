@@ -16,7 +16,8 @@ from app.services.url_extraction import extract_urls
 logger = logging.getLogger(__name__)
 
 # Total wall-clock timeout for "extract + scrape + vision" so one slow URL doesn't block
-REFERENCE_URL_TOTAL_TIMEOUT_SEC = 90
+# Kept under 60s to keep quote generation responsive (crawl + scrape + vision run before LLM).
+REFERENCE_URL_TOTAL_TIMEOUT_SEC = 50
 
 # Section header used in the brief
 REFERENCE_URLS_HEADER = "Reference URLs (scraped content and visual description):"
@@ -162,6 +163,8 @@ async def build_reference_url_context(
     timeout = REFERENCE_URL_TOTAL_TIMEOUT_SEC
     if used_crawl:
         timeout = max(timeout, settings.SITE_CRAWL_TIMEOUT_SEC + max_urls_for_scrape * settings.URL_SCRAPE_TIMEOUT_SEC)
+    # Cap total so quote generation stays responsive even when crawling many pages
+    timeout = min(timeout, 75)
 
     try:
         context, urls_used = await asyncio.wait_for(
@@ -203,6 +206,7 @@ async def _scrape_and_describe(
     sections: list[str] = []
     urls_used: list[str] = []
 
+    llm = get_llm_service()
     for r in results:
         urls_used.append(r.url)
         if r.error and not r.extracted_text and not r.screenshot_base64:
@@ -213,19 +217,42 @@ async def _scrape_and_describe(
         if r.extracted_text:
             block_parts.append(r.extracted_text.strip())
 
+        all_screenshots: list[str] = []
         if r.screenshot_base64:
+            all_screenshots.append(r.screenshot_base64)
+        if getattr(r, "extra_screenshots", None):
+            all_screenshots.extend(r.extra_screenshots)
+        if all_screenshots:
+            for idx, img_b64 in enumerate(all_screenshots):
+                try:
+                    analysis_result = await llm.analyze_image(
+                        img_b64,
+                        context=r.url,
+                        analysis_type="reference_url_screenshot",
+                    )
+                    analysis_text = (analysis_result.get("analysis") or "").strip()
+                    if analysis_text:
+                        label = (
+                            f"Visual reference for {r.url} (screenshot {idx + 1} of {len(all_screenshots)}):"
+                            if len(all_screenshots) > 1
+                            else f"Visual reference for {r.url}:"
+                        )
+                        block_parts.append(f"{label} {analysis_text}")
+                except Exception as e:
+                    logger.warning("Vision description failed for %s (screenshot %s): %s", r.url, idx + 1, e)
+        elif (r.extracted_text or "").strip():
+            # No screenshot (e.g. Selenium failed, HTTP fallback only): infer design level and theme/plugin implications from text
             try:
-                llm = get_llm_service()
-                analysis_result = await llm.analyze_image(
-                    r.screenshot_base64,
-                    context=r.url,
-                    analysis_type="reference_url_screenshot",
+                design_inference = await llm.infer_reference_design_from_text(
+                    r.extracted_text.strip(),
+                    r.url,
                 )
-                analysis_text = (analysis_result.get("analysis") or "").strip()
-                if analysis_text:
-                    block_parts.append(f"Visual reference for {r.url}: {analysis_text}")
+                if design_inference:
+                    block_parts.append(
+                        f"Design inference (from reference content; no screenshot available): {design_inference}"
+                    )
             except Exception as e:
-                logger.warning("Vision description failed for %s: %s", r.url, e)
+                logger.warning("Design inference from text failed for %s: %s", r.url, e)
 
         sections.append("\n\n".join(block_parts))
 

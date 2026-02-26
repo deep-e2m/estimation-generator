@@ -26,6 +26,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   description?: string;
+  reference_urls?: string[];
   platform?: ProjectPlatform;
   status: ProjectStatus;
   quotes_count: number;
@@ -48,6 +49,8 @@ export interface ProjectCreate {
   name: string;
   description?: string;
   additional_instructions?: string;
+  /** Reference URLs (e.g. Figma) to scrape and include in the estimation brief */
+  reference_urls?: string[];
   platform?: ProjectPlatform;
   // Optional client fields (for future use)
   client_id?: string;
@@ -61,6 +64,7 @@ export interface ProjectCreate {
 export interface ProjectUpdate {
   name?: string;
   description?: string;
+  reference_urls?: string[];
   client_email?: string;
   platform?: ProjectPlatform;
   status?: ProjectStatus;

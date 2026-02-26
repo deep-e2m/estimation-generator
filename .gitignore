@@ -1,15 +1,17 @@
 # ==========================================
-# Environment variables
+# Environment variables (never commit secrets)
 # ==========================================
 .env
 .env.*
 !.env.example
+!.env*.example
 .env.local
 .env.development
 .env.development.local
 .env.test.local
 .env.production.local
 .env.production
+*.local
 
 # ==========================================
 # Node / Frontend
@@ -25,6 +27,11 @@ dist/
 build/
 frontend/dist/
 frontend/build/
+.vite/
+.turbo/
+.next/
+out/
+storybook-static/
 
 # Logs
 *.log
@@ -232,6 +239,17 @@ dump.rdb
 # Ruff linter cache
 .ruff_cache/
 
+# uv (Python package manager) cache
+.uv/
+uv.lock.bak
+
+# Generic caches
+.cache/
+*.cache
+
+# Jupyter
+.ipynb_checkpoints/
+
 # Temporary files
 *.tmp
 *.temp
@@ -242,13 +260,25 @@ dump.rdb
 *.sqlite
 *.db
 
-# Images
+# Images and binaries (avoid committing screenshots/artifacts; allow app assets)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webp
 *.ico
+!frontend/public/**/*.png
+!frontend/public/**/*.jpg
+!frontend/public/**/*.jpeg
+!frontend/public/**/*.gif
+!frontend/public/**/*.webp
+!frontend/public/**/*.ico
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+!public/**/*.gif
+!public/**/*.webp
+!public/**/*.ico
 
 # ==========================================
 # Junk / accidental files

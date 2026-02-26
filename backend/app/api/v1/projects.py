@@ -366,10 +366,24 @@ async def create_project(
     else:
         logger.info("Creating project without client association")
 
+    # Use explicit reference_urls if provided; otherwise extract from description and additional_instructions
+    reference_urls = project_data.reference_urls or []
+    if not reference_urls:
+        settings = get_settings()
+        reference_urls = extract_urls(
+            project_data.description or "",
+            project_data.additional_instructions or "",
+            allowed_schemes=tuple(settings.ALLOWED_URL_SCHEMES),
+            max_urls=settings.MAX_REFERENCE_URLS,
+        )
+        if reference_urls:
+            logger.info("Auto-extracted %d reference URL(s) from project content", len(reference_urls))
+
     new_project = Project(
         name=project_data.name,
         description=project_data.description,
         additional_instructions=project_data.additional_instructions,
+        reference_urls=reference_urls,
         platform=project_data.platform,
         status=ProjectStatus.ACTIVE,
         client_id=client_id,
@@ -563,6 +577,7 @@ async def get_project(
         name=project.name,
         description=project.description,
         additional_instructions=project.additional_instructions,
+        reference_urls=project.reference_urls if project.reference_urls is not None else None,
         platform=project.platform,
         status=project.status,
         created_at=project.created_at,

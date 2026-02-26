@@ -5,6 +5,7 @@ This module provides endpoints for quote management including
 generation, CRUD operations, status management, and regeneration.
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -626,28 +627,38 @@ async def generate_quote(
             )
 
     # Step 2 & 3: Company stack (plugins/themes/guidelines) + reference estimates (similar quotes)
-    # RAG = any reference from KB: guideline/training (company stack) OR similar quotes.
+    # Run both RAG lookups in parallel to reduce total generation time.
     rag_service = get_rag_service()
-    company_stack_context, company_stack_from_rag = await rag_service.build_company_stack_context(
-        query=canonical_brief,
-        db_session=db,
-    )
-    reference_estimates_context = ""
-    calibration_band = None
-    if request.use_rag:
+
+    async def _get_company_stack():
+        return await rag_service.build_company_stack_context(
+            query=canonical_brief,
+            db_session=db,
+        )
+
+    async def _get_reference_estimates():
+        if not request.use_rag:
+            return "", None
         try:
-            reference_estimates_context, calibration_band = await rag_service.build_reference_estimates_context(
+            return await rag_service.build_reference_estimates_context(
                 query=canonical_brief,
                 platform=project.platform.value,
                 db_session=db,
             )
-            logger.debug(
-                "Reference estimates context: %d characters",
-                len(reference_estimates_context),
-            )
         except Exception as e:
             logger.warning("Failed to get reference estimates context: %s", str(e))
             await db.rollback()
+            return "", None
+
+    (company_stack_context, company_stack_from_rag), (reference_estimates_context, calibration_band) = await asyncio.gather(
+        _get_company_stack(),
+        _get_reference_estimates(),
+    )
+    if reference_estimates_context:
+        logger.debug(
+            "Reference estimates context: %d characters",
+            len(reference_estimates_context),
+        )
     # RAG "used" when we pulled any reference from KB: company stack (plugins/themes) or similar quotes
     any_rag_used = bool(reference_estimates_context) or company_stack_from_rag
 

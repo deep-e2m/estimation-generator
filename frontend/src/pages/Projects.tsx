@@ -373,10 +373,11 @@ export default function Projects() {
   const updateMutation = useMutation({
     mutationFn: (payload: { projectId: string; data: ProjectUpdate }) =>
       projectsService.update(payload.projectId, payload.data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-projects'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['project', variables.projectId] })
     },
   })
 
@@ -697,7 +698,7 @@ export default function Projects() {
                   onChange={(e) => handleEditFieldChange('description', e.target.value)}
                 />
                 <p className="projects-detail-dialog-hint">
-                  Long briefs are best viewed here so the projects list stays compact.
+                  Long briefs are best viewed here so the projects list stays compact. URLs in the brief are detected automatically for the estimate.
                 </p>
               </div>
             </div>

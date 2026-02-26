@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Enum, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -85,6 +85,13 @@ class Project(Base, UUIDMixin, TimestampMixin):
         Text,
         nullable=True,
         doc="Additional information or instructions for the project",
+    )
+
+    reference_urls: Mapped[Optional[list]] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=list,
+        doc="Reference URLs (e.g. Figma design links) for estimation; scraped and included in the brief when URL scraping is enabled",
     )
 
     # Client relationship

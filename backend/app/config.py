@@ -234,22 +234,22 @@ class Settings(BaseSettings):
 
     # ==================== URL Scraping (Reference URLs for Estimation) ====================
     # When enabled, URLs in description/instructions/docs are scraped (screenshot + text)
-    # and added to the project brief. Set to False to disable (e.g. no Playwright in env).
+    # and added to the project brief. Set to False to disable (e.g. no browser/Chromium in env).
     ENABLE_URL_SCRAPING: bool = Field(
         default=True,
         description="Enable scraping of reference URLs found in project content",
     )
     MAX_REFERENCE_URLS: int = Field(
-        default=5,
+        default=4,
         ge=1,
         le=10,
         description="Maximum number of reference URLs to scrape per request",
     )
     URL_SCRAPE_TIMEOUT_SEC: int = Field(
-        default=25,
+        default=18,
         ge=5,
         le=120,
-        description="Timeout in seconds per URL when scraping (Playwright)",
+        description="Timeout in seconds per URL when scraping (Selenium)",
     )
     # Maximum character length for the combined reference URL block in the brief
     URL_REFERENCE_CONTEXT_MAX_CHARS: int = Field(
@@ -272,7 +272,7 @@ class Settings(BaseSettings):
         description="Enable full-site crawl from a seed URL (discover + scrape all pages)",
     )
     MAX_SITE_PAGES: int = Field(
-        default=25,
+        default=12,
         ge=1,
         le=50,
         description="Maximum number of pages to discover and scrape when crawling a site",
@@ -284,13 +284,13 @@ class Settings(BaseSettings):
         description="Crawl depth: 1=seed+same-page links, 2=one more hop from those pages",
     )
     SITE_CRAWL_TIMEOUT_SEC: int = Field(
-        default=90,
+        default=55,
         ge=30,
         le=300,
         description="Total timeout in seconds for the crawl phase (discovering URLs)",
     )
 
-    # ==================== Reference site video (Playwright recording) ====================
+    # ==================== Reference site video (optional; was Playwright) ====================
     # When set, full-site preview can record a video of the crawl (navigate through each page).
     # Directory must exist and be writable; leave empty to disable video recording.
     REFERENCE_VIDEO_STORAGE_PATH: str = Field(
