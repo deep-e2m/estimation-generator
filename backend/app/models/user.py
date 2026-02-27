@@ -17,9 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.approval_request import ApprovalRequest
     from app.models.chat_message import ChatMessage
     from app.models.client import Client
     from app.models.project import Project
+    from app.models.project_share import ProjectShare
     from app.models.quote import Quote
 
 
@@ -33,6 +35,8 @@ class UserRole(str, enum.Enum):
 
     ADMIN = "admin"
     PM = "pm"  # Project Manager
+    SUPER_PM = "super_pm"  # Superior PM (can approve estimations)
+    DEV = "dev"  # Developer
 
 
 class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
@@ -200,6 +204,30 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
         back_populates="user",
+    )
+
+    project_shares_received: Mapped[list["ProjectShare"]] = relationship(
+        "ProjectShare",
+        foreign_keys="ProjectShare.shared_with_user_id",
+        back_populates="shared_with_user",
+    )
+
+    project_shares_given: Mapped[list["ProjectShare"]] = relationship(
+        "ProjectShare",
+        foreign_keys="ProjectShare.shared_by_user_id",
+        back_populates="shared_by_user",
+    )
+
+    approval_requests_sent: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
+        foreign_keys="ApprovalRequest.requested_by",
+        back_populates="requester",
+    )
+
+    approval_requests_received: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
+        foreign_keys="ApprovalRequest.assigned_to",
+        back_populates="assignee",
     )
 
     def __repr__(self) -> str:

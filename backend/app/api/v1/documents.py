@@ -29,6 +29,8 @@ from app.core.database import get_db_session as get_db
 from app.models.document import Document, DocumentType
 from app.models.project import Project
 from app.models.user import User
+from app.models.audit_log import ActionOutcome
+from app.services import audit
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +235,22 @@ async def create_document(
 
     logger.info(f"Document created: id={document.id}, title={document.title}")
 
+    # Audit log: document uploaded
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="document.uploaded",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="document",
+            resource_id=document.id,
+            project_id=project_id,
+            metadata={"filename": document.title},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for document upload: %s", e)
+
     return DocumentDataResponse(data=DocumentResponse.model_validate(document))
 
 
@@ -304,10 +322,29 @@ async def delete_document(
     if not document or document.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    doc_title = document.title
+    doc_project_id = document.project_id
+
     await db.delete(document)
     await db.commit()
 
     logger.info(f"Document deleted: id={document_id}")
+
+    # Audit log: document deleted
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="document.deleted",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="document",
+            resource_id=document_id,
+            project_id=doc_project_id,
+            metadata={"filename": doc_title},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for document deletion: %s", e)
 
 
 # =============================================================================

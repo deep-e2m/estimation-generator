@@ -9,23 +9,22 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import {
   FolderOpen,
   FileText,
-  Plus,
   Clock,
   TrendingUp,
   Sparkles,
   ChevronRight,
   MoreVertical,
-  Upload,
-  History,
-  Share2,
   Calendar,
   BarChart3,
   Edit,
   Archive,
   Trash2,
+  Users,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,10 +36,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { useUser } from '@/store/authStore'
+import { useUser, useCanApproveEstimations, useCanManageUsers } from '@/store/authStore'
 import { projectsService } from '@/services/projects.service'
 import { quotesService } from '@/services/quotes.service'
 import { dashboardService } from '@/services/dashboard.service'
+import { approvalsService } from '@/services/approvals.service'
 import { formatRelativeTime } from '@/lib/date'
 import type { QuoteSummary, QuoteStatus, ProjectStatus } from '@/types'
 
@@ -268,33 +268,6 @@ function RecentProjectsList({ projects, isLoading, onProjectAction }: RecentProj
     </div>
   )
 }
-
-// ============================================
-// EMPTY STATE CARDS - Stitch Design (Fast Rendering)
-// ============================================
-
-function NoQuotesCard() {
-  const navigate = useNavigate()
-  
-  return (
-    <div className="dashboard-empty-card">
-      <div className="dashboard-empty-icon quote">
-        <FileText style={{ width: 28, height: 28 }} />
-      </div>
-      <h3 className="dashboard-empty-title">No quotes yet</h3>
-      <p className="dashboard-empty-description">
-        Start your first AI-assisted project estimate.
-      </p>
-      <button 
-        className="dashboard-empty-btn dashboard-empty-btn-primary"
-        onClick={() => navigate('/projects/new')}
-      >
-        Create Quote
-      </button>
-    </div>
-  )
-}
-
 
 // ============================================
 // RECENT QUOTES LIST (Fast Rendering)
@@ -569,57 +542,6 @@ function UpcomingDeadlines({ projects, isLoading }: UpcomingDeadlinesProps) {
 }
 
 // ============================================
-// QUICK ACTIONS CARD - Stitch Design (2x2 Grid, Fast Rendering)
-// ============================================
-
-function QuickActionsCard() {
-  const navigate = useNavigate()
-  
-  const actions = [
-    {
-      label: 'New Project',
-      icon: Plus,
-      onClick: () => navigate('/projects/new'),
-    },
-    {
-      label: 'Import CSV',
-      icon: Upload,
-      onClick: () => navigate('/projects/new'),
-    },
-    {
-      label: 'History',
-      icon: History,
-      onClick: () => navigate('/projects'),
-    },
-    {
-      label: 'Share Report',
-      icon: Share2,
-      onClick: () => navigate('/projects'),
-    },
-  ]
-
-  return (
-    <div className="dashboard-quick-actions-card">
-      <h3 className="dashboard-quick-actions-title">Quick Actions</h3>
-      <div className="dashboard-quick-actions-grid">
-        {actions.map((action) => (
-          <button
-            key={action.label}
-            className="dashboard-quick-action-btn"
-            onClick={action.onClick}
-          >
-            <div className="dashboard-quick-action-icon">
-              <action.icon style={{ width: 18, height: 18 }} />
-            </div>
-            <span className="dashboard-quick-action-label">{action.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ============================================
 // MAIN DASHBOARD COMPONENT - Stitch Design
 // ============================================
 
@@ -768,9 +690,11 @@ export default function Dashboard() {
   const user = useUser()
   const queryClient = useQueryClient()
   const [fullAnalyticsOpen, setFullAnalyticsOpen] = useState(false)
+  const canApprove = useCanApproveEstimations()
+  const canManageUsers = useCanManageUsers()
 
   // Dashboard stats from DB (so totals and hours stay correct when projects/quotes are deleted)
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardService.getStats(),
     staleTime: 10000,
@@ -787,6 +711,14 @@ export default function Dashboard() {
     queryKey: ['dashboard-quotes'],
     queryFn: () => quotesService.list({ sort_by: 'created_at', sort_order: 'desc' }, undefined, 10),
     staleTime: 10000,
+  })
+
+  // Pending approval count for approvers (admin / super_pm)
+  const { data: pendingApprovals = [] } = useQuery({
+    queryKey: ['approval-requests', 'pending'],
+    queryFn: () => approvalsService.list('pending'),
+    staleTime: 10000,
+    enabled: canApprove,
   })
 
   const deleteProjectMutation = useMutation({
@@ -913,11 +845,52 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* No Quotes & Quick Actions Side by Side */}
-          <div className="dashboard-grid dashboard-grid-2col">
-            <NoQuotesCard />
-            <QuickActionsCard />
-          </div>
+          {/* Quick Admin - Admin only */}
+          {canManageUsers && (
+            <Card className="dashboard-section">
+              <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
+                <h2 className="dashboard-section-title flex items-center gap-2">
+                  <Users style={{ width: 20, height: 20 }} />
+                  Quick Admin
+                </h2>
+              </div>
+              <div style={{ padding: 'var(--space-4) var(--space-5)' }}>
+                <Link
+                  to="/admin/users"
+                  className="dashboard-section-link"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  Manage users <ChevronRight style={{ width: 16, height: 16 }} />
+                </Link>
+              </div>
+            </Card>
+          )}
+
+          {/* Pending Approvals - Approvers only */}
+          {canApprove && (
+            <Card className="dashboard-section">
+              <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
+                <h2 className="dashboard-section-title flex items-center gap-2">
+                  <ClipboardCheck style={{ width: 20, height: 20 }} />
+                  Pending Approvals
+                </h2>
+                <Link
+                  to="/approval-requests"
+                  className="dashboard-section-link"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  View all <ChevronRight style={{ width: 16, height: 16 }} />
+                </Link>
+              </div>
+              <div style={{ padding: 'var(--space-4) var(--space-5)' }}>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {pendingApprovals.length === 0
+                    ? 'No pending approval requests.'
+                    : `${pendingApprovals.length} request${pendingApprovals.length !== 1 ? 's' : ''} awaiting your decision.`}
+                </p>
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Right Column - AI Performance (values from dashboard-stats API; no hardcoded fallbacks) */}

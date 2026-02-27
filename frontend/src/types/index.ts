@@ -29,7 +29,7 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// User Types
+// User Types (prefer auth.types UserRole for RBAC: admin | pm | super_pm | dev)
 export type UserRole = 'Admin' | 'PM';
 
 export interface User {
@@ -62,6 +62,7 @@ export interface Project {
   team_members: TeamMember[];
   quotes_count: number;
   requirements_count?: number;
+  reference_urls?: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -166,6 +167,8 @@ export interface Quote extends QuoteSummary {
     id: string;
     name: string;
   };
+  /** Optional project name when project object is not populated */
+  project_name?: string;
   requirements: {
     text: string;
     attachments: Attachment[];
@@ -302,3 +305,4 @@ export type {
 export * from './file.types';
 export * from './project';
 export * from './chat';
+export * from './rbac.types';

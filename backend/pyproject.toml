@@ -12,3 +12,6 @@ quote-style = "double"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "selenium: run real Selenium/Chrome URL scraping (skipped if Chrome not available)",
+]

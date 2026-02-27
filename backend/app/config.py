@@ -48,6 +48,8 @@ _DEFAULT_CORS_ORIGINS = [
 _DEFAULT_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _DEFAULT_CORS_HEADERS = ["Authorization", "Content-Type", "X-Request-ID", "Accept"]
 _DEFAULT_ALLOWED_URL_SCHEMES = ["https"]
+# In-house only: restrict sign-up and sign-in to company email domains
+_DEFAULT_ALLOWED_EMAIL_DOMAINS = ["e2m.solutions", "e2msolution.com"]
 
 
 class Settings(BaseSettings):
@@ -131,6 +133,13 @@ class Settings(BaseSettings):
     CORS_ALLOW_CREDENTIALS: bool = True
     cors_allow_methods_raw: str = Field(default="", alias="CORS_ALLOW_METHODS")
     cors_allow_headers_raw: str = Field(default="", alias="CORS_ALLOW_HEADERS")
+
+    # Allowed email domains (in-house only; empty = allow any)
+    allowed_email_domains_raw: str = Field(
+        default="e2m.solutions,e2msolution.com",
+        alias="ALLOWED_EMAIL_DOMAINS",
+        description="Comma-separated list of allowed email domains for registration and login (e.g. e2m.solutions,e2msolution.com). Empty = no restriction.",
+    )
 
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -328,6 +337,14 @@ class Settings(BaseSettings):
             return _DEFAULT_ALLOWED_URL_SCHEMES.copy()
         return [s.strip().lower() for s in raw.split(",") if s.strip()] or _DEFAULT_ALLOWED_URL_SCHEMES.copy()
 
+    @property
+    def ALLOWED_EMAIL_DOMAINS(self) -> list[str]:
+        """Allowed email domains for registration and login. Empty = no restriction."""
+        return _parse_list_env(
+            self.allowed_email_domains_raw,
+            _DEFAULT_ALLOWED_EMAIL_DOMAINS,
+        )
+
     _DEFAULT_SECRET_KEY = "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_IN_PRODUCTION"
 
     @model_validator(mode="after")
@@ -372,6 +389,24 @@ class Settings(BaseSettings):
         return self.DATABASE_URL.replace(
             "postgresql+asyncpg://", "postgresql+psycopg://"
         )
+
+
+def is_allowed_email_domain(email: str) -> bool:
+    """
+    Return True if the email's domain is in ALLOWED_EMAIL_DOMAINS.
+    If ALLOWED_EMAIL_DOMAINS is empty, allow any domain.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    domains = settings.ALLOWED_EMAIL_DOMAINS
+    if not domains:
+        return True
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        return False
+    domain = email.split("@")[-1]
+    return domain in domains
 
 
 @lru_cache()

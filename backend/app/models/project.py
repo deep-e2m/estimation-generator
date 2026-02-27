@@ -17,9 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.approval_request import ApprovalRequest
     from app.models.chat_message import ChatMessage
     from app.models.client import Client
     from app.models.document import Document
+    from app.models.project_share import ProjectShare
     from app.models.quote import Quote
     from app.models.user import User
 
@@ -166,6 +168,18 @@ class Project(Base, UUIDMixin, TimestampMixin):
 
     documents: Mapped[list["Document"]] = relationship(
         "Document",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+    shares: Mapped[list["ProjectShare"]] = relationship(
+        "ProjectShare",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+    approval_requests: Mapped[list["ApprovalRequest"]] = relationship(
+        "ApprovalRequest",
         back_populates="project",
         cascade="all, delete-orphan",
     )

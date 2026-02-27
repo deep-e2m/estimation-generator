@@ -16,6 +16,7 @@ import type {
   ReferenceUrlPreviewData,
   ReferenceUrlSitePreviewData,
 } from '@/types';
+import type { AuditLogEntry, AuditLogsListResponse } from './audit-logs.service';
 
 // Build query params from filters (page-based pagination)
 function buildProjectQueryParams(
@@ -156,6 +157,20 @@ export const projectsService = {
    */
   reactivate: async (projectId: string): Promise<Project> => {
     return projectsService.update(projectId, { status: 'active' });
+  },
+
+  /**
+   * Get activity log for a project (owner, shared users, admin).
+   */
+  getProjectActivity: async (
+    projectId: string,
+    params?: { page?: number; per_page?: number }
+  ): Promise<AuditLogsListResponse> => {
+    const response = await apiClient.get<AuditLogsListResponse>(
+      `/api/v1/projects/${projectId}/activity`,
+      { params: params ?? {} }
+    );
+    return response.data;
   },
 };
 

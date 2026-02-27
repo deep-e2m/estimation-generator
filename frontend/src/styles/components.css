@@ -63,6 +63,18 @@
   padding: 0;
 }
 
+/* Icon sizes for Lucide/SVG */
+.icon-sm {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.icon-xs {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 .btn-icon-lg {
   width: 48px;
   height: 48px;

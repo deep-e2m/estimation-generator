@@ -4,6 +4,15 @@ Pydantic schemas package.
 This module exports all Pydantic schemas for request/response validation.
 """
 
+from app.schemas.approval_request import (
+    ApprovalDecision,
+    ApprovalRequestCreate,
+    ApprovalRequestResponse,
+)
+from app.schemas.audit_log import (
+    AuditLogResponse,
+    AuditLogsListResponse,
+)
 from app.schemas.auth import (
     APIResponse,
     ErrorDetail,
@@ -58,6 +67,11 @@ from app.schemas.knowledge import (
     KnowledgeStatsResponse,
     SourceTypeStats,
 )
+from app.schemas.project_share import (
+    ProjectShareCreate,
+    ProjectShareResponse,
+    ProjectShareUpdate,
+)
 from app.schemas.project import (
     PaginationMeta,
     ProjectCreate,
@@ -90,6 +104,13 @@ from app.schemas.quote import (
 )
 
 __all__ = [
+    # Approval request schemas
+    "ApprovalDecision",
+    "ApprovalRequestCreate",
+    "ApprovalRequestResponse",
+    # Audit log schemas
+    "AuditLogResponse",
+    "AuditLogsListResponse",
     # Auth schemas
     "APIResponse",
     "ErrorDetail",
@@ -119,6 +140,10 @@ __all__ = [
     "ProjectListResponse",
     "ProjectResponse",
     "ProjectUpdate",
+    # Project share schemas
+    "ProjectShareCreate",
+    "ProjectShareResponse",
+    "ProjectShareUpdate",
     # Quote schemas
     "QuoteCreate",
     "QuoteDataResponse",

@@ -12,6 +12,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { getUserAvatarUrl } from '@/lib/placeholderAvatars'
 import {
   LayoutDashboard,
   FolderOpen,
@@ -26,9 +27,13 @@ import {
   Plus,
   Pin,
   PinOff,
+  ClipboardCheck,
+  Users,
+  FileText,
 } from 'lucide-react'
 
-import { useAuthStore, useUser } from '@/store/authStore'
+import { useAuthStore, useUser, useCanApproveEstimations, useCanManageUsers } from '@/store/authStore'
+import { ROLES } from '@/constants/roles'
 import { useIdleTimeout } from '@/hooks'
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
@@ -38,18 +43,10 @@ const IDLE_TIMEOUT_MINUTES = 60
 /** Proactively refresh access token every N minutes so active users don't hit 401. */
 const PROACTIVE_REFRESH_MINUTES = 25
 
-// Navigation items
-const mainNavItems = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    label: 'Projects',
-    href: '/projects',
-    icon: FolderOpen,
-  },
+// Base navigation items (role-based items added in component)
+const baseMainNavItems = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Projects', href: '/projects', icon: FolderOpen },
 ]
 
 const bottomNavItems = [
@@ -152,7 +149,7 @@ function UserMenu() {
         aria-haspopup="true"
       >
         <Avatar
-          src={user?.avatar_url}
+          src={user ? getUserAvatarUrl(user.avatar_url, user.full_name) : undefined}
           alt={user?.full_name || 'User'}
           size="sm"
         />
@@ -232,6 +229,24 @@ export default function DashboardLayout() {
   const navigate = useNavigate()
   const logout = useAuthStore((state) => state.logout)
   const refreshToken = useAuthStore((state) => state.refreshToken)
+  const user = useUser()
+  const canApproveEstimations = useCanApproveEstimations()
+  const canManageUsers = useCanManageUsers()
+  /* Approval Requests: only for super_pm (admin is tech-level, no approval workflow) */
+  const showApprovalRequests = canApproveEstimations
+
+  const mainNavItems = [
+    ...baseMainNavItems,
+    ...(showApprovalRequests
+      ? [{ label: 'Approval Requests', href: '/approval-requests', icon: ClipboardCheck }]
+      : []),
+    ...(canManageUsers
+      ? [
+          { label: 'Users', href: '/admin/users', icon: Users },
+          { label: 'Activity Logs', href: '/admin/logs', icon: FileText },
+        ]
+      : []),
+  ]
 
   // Idle timeout: after 1 hour with no activity (clicks, keys, API requests), logout
   useIdleTimeout({
@@ -289,6 +304,9 @@ export default function DashboardLayout() {
     const path = location.pathname
     if (path === '/dashboard') return 'Dashboard'
     if (path.startsWith('/projects')) return 'Projects'
+    if (path === '/approval-requests') return 'Approval Requests'
+    if (path.startsWith('/admin/users')) return 'Users'
+    if (path.startsWith('/admin/logs')) return 'Activity Logs'
     if (path.startsWith('/settings')) return 'Settings'
     if (path.startsWith('/help')) return 'Help & Support'
     return 'Estimate AI'
@@ -530,9 +548,10 @@ export default function DashboardLayout() {
         {/* Main Content */}
         <main className="page-content">
           <div className={cn(
-            'page-container', 
+            'page-container',
             location.pathname === '/dashboard' && 'dashboard-container',
-            location.pathname === '/projects' && 'projects-container'
+            location.pathname === '/projects' && 'projects-container',
+            location.pathname.startsWith('/admin') && 'admin-container'
           )}>
             <Outlet />
           </div>

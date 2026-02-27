@@ -24,6 +24,15 @@ from app.core.security import (
     verify_refresh_token,
 )
 from app.models.user import User, UserRole
+from app.models.audit_log import ActionOutcome
+from app.services import audit
+
+# Map string role from registration to enum (only non-admin roles allowed)
+REGISTER_ROLE_MAP = {
+    "pm": UserRole.PM,
+    "super_pm": UserRole.SUPER_PM,
+    "dev": UserRole.DEV,
+}
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -96,12 +105,13 @@ async def register(
         # Create new user
         password_hash = hash_password(user_data.password, validate=False)  # Already validated by schema
 
+        role = REGISTER_ROLE_MAP.get(user_data.role, UserRole.PM)
         new_user = User(
             email=user_data.email.lower(),
             password_hash=password_hash,
             full_name=user_data.full_name,
             company_name=user_data.company_name,
-            role=UserRole.PM,  # Default role
+            role=role,
             is_email_verified=False,  # Require email verification
         )
 
@@ -110,6 +120,21 @@ async def register(
         await db.refresh(new_user)
 
         logger.info("New user registered: %s", new_user.email)
+
+        # Audit log: user registration
+        try:
+            await audit.log_action(
+                db=db,
+                actor_user_id=new_user.id,
+                actor_role=new_user.role.value,
+                action="auth.register",
+                outcome=ActionOutcome.SUCCESS,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                metadata={"email": new_user.email},
+            )
+        except Exception as e:
+            logger.error("Failed to log audit for registration: %s", e)
 
         # Generate tokens for auto-login after registration
         token_data = create_token_pair(
@@ -237,6 +262,37 @@ async def login(
             from datetime import timedelta
             user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
             logger.warning("Account locked due to too many failed attempts: %s", credentials.email)
+            # Audit log: account locked (flush_only to avoid mid-request commit)
+            try:
+                await audit.log_action(
+                    db=db,
+                    actor_user_id=user.id,
+                    actor_role=user.role.value,
+                    action="auth.account.locked",
+                    outcome=ActionOutcome.SUCCESS,
+                    ip_address=request.client.host if request.client else None,
+                    user_agent=request.headers.get("user-agent"),
+                    metadata={"failed_attempts": user.failed_login_attempts},
+                    flush_only=True,
+                )
+            except Exception as e:
+                logger.error("Failed to log audit for account lockout: %s", e)
+
+        # Audit log: login failure (flush_only to avoid mid-request commit)
+        try:
+            await audit.log_action(
+                db=db,
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                action="auth.login.failure",
+                outcome=ActionOutcome.FAILURE,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                metadata={"reason": "invalid_password", "email_attempt": credentials.email},
+                flush_only=True,
+            )
+        except Exception as e:
+            logger.error("Failed to log audit for login failure: %s", e)
 
         await db.commit()
 
@@ -264,6 +320,22 @@ async def login(
     # Store refresh token hash (for token revocation)
     user.refresh_token = hash_password(token_data["refresh_token"], validate=False)
     user.refresh_token_expires_at = token_data["refresh_token_expires_at"]
+
+    # Audit log: login success (flush_only to avoid mid-request commit / greenlet issues)
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            action="auth.login.success",
+            outcome=ActionOutcome.SUCCESS,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            metadata={"method": "password"},
+            flush_only=True,
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for login success: %s", e)
 
     await db.commit()
     await db.refresh(user)
@@ -436,6 +508,21 @@ async def logout(
     await db.commit()
 
     logger.info("User logged out: %s", current_user.email)
+
+    # Audit log: logout
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="auth.logout",
+            outcome=ActionOutcome.SUCCESS,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            metadata={},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for logout: %s", e)
 
     return LogoutResponse(
         success=True,

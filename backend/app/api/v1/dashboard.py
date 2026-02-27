@@ -13,10 +13,11 @@ from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.api.dependencies import ActiveUser, DbSession
 from app.models.project import Project, ProjectStatus
+from app.models.project_share import ProjectShare
 from app.models.quote import Quote, QuoteStatus
 from app.schemas.auth import APIResponse
 
@@ -74,41 +75,85 @@ async def get_dashboard_stats(
     current_user: ActiveUser,
     db: DbSession,
 ) -> DashboardStatsResponse:
-    """Return total projects, total quotes, and sum of quote hours for the current user."""
+    """Return total projects, total quotes, and sum of quote hours. Admin sees all; others see own + shared."""
     user_id = current_user.id
 
-    # Total projects
-    projects_count_q = select(func.count()).select_from(Project).where(Project.created_by == user_id)
+    # Project scope: admin sees all; non-admin sees own + shared
+    if current_user.is_admin:
+        project_scope = select(Project.id)
+    else:
+        shared_ids = select(ProjectShare.project_id).where(
+            ProjectShare.shared_with_user_id == user_id
+        )
+        project_scope = select(Project.id).where(
+            or_(
+                Project.created_by == user_id,
+                Project.id.in_(shared_ids),
+            )
+        )
+
+    # Total projects (count distinct in scope)
+    projects_count_q = select(func.count()).select_from(project_scope.subquery())
     projects_result = await db.execute(projects_count_q)
     total_projects = projects_result.scalar() or 0
 
     # Active projects
-    active_count_q = select(func.count()).select_from(Project).where(
-        Project.created_by == user_id,
-        Project.status == ProjectStatus.ACTIVE,
-    )
+    if current_user.is_admin:
+        active_count_q = select(func.count()).select_from(Project).where(
+            Project.status == ProjectStatus.ACTIVE,
+        )
+    else:
+        shared_ids = select(ProjectShare.project_id).where(
+            ProjectShare.shared_with_user_id == user_id
+        )
+        active_count_q = select(func.count()).select_from(Project).where(
+            Project.status == ProjectStatus.ACTIVE,
+            or_(
+                Project.created_by == user_id,
+                Project.id.in_(shared_ids),
+            ),
+        )
     active_result = await db.execute(active_count_q)
     active_projects = active_result.scalar() or 0
 
-    # Total quotes and total hours (quotes are owned by user via created_by)
-    quotes_count_q = select(func.count()).select_from(Quote).where(Quote.created_by == user_id)
+    # Quote scope: quotes on projects the user can see (by project_id)
+    if current_user.is_admin:
+        quote_project_scope = None  # no filter = all quotes
+    else:
+        shared_ids = select(ProjectShare.project_id).where(
+            ProjectShare.shared_with_user_id == user_id
+        )
+        quote_project_scope = or_(
+            Quote.project_id.in_(select(Project.id).where(Project.created_by == user_id)),
+            Quote.project_id.in_(shared_ids),
+        )
+
+    # Total quotes and total hours
+    if quote_project_scope is None:
+        quotes_count_q = select(func.count()).select_from(Quote)
+        hours_q = select(func.coalesce(func.sum(Quote.total_hours), Decimal("0"))).select_from(Quote)
+        pending_q = select(func.count()).select_from(Quote).where(Quote.status == QuoteStatus.DRAFT)
+    else:
+        quotes_count_q = select(func.count()).select_from(Quote).where(quote_project_scope)
+        hours_q = (
+            select(func.coalesce(func.sum(Quote.total_hours), Decimal("0")))
+            .select_from(Quote)
+            .where(quote_project_scope)
+        )
+        pending_q = select(func.count()).select_from(Quote).where(
+            quote_project_scope,
+            Quote.status == QuoteStatus.DRAFT,
+        )
+
     quotes_result = await db.execute(quotes_count_q)
     total_quotes = quotes_result.scalar() or 0
 
-    hours_q = select(func.coalesce(func.sum(Quote.total_hours), Decimal("0"))).where(
-        Quote.created_by == user_id
-    )
     hours_result = await db.execute(hours_q)
     total_hours_value = hours_result.scalar()
     if total_hours_value is None:
         total_hours_value = Decimal("0")
     total_hours_estimated = float(total_hours_value)
 
-    # Pending quotes (draft only; "generating" is a transient frontend state)
-    pending_q = select(func.count()).select_from(Quote).where(
-        Quote.created_by == user_id,
-        Quote.status == QuoteStatus.DRAFT,
-    )
     pending_result = await db.execute(pending_q)
     pending_quotes = pending_result.scalar() or 0
 

@@ -32,8 +32,12 @@ import { QuoteEditPage } from '@/pages/QuoteEdit'
 // Utility pages
 import SettingsPage from '@/pages/Settings'
 import HelpPage from '@/pages/Help'
+import ApprovalRequestsPage from '@/pages/ApprovalRequests'
+import UsersPage from '@/pages/admin/Users'
+import AuditLogsPage from '@/pages/admin/AuditLogs'
 import NotFoundPage from '@/pages/NotFound'
 import UnauthorizedPage from '@/pages/Unauthorized'
+import { APPROVER_ROLES, ADMIN_ROLES } from '@/constants/roles'
 
 function App() {
   const { checkAuth } = useAuthStore()
@@ -91,6 +95,36 @@ function App() {
         <Route path="/quotes" element={<Navigate to="/projects" replace />} />
         <Route path="/quotes/new" element={<Navigate to="/projects" replace />} />
         <Route path="/quotes/:id" element={<Navigate to="/projects" replace />} />
+
+        {/* Approvals (Super PM / Admin) - route-level guard */}
+        <Route
+          path="/approval-requests"
+          element={
+            <ProtectedRoute allowedRoles={[...APPROVER_ROLES]}>
+              <ApprovalRequestsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin: User management (Admin only) */}
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES]}>
+              <UsersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin: Activity logs (Admin only) */}
+        <Route
+          path="/admin/logs"
+          element={
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES]}>
+              <AuditLogsPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Settings and Help */}
         <Route path="/settings" element={<SettingsPage />} />

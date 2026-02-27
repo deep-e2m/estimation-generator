@@ -487,6 +487,12 @@
   padding: var(--space-5) var(--space-6);
 }
 
+/* Full-width admin layout (Users, Activity Logs) */
+.page-container.admin-container {
+  max-width: 100%;
+  padding: var(--space-5) var(--space-6);
+}
+
 /* Page header */
 .page-header {
   display: flex;

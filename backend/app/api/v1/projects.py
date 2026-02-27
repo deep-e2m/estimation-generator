@@ -12,14 +12,26 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from app.config import get_settings
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
+from app.api.dependencies import (
+    ActiveUser,
+    DbSession,
+    api_error,
+    get_project_with_access,
+    get_project_with_owner_or_admin,
+    get_project_with_permission,
+)
 from app.models.client import Client
+from app.models.project_share import AccessLevel, ProjectShare
 from app.models.document import Document, DocumentType
 from app.models.project import Platform, Project, ProjectStatus
 from app.models.quote import Quote
+from app.models.audit_log import AuditLog, ActionOutcome
+from app.models.user import User
+from app.services import audit
+from app.schemas.audit_log import AuditLogResponse, AuditLogsListResponse
 from app.schemas.project import (
     CheckContentQualityData,
     CheckContentQualityRequest,
@@ -404,6 +416,25 @@ async def create_project(
 
     logger.info("Project created: id=%s, name=%s", new_project.id, new_project.name)
 
+    # Audit log: project created
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="project.created",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="project",
+            resource_id=new_project.id,
+            project_id=new_project.id,
+            metadata={
+                "name": new_project.name,
+                "platform": new_project.platform.value if new_project.platform else None,
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for project creation: %s", e)
+
     return ProjectDataResponse(
         success=True,
         data=new_project,
@@ -442,12 +473,24 @@ async def list_projects(
         limit,
     )
 
-    # Build base query with eager loads for client
+    # Build base query: own projects + shared projects; admin sees all
     base_query = (
         select(Project)
         .options(selectinload(Project.client))
-        .where(Project.created_by == current_user.id)
     )
+    if current_user.is_admin:
+        pass  # no filter: admin sees all
+    else:
+        # Own projects OR projects shared with this user
+        subq = select(ProjectShare.project_id).where(
+            ProjectShare.shared_with_user_id == current_user.id
+        )
+        base_query = base_query.where(
+            or_(
+                Project.created_by == current_user.id,
+                Project.id.in_(subq),
+            )
+        )
 
     # Apply filters
     if status_filter:
@@ -616,9 +659,12 @@ async def update_project(
 ) -> ProjectDataResponse:
     logger.info("Updating project: id=%s, user=%s", project_id, current_user.email)
 
-    project = await get_project_with_access(project_id, current_user, db)
+    project, _ = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.EDIT_CONTENT
+    )
 
     update_data = project_data.model_dump(exclude_unset=True)
+    changes = list(update_data.keys())  # Track which fields changed
     for field, value in update_data.items():
         setattr(project, field, value)
 
@@ -626,6 +672,22 @@ async def update_project(
     await db.refresh(project)
 
     logger.info("Project updated: id=%s", project.id)
+
+    # Audit log: project updated
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="project.updated",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="project",
+            resource_id=project.id,
+            project_id=project.id,
+            metadata={"changes": changes},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for project update: %s", e)
 
     # Get quote count
     quote_count_query = select(func.count()).where(Quote.project_id == project.id)
@@ -660,7 +722,7 @@ async def delete_project(
 ) -> ProjectDeleteResponse:
     logger.info("Deleting project: id=%s, user=%s", project_id, current_user.email)
 
-    project = await get_project_with_access(project_id, current_user, db)
+    project = await get_project_with_owner_or_admin(project_id, current_user, db)
     project_name = project.name
 
     await db.delete(project)
@@ -668,7 +730,113 @@ async def delete_project(
 
     logger.info("Project deleted: id=%s, name=%s", project_id, project_name)
 
+    # Audit log: project deleted
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="project.deleted",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="project",
+            resource_id=project_id,
+            project_id=project_id,
+            metadata={"name": project_name},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for project deletion: %s", e)
+
     return ProjectDeleteResponse(
         success=True,
         data={"message": f"Project '{project_name}' deleted successfully"},
+    )
+
+
+@router.get("/{project_id}/activity", response_model=AuditLogsListResponse)
+async def get_project_activity(
+    project_id: UUID,
+    current_user: ActiveUser,
+    db: DbSession,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    per_page: int = Query(50, ge=1, le=100, description="Items per page"),
+) -> AuditLogsListResponse:
+    """
+    Get activity log for a specific project.
+
+    Only users with access to the project (owner, shared users, admin) can view.
+    Returns logs ordered by timestamp descending (most recent first).
+    """
+    # Verify access (reuses existing helper which checks owner, shared users, admin)
+    await get_project_with_access(project_id, current_user, db)
+
+    logger.info(
+        "User %s requested activity for project %s: page=%d, per_page=%d",
+        current_user.email,
+        project_id,
+        page,
+        per_page,
+    )
+
+    # Query audit logs filtered by project_id with user join
+    query = (
+        select(
+            AuditLog,
+            User.full_name,
+            User.email,
+        )
+        .outerjoin(User, AuditLog.actor_user_id == User.id)
+        .where(AuditLog.project_id == project_id)
+        .order_by(AuditLog.timestamp.desc())
+    )
+
+    # Get total count
+    count_query = select(func.count()).select_from(
+        query.alias()
+    )
+    total = await db.scalar(count_query) or 0
+
+    # Paginate
+    offset = (page - 1) * per_page
+    results = await db.execute(query.offset(offset).limit(per_page))
+    rows = results.all()
+
+    # Map to response
+    logs = []
+    for row in rows:
+        audit_log = row[0]
+        actor_name = row[1]
+        actor_email = row[2]
+
+        logs.append(
+            AuditLogResponse(
+                id=audit_log.id,
+                actor_user_id=audit_log.actor_user_id,
+                actor_role=audit_log.actor_role,
+                actor_name=actor_name,
+                actor_email=actor_email,
+                action=audit_log.action,
+                outcome=audit_log.outcome.value,
+                resource_type=audit_log.resource_type,
+                resource_id=audit_log.resource_id,
+                project_id=audit_log.project_id,
+                project_name=None,  # Not needed for project-scoped view
+                timestamp=audit_log.timestamp,
+                ip_address=audit_log.ip_address,
+                metadata=audit_log.metadata_,
+            )
+        )
+
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+
+    return AuditLogsListResponse(
+        success=True,
+        data=logs,
+        pagination=PaginationMeta(
+            page=page,
+            page_size=per_page,
+            total_items=total,
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_previous=page > 1,
+        ),
     )

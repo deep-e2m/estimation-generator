@@ -4,11 +4,22 @@
 
 import { z } from 'zod'
 
-// Email validation
+/** Allowed email domains for in-house use (registration and login). */
+export const ALLOWED_EMAIL_DOMAINS = ['e2m.solutions', 'e2msolution.com'] as const
+
 const emailSchema = z
   .string()
   .min(1, 'Email is required')
   .email('Please enter a valid email address')
+
+/** Email validation restricted to company domains (@e2m.solutions, @e2msolution.com). */
+export const companyEmailSchema = emailSchema.refine(
+  (email) => {
+    const domain = email.split('@')[1]?.toLowerCase()
+    return domain != null && ALLOWED_EMAIL_DOMAINS.includes(domain)
+  },
+  { message: 'Please use your company email (@e2m.solutions or @e2msolution.com).' }
+)
 
 // Password validation with rules
 const passwordSchema = z
@@ -27,7 +38,7 @@ const simplePasswordSchema = z.string().min(1, 'Password is required')
  * Login form schema
  */
 export const loginSchema = z.object({
-  email: emailSchema,
+  email: companyEmailSchema,
   password: simplePasswordSchema,
   remember_me: z.boolean().optional(),
 })
@@ -39,7 +50,7 @@ export type LoginFormData = z.infer<typeof loginSchema>
  */
 export const registerSchema = z
   .object({
-    email: emailSchema,
+    email: companyEmailSchema,
     full_name: z
       .string()
       .min(1, 'Full name is required')
@@ -60,7 +71,7 @@ export type RegisterFormData = z.infer<typeof registerSchema>
  * Forgot password form schema
  */
 export const forgotPasswordSchema = z.object({
-  email: emailSchema,
+  email: companyEmailSchema,
 })
 
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>

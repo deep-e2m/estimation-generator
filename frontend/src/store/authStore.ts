@@ -229,6 +229,46 @@ export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenti
 export const useAuthLoading = () => useAuthStore((state) => state.isLoading)
 export const useAuthError = () => useAuthStore((state) => state.error)
 
+// Role helpers (accept optional user for use outside React)
+export function isAdmin(user: { role: string } | null | undefined): boolean {
+  return user?.role === 'admin'
+}
+export function isPM(user: { role: string } | null | undefined): boolean {
+  return user?.role === 'pm'
+}
+export function isSuperPM(user: { role: string } | null | undefined): boolean {
+  return user?.role === 'super_pm'
+}
+export function isDev(user: { role: string } | null | undefined): boolean {
+  return user?.role === 'dev'
+}
+export function canCreateProject(user: { role: string } | null | undefined): boolean {
+  if (!user) return false
+  return ['admin', 'pm', 'super_pm', 'dev'].includes(user.role)
+}
+/** Only super_pm can approve estimations; admin is tech-level and does not use approval workflow. */
+export function canApproveEstimations(user: { role: string } | null | undefined): boolean {
+  if (!user) return false
+  return user.role === 'super_pm'
+}
+export function canShareProject(user: { role: string } | null | undefined): boolean {
+  if (!user) return false
+  return ['admin', 'pm', 'super_pm'].includes(user.role)
+}
+export function canManageUsers(user: { role: string } | null | undefined): boolean {
+  return user?.role === 'admin'
+}
+
+// Role selector hooks (use current user from store)
+export const useIsAdmin = () => useAuthStore((s) => isAdmin(s.user))
+export const useIsPM = () => useAuthStore((s) => isPM(s.user))
+export const useIsSuperPM = () => useAuthStore((s) => isSuperPM(s.user))
+export const useIsDev = () => useAuthStore((s) => isDev(s.user))
+export const useCanCreateProject = () => useAuthStore((s) => canCreateProject(s.user))
+export const useCanApproveEstimations = () => useAuthStore((s) => canApproveEstimations(s.user))
+export const useCanShareProject = () => useAuthStore((s) => canShareProject(s.user))
+export const useCanManageUsers = () => useAuthStore((s) => canManageUsers(s.user))
+
 /**
  * Ensure we have a valid (non-expired) access token.
  *

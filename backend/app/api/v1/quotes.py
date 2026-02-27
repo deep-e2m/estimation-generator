@@ -23,6 +23,8 @@ from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_w
 from app.models.document import Document, DocumentType
 from app.models.project import Project
 from app.models.quote import Complexity, Quote, QuoteStatus
+from app.models.audit_log import ActionOutcome
+from app.services import audit
 from app.schemas.project import PaginationMeta
 from app.schemas.quote import (
     AnalysisMetadata,
@@ -789,6 +791,25 @@ async def generate_quote(
         generation_time_ms,
     )
 
+    # Audit log: quote created
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.created",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=new_quote.id,
+            project_id=project_id,
+            metadata={
+                "title": new_quote.title,
+                "total_hours": float(new_quote.total_hours),
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote creation: %s", e)
+
     # Generate quote number from ID
     quote_number = f"QT-{str(new_quote.id)[:8].upper()}"
 
@@ -1105,6 +1126,23 @@ async def update_quote(
 
     logger.info("Quote updated: id=%s", quote.id)
 
+    # Audit log: quote updated
+    try:
+        changes = list(update_data.keys())
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.updated",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=quote.id,
+            project_id=quote.project_id,
+            metadata={"changes": changes},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote update: %s", e)
+
     response_data = QuoteResponse(
         id=quote.id,
         quote_number=f"QT-{str(quote.id)[:8].upper()}",
@@ -1224,6 +1262,25 @@ async def update_quote_status(
 
     logger.info("Quote status updated: id=%s, status=%s", quote.id, quote.status.value)
 
+    # Audit log: quote status changed
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.status.changed",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=quote.id,
+            project_id=quote.project_id,
+            metadata={
+                "old_status": current_status.value,
+                "new_status": new_status.value,
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote status change: %s", e)
+
     # Ingest approved quote into RAG knowledge base (own session; do not pass db)
     if new_status == QuoteStatus.APPROVED:
         try:
@@ -1304,11 +1361,28 @@ async def delete_quote(
         )
 
     quote_title = quote.title
+    quote_project_id = quote.project_id
 
     await db.delete(quote)
     await db.commit()
 
     logger.info("Quote deleted: id=%s, title=%s", quote_id, quote_title)
+
+    # Audit log: quote deleted
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.deleted",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=quote_id,
+            project_id=quote_project_id,
+            metadata={"title": quote_title},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote deletion: %s", e)
 
     return QuoteDeleteResponse(
         success=True,
@@ -1996,6 +2070,22 @@ async def export_quote_docx(
 
     logger.info("DOCX export completed: quote_id=%s, filename=%s", quote_id, filename)
 
+    # Audit log: quote exported
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.exported",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=quote_id,
+            project_id=project_id,
+            metadata={"format": "docx", "filename": filename},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote export: %s", e)
+
     # Return as downloadable file
     return StreamingResponse(
         io.BytesIO(docx_bytes),
@@ -2428,6 +2518,22 @@ async def export_quote_pdf(
     filename = f"Proposal_{safe_title}_{quote.created_at.strftime('%Y%m%d')}.pdf"
 
     logger.info("PDF export completed: quote_id=%s, filename=%s", quote_id, filename)
+
+    # Audit log: quote exported
+    try:
+        await audit.log_action(
+            db=db,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            action="quote.exported",
+            outcome=ActionOutcome.SUCCESS,
+            resource_type="quote",
+            resource_id=quote_id,
+            project_id=project_id,
+            metadata={"format": "pdf", "filename": filename},
+        )
+    except Exception as e:
+        logger.error("Failed to log audit for quote export: %s", e)
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

@@ -2,7 +2,7 @@
  * Authentication Types
  */
 
-export type UserRole = 'admin' | 'pm'
+export type UserRole = 'admin' | 'pm' | 'super_pm' | 'dev'
 
 export interface User {
   id: string
@@ -11,6 +11,7 @@ export interface User {
   role: UserRole
   company_name?: string
   avatar_url?: string
+  is_active?: boolean
   created_at: string
   updated_at?: string
 }
@@ -21,10 +22,14 @@ export interface LoginCredentials {
   remember_me?: boolean
 }
 
+/** Roles that can be selected during self-registration (admin is assigned only by existing admins) */
+export type RegisterableRole = 'pm' | 'super_pm' | 'dev'
+
 export interface RegisterData {
   email: string
   password: string
   full_name: string
+  role: RegisterableRole
   company_name?: string
 }
 

@@ -22,11 +22,17 @@ import {
   ListChecks,
   Link2,
   Eye,
+  Share2,
+  Send,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { parseTotalHoursFromContent, parseRequirementsCountFromContent } from '@/lib/quote-content-parse';
 import { apiClient, getErrorMessage, projectsService, quotesService } from '@/services';
+import { useCanShareProject } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
+import { ShareProjectDialog } from '@/components/project/ShareProjectDialog';
+import { SendForApprovalDialog } from '@/components/approval/SendForApprovalDialog';
+import { ProjectSharesList } from '@/components/project/ProjectSharesList';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -34,7 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from '@/components/ui/Dialog';
+} from '@/components/ui';
 import { EstimateChat } from '@/components/estimate/EstimateChat';
 import type {
   Project,
@@ -92,8 +98,12 @@ export function ProjectDetailPage() {
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewVideoBlobUrl, setPreviewVideoBlobUrl] = useState<string | null>(null);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const saveStatusResetTimeoutRef = useRef<number | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sendApprovalDialogOpen, setSendApprovalDialogOpen] = useState(false);
+  const canShare = useCanShareProject();
 
   // Load project data
   useEffect(() => {
@@ -381,8 +391,24 @@ export function ProjectDetailPage() {
             <span className="project-detail-breadcrumb-current">{project.name}</span>
           </div>
         </div>
-
+        {canShare && id && (
+          <div className="project-detail-header-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)} leftIcon={<Share2 style={{ width: 16, height: 16 }} />}>
+              Share
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSendApprovalDialogOpen(true)} leftIcon={<Send style={{ width: 16, height: 16 }} />}>
+              Send for approval
+            </Button>
+          </div>
+        )}
       </header>
+
+      {canShare && id && (
+        <>
+          <ShareProjectDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} projectId={id} />
+          <SendForApprovalDialog open={sendApprovalDialogOpen} onOpenChange={setSendApprovalDialogOpen} projectId={id} />
+        </>
+      )}
 
       {/* Project Title Section - Compact Layout */}
       <div className="project-detail-title-section">
@@ -491,7 +517,7 @@ export function ProjectDetailPage() {
             {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsToShow.length > 0 && (
               <>
                 <div className="project-detail-reference-urls-list">
-                  {referenceUrlsToShow.map((url) => (
+                  {referenceUrlsToShow.map((url: string) => (
                     <div key={url} className="project-detail-reference-url-item-row">
                       <a
                         href={url}
@@ -518,6 +544,17 @@ export function ProjectDetailPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+        {canShare && id && (
+          <div className="project-detail-sharing-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--color-gray-200)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span className="project-detail-description-label">Shared with</span>
+              <Button variant="ghost" size="sm" onClick={() => setShareDialogOpen(true)}>
+                Share with someone
+              </Button>
+            </div>
+            <ProjectSharesList projectId={id} />
           </div>
         )}
       </div>

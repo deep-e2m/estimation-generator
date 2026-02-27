@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.config import settings
+from app.config import is_allowed_email_domain, settings
 
 
 # =============================================================================
@@ -72,6 +72,10 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for user registration request."""
 
+    role: Literal["pm", "super_pm", "dev"] = Field(
+        default="pm",
+        description="User's role (pm, super_pm, or dev). Admin cannot be self-selected.",
+    )
     password: str = Field(
         ...,
         min_length=settings.PASSWORD_MIN_LENGTH,
@@ -120,6 +124,16 @@ class UserCreate(UserBase):
             raise ValueError("Full name must be at least 2 characters")
         return v
 
+    @field_validator("email")
+    @classmethod
+    def validate_email_domain(cls, v: str) -> str:
+        """Restrict registration to company email domains only."""
+        if not is_allowed_email_domain(v):
+            raise ValueError(
+                "Only company email addresses are allowed (e.g. @e2m.solutions or @e2msolution.com)."
+            )
+        return v.lower()
+
 
 class UserResponse(BaseModel):
     """Schema for user data in responses."""
@@ -130,8 +144,12 @@ class UserResponse(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     full_name: str = Field(..., description="User's full name")
     company_name: str | None = Field(None, description="User's company name")
-    role: str = Field(..., description="User's role (admin or pm)")
+    role: str = Field(
+        ...,
+        description="User's role (admin, pm, super_pm, or dev)",
+    )
     avatar_url: str | None = Field(None, description="URL to user's avatar")
+    is_active: bool = Field(True, description="Whether the user account is active")
     created_at: datetime = Field(..., description="When user was created")
     updated_at: datetime | None = Field(None, description="When user was last updated")
 
@@ -162,6 +180,16 @@ class LoginRequest(BaseModel):
         description="User's password",
         examples=["SecureP@ss123"],
     )
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_domain(cls, v: str) -> str:
+        """Restrict login to company email domains only."""
+        if not is_allowed_email_domain(v):
+            raise ValueError(
+                "Only company email addresses are allowed (e.g. @e2m.solutions or @e2msolution.com)."
+            )
+        return v.lower()
 
 
 class TokenResponse(BaseModel):
@@ -241,6 +269,16 @@ class PasswordResetRequest(BaseModel):
         description="Email address for password reset",
         examples=["user@example.com"],
     )
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_domain(cls, v: str) -> str:
+        """Restrict password reset to company email domains only."""
+        if not is_allowed_email_domain(v):
+            raise ValueError(
+                "Only company email addresses are allowed (e.g. @e2m.solutions or @e2msolution.com)."
+            )
+        return v.lower()
 
 
 class PasswordResetConfirm(BaseModel):

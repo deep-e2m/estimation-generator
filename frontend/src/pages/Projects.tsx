@@ -22,6 +22,7 @@ import {
   Edit,
   CheckCircle,
   RotateCcw,
+  History,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/dialog'
 import { projectsService } from '@/services'
 import { formatRelativeTime } from '@/lib/utils'
+import { ProjectActivityModal } from '@/components/project/ProjectActivityModal'
 import type { ProjectStatus } from '@/types'
 import type { ProjectSummary, ProjectUpdate } from '@/types/project'
 
@@ -106,6 +108,7 @@ function ProjectCard({
   }
   const dropdownOptions = [
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
+    { value: 'activity', label: 'View Activity', icon: <History style={{ width: 16, height: 16 }} /> },
     ...statusActions,
     { value: 'divider', label: '', divider: true },
     { value: 'delete', label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true },
@@ -315,6 +318,9 @@ export default function Projects() {
   const [dialogProject, setDialogProject] = useState<ProjectSummary | null>(null)
   const [editForm, setEditForm] = useState<ProjectEditForm | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [activityModalOpen, setActivityModalOpen] = useState(false)
+  const [activityProjectId, setActivityProjectId] = useState<string | null>(null)
+  const [activityProjectName, setActivityProjectName] = useState<string>('')
 
   // Sync URL search param into state (e.g. from global header search)
   useEffect(() => {
@@ -388,6 +394,11 @@ export default function Projects() {
     switch (action) {
       case 'edit':
         handleOpenDialog(project)
+        break
+      case 'activity':
+        setActivityProjectId(project.id)
+        setActivityProjectName(project.name || '')
+        setActivityModalOpen(true)
         break
       case 'active':
         try {
@@ -728,6 +739,19 @@ export default function Projects() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {activityProjectId && (
+        <ProjectActivityModal
+          projectId={activityProjectId}
+          projectName={activityProjectName}
+          open={activityModalOpen}
+          onClose={() => {
+            setActivityModalOpen(false)
+            setActivityProjectId(null)
+            setActivityProjectName('')
+          }}
+        />
+      )}
     </div>
   )
 }

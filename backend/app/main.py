@@ -13,7 +13,21 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, chat, clients, dashboard, documents, files, knowledge, projects, quotes
+from app.api.v1 import (
+    approvals,
+    audit_logs,
+    auth,
+    chat,
+    clients,
+    dashboard,
+    documents,
+    files,
+    knowledge,
+    project_shares,
+    projects,
+    quotes,
+    users,
+)
 from app.config import settings
 from app.core.database import close_db_connection, init_db_connection
 from app.core.redis import close_redis_client, get_redis_client, redis_ping
@@ -115,9 +129,30 @@ def create_application() -> FastAPI:
     )
 
     app.include_router(
+        project_shares.router,
+        prefix=f"{settings.API_V1_PREFIX}/projects",
+        tags=["Project Shares"],
+    )
+    app.include_router(
         projects.router,
         prefix=f"{settings.API_V1_PREFIX}/projects",
         tags=["Projects"],
+    )
+    app.include_router(
+        approvals.router,
+        prefix=settings.API_V1_PREFIX,
+        tags=["Approvals"],
+    )
+    app.include_router(
+        users.router,
+        prefix=f"{settings.API_V1_PREFIX}/users",
+        tags=["Users"],
+    )
+
+    app.include_router(
+        audit_logs.router,
+        prefix=settings.API_V1_PREFIX,
+        tags=["Audit Logs"],
     )
 
     app.include_router(

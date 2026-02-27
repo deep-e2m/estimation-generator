@@ -15,3 +15,6 @@ export { projectsService } from './projects.service';
 export { quotesService } from './quotes.service';
 export { chatService } from './chat.service';
 export { documentsService } from './documents.service';
+export { projectSharesService } from './project-shares.service';
+export { approvalsService } from './approvals.service';
+export { usersService } from './users.service';

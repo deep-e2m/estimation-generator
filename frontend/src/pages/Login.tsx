@@ -17,10 +17,11 @@ import { Mail, Lock, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/store/authStore'
+import { companyEmailSchema } from '@/lib/validations'
 
-// Form validation schema
+// Form validation schema (company email only: @e2m.solutions or @e2msolution.com)
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  email: companyEmailSchema,
   password: z.string().min(1, 'Password is required'),
   remember: z.boolean().optional(),
 })
@@ -157,6 +158,7 @@ export default function Login() {
               <label htmlFor="email" className="label">
                 Email Address
               </label>
+              <p className="auth-field-hint">Use your company email (@e2m.solutions or @e2msolution.com)</p>
               <div className={`auth-input-wrapper ${errors.email ? 'auth-input-wrapper-error' : ''}`}>
                 <div className="auth-input-icon-box">
                   <Mail style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
@@ -165,7 +167,7 @@ export default function Login() {
                   id="email"
                   type="email"
                   className="auth-input"
-                  placeholder="you@example.com"
+                  placeholder="name@e2m.solutions"
                   autoComplete="email"
                   {...register('email')}
                 />

@@ -12,15 +12,24 @@ import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react'
+import { Mail, Lock, User, ArrowRight, Sparkles, Briefcase } from 'lucide-react'
+import type { RegisterableRole } from '@/types/auth.types'
+
+const REGISTER_ROLE_OPTIONS: { value: RegisterableRole; label: string }[] = [
+  { value: 'pm', label: 'Project Manager (PM)' },
+  { value: 'super_pm', label: 'Superior PM (can approve estimations)' },
+  { value: 'dev', label: 'Developer' },
+]
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/store/authStore'
+import { companyEmailSchema } from '@/lib/validations'
 
-// Form validation schema
+// Form validation schema (company email only: @e2m.solutions or @e2msolution.com)
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email address'),
+  email: companyEmailSchema,
+  role: z.enum(['pm', 'super_pm', 'dev'], { message: 'Please select your role' }),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
@@ -53,6 +62,7 @@ export default function Register() {
     defaultValues: {
       full_name: '',
       email: '',
+      role: 'pm' as RegisterableRole,
       password: '',
       confirmPassword: '',
       terms: false,
@@ -68,6 +78,7 @@ export default function Register() {
         email: data.email,
         password: data.password,
         full_name: data.full_name,
+        role: data.role,
       })
       toast.success('Account created successfully')
       navigate('/dashboard', { replace: true })
@@ -177,11 +188,39 @@ export default function Register() {
               )}
             </div>
 
+            {/* Role field */}
+            <div className="auth-form-field">
+              <label htmlFor="role" className="label">
+                I am signing up as
+              </label>
+              <div className={`auth-input-wrapper ${errors.role ? 'auth-input-wrapper-error' : ''}`}>
+                <div className="auth-input-icon-box">
+                  <Briefcase style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                </div>
+                <select
+                  id="role"
+                  className="auth-input"
+                  aria-label="Account role"
+                  {...register('role')}
+                >
+                  {REGISTER_ROLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {errors.role && (
+                <p className="auth-error-text">{errors.role.message}</p>
+              )}
+            </div>
+
             {/* Email field */}
             <div className="auth-form-field">
               <label htmlFor="email" className="label">
                 Email Address
               </label>
+              <p className="auth-field-hint">Use your company email (@e2m.solutions or @e2msolution.com)</p>
               <div className={`auth-input-wrapper ${errors.email ? 'auth-input-wrapper-error' : ''}`}>
                 <div className="auth-input-icon-box">
                   <Mail style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
@@ -190,7 +229,7 @@ export default function Register() {
                   id="email"
                   type="email"
                   className="auth-input"
-                  placeholder="you@example.com"
+                  placeholder="name@e2m.solutions"
                   autoComplete="email"
                   {...register('email')}
                 />
