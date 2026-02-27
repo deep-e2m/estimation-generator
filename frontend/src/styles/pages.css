@@ -16,7 +16,7 @@
 .auth-branding {
   display: none;
   width: 50%;
-  background: linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-800));
+  background: linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-900));
   position: relative;
   overflow: hidden;
 }
@@ -177,7 +177,7 @@
   right: 80px;
   width: 384px;
   height: 384px;
-  background-color: rgba(99, 102, 241, 0.2);
+  background-color: rgba(30, 64, 175, 0.2);
   border-radius: var(--radius-full);
   filter: blur(60px);
 }
@@ -210,7 +210,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-800));
+  background: linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-900));
   border-radius: var(--radius-2xl);
   margin-bottom: var(--space-4);
 }
@@ -255,7 +255,7 @@
 
 .auth-input-wrapper:focus-within {
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.12);
 }
 
 .auth-input-wrapper-error {
@@ -626,7 +626,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%);
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, rgba(30, 64, 175, 0.06) 100%);
   border-left: 4px solid var(--color-purple-500);
   border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
   font-size: var(--font-size-sm);
@@ -1576,7 +1576,7 @@
 
 .projects-search-box:focus-within {
   border-color: var(--color-primary-400);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .projects-search-box input {
@@ -1625,7 +1625,7 @@
   background-color: var(--color-primary-600);
   border-color: var(--color-primary-600);
   color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.25);
 }
 
 .projects-status-tab-active:hover {
@@ -1935,7 +1935,7 @@
   background-color: var(--color-primary-600);
   border-color: var(--color-primary-600);
   color: white;
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.25);
 }
 
 .projects-pagination-btn-active:hover:not(:disabled) {
@@ -2097,7 +2097,7 @@
 .projects-detail-dialog-textarea:focus {
   outline: none;
   border-color: var(--color-primary-400);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .projects-detail-dialog-textarea {
@@ -2347,7 +2347,7 @@
 .admin-filter-input:focus {
   outline: none;
   border-color: var(--color-primary-400);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .admin-filter-select {
@@ -2418,7 +2418,7 @@
   height: 44px;
   padding: 0 var(--space-5);
   font-weight: var(--font-weight-bold);
-  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 10px 15px -3px rgba(30, 64, 175, 0.18);
 }
 
 .user-management-card {
@@ -2559,7 +2559,7 @@
 }
 
 .user-management-filter-dropdown:hover {
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(30, 64, 175, 0.25);
 }
 
 .user-management-filter-dropdown .filter-icon {
@@ -2665,7 +2665,7 @@
 
 .user-card:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(30, 64, 175, 0.3);
 }
 
 .user-card-top {
@@ -2698,7 +2698,7 @@
 
 .user-card-menu-btn:hover {
   color: var(--color-primary-600);
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(30, 64, 175, 0.12);
 }
 
 .user-card-body {
@@ -2744,7 +2744,7 @@
 }
 
 .badge-admin {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(30, 64, 175, 0.12);
   color: var(--color-primary-600);
 }
 

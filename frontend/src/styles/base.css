@@ -24,9 +24,47 @@ html {
 
 body {
   min-height: 100vh;
-  background-color: var(--color-gray-50);
   color: var(--color-gray-900);
   overflow-x: hidden;
+  /* Layered graphic background: base → gradient depth → diagonal stripes */
+  background-color: var(--bg-base, #fafafa);
+  background-image:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0,
+      transparent calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) var(--bg-diagonal-size, 120px)
+    ),
+    repeating-linear-gradient(
+      -105deg,
+      transparent 0,
+      transparent calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) var(--bg-diagonal-size, 120px)
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) calc(var(--bg-diagonal-size, 120px) * 2)
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) calc(var(--bg-diagonal-size, 120px) * 2)
+    ),
+    linear-gradient(160deg, #ffffff 0%, #f8fafc 45%, #f1f5f9 100%);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-attachment: scroll;
 }
 
 #root {

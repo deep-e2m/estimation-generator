@@ -29,19 +29,9 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// User Types (prefer auth.types UserRole for RBAC: admin | pm | super_pm | dev)
-export type UserRole = 'Admin' | 'PM';
-
-export interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  role: UserRole;
-  company_name?: string;
-  avatar_url?: string;
-  created_at: string;
-  updated_at?: string;
-}
+// Import canonical User/UserRole from auth.types (supports all 4 RBAC roles: admin | pm | super_pm | dev)
+import type { User, UserRole } from './auth.types'
+export type { User, UserRole }
 
 // Platform Type (used by both Project and Quote)
 export type Platform = 'wordpress';

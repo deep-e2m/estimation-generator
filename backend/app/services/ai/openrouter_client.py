@@ -102,6 +102,8 @@ class OpenRouterClient:
         "document_vision": "google/gemini-2.5-flash",
         # Chat, clarification questions, requirements analysis
         "fast": "google/gemini-2.5-flash-lite",
+        # Avatar placeholder gender classification (low token, low cost)
+        "avatar_gender": "google/gemini-2.5-flash-lite",
         # RAG embeddings
         "embedding": "openai/text-embedding-3-small",
         # Last-resort fallback
@@ -117,6 +119,7 @@ class OpenRouterClient:
         "vision": ["claude"],
         "document_vision": ["vision", "claude"],
         "fast": ["generation_fallback", "generation"],
+        "avatar_gender": ["fast"],
     }
 
     def __init__(

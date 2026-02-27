@@ -99,7 +99,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Only watch app code for reload; delay reduces port-binding races on reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-delay 0.5
     networks:
       - estimation-network
     healthcheck:

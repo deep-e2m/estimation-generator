@@ -163,6 +163,19 @@ docker compose exec db pg_isready -U postgres
 docker compose logs db
 ```
 
+### Backend reload crashes (WatchFiles / spawn)
+
+If the backend exits with a traceback in `SpawnProcess` / `subprocess_started` when files change, reload in Docker may be flaky on your setup. You can disable reload and restart the backend when needed:
+
+```bash
+# One-off run without reload
+docker compose run --rm -p 8000:8000 backend uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Or add a compose override: docker-compose.override.yml with backend command without --reload
+```
+
+For day-to-day backend dev with reload, run the backend locally (`cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`) and use Docker only for DB/Redis/frontend.
+
 ### Hot-reload not working
 
 For macOS/Windows, file watching may need polling:

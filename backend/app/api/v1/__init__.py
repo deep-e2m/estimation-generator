@@ -18,6 +18,7 @@ from app.api.v1 import (
     projects,
     quotes,
     users,
+    utils,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "projects",
     "quotes",
     "users",
+    "utils",
 ]

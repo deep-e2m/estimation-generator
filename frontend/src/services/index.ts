@@ -18,3 +18,4 @@ export { documentsService } from './documents.service';
 export { projectSharesService } from './project-shares.service';
 export { approvalsService } from './approvals.service';
 export { usersService } from './users.service';
+export { utilsService } from './utils.service';

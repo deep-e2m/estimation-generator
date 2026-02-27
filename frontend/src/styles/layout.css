@@ -10,7 +10,45 @@
 .layout {
   display: flex;
   min-height: 100vh;
-  background-color: var(--color-gray-50);
+  /* Match body graphic background so app canvas is consistent */
+  background-color: var(--bg-base, #fafafa);
+  background-image:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0,
+      transparent calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) var(--bg-diagonal-size, 120px)
+    ),
+    repeating-linear-gradient(
+      -105deg,
+      transparent 0,
+      transparent calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) calc(var(--bg-diagonal-size, 120px) - 1px),
+      var(--bg-stripe-subtle, rgba(226, 232, 240, 0.25)) var(--bg-diagonal-size, 120px)
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) calc(var(--bg-diagonal-size, 120px) * 2)
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) var(--bg-diagonal-size, 120px),
+      var(--bg-stripe, rgba(241, 245, 249, 0.5)) calc(var(--bg-diagonal-size, 120px) * 2)
+    ),
+    linear-gradient(160deg, #ffffff 0%, #f8fafc 45%, #f1f5f9 100%);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-attachment: scroll;
 }
 
 /* ============================================
@@ -59,13 +97,13 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-700));
+  background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-800));
   border-radius: var(--radius-xl);
   color: white;
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-lg);
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
 }
 
 .sidebar-logo-text {
@@ -220,17 +258,17 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: white;
-  background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+  background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-800));
   border-radius: var(--radius-xl);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
   transition: all var(--transition-normal);
   overflow: hidden;
   white-space: nowrap;
 }
 
 .nav-button-primary:hover {
-  background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-700));
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-900));
+  box-shadow: 0 6px 16px rgba(30, 64, 175, 0.3);
   transform: translateY(-1px);
 }
 
@@ -599,7 +637,7 @@
   transform: translateY(-50%);
   width: 3px;
   height: 60%;
-  background: linear-gradient(180deg, var(--color-primary-500), var(--color-primary-600));
+  background: linear-gradient(180deg, var(--color-primary-600), var(--color-primary-700));
   border-radius: 0 2px 2px 0;
 }
 

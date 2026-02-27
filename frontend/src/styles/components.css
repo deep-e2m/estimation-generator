@@ -83,13 +83,13 @@
 
 /* Button Variants */
 .btn-primary {
-  background: linear-gradient(to bottom right, var(--color-primary-500), var(--color-primary-700));
+  background: linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-800));
   color: white;
   box-shadow: var(--shadow-primary);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(to bottom right, var(--color-primary-600), var(--color-primary-800));
+  background: linear-gradient(to bottom right, var(--color-primary-700), var(--color-primary-900));
   box-shadow: var(--shadow-lg);
   transform: translateY(-1px);
 }
@@ -185,7 +185,7 @@
 .input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .input:disabled {
@@ -251,7 +251,7 @@
 .textarea:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .textarea-error {
@@ -303,7 +303,7 @@
 .select[data-state="open"] {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .select-content {

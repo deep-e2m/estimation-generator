@@ -300,7 +300,7 @@
 .estimation-chat-input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .estimation-chat-input:disabled {
@@ -1570,7 +1570,7 @@
 .chat-input-wrapper:focus-within {
   background: white;
   border-color: var(--color-primary-400);
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.12);
 }
 
 .chat-input {
@@ -1611,11 +1611,11 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.25);
 }
 
 .chat-send-button:hover:not(:disabled) {
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
 }
 
 .chat-send-button:disabled {
@@ -1688,7 +1688,7 @@
 
 .document-section-highlighted {
   border-color: var(--color-primary-300);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 .document-section-header {
@@ -3389,7 +3389,7 @@
 .estimation-mobile-tab.active {
   background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
   color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.25);
 }
 
 .estimation-mobile-tab:not(.active):hover {

@@ -51,13 +51,8 @@ interface AuthRouteProps {
 export function AuthRoute({ children }: AuthRouteProps) {
   const { isAuthenticated, isLoading } = useAuthStore()
 
-  // Show loading spinner while checking auth
-  if (isLoading) {
-    return <PageSpinner />
-  }
-
-  // Redirect to dashboard if already authenticated
-  if (isAuthenticated) {
+  // Only redirect once auth status is confirmed — don't block the form while loading
+  if (!isLoading && isAuthenticated) {
     return <Navigate to="/dashboard" replace />
   }
 

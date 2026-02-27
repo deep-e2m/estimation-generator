@@ -27,6 +27,7 @@ from app.api.v1 import (
     projects,
     quotes,
     users,
+    utils,
 )
 from app.config import settings
 from app.core.database import close_db_connection, init_db_connection
@@ -191,6 +192,12 @@ def create_application() -> FastAPI:
         tags=["Files"],
     )
 
+    app.include_router(
+        utils.router,
+        prefix=f"{settings.API_V1_PREFIX}/utils",
+        tags=["Utils"],
+    )
+
     return app
 
 
@@ -240,8 +247,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
 
-# Create the application instance
-app = create_application()
+# Create the application instance (wrap so reload subprocess failures log full traceback)
+try:
+    app = create_application()
+except Exception:
+    logger.exception("Failed to create application (check logs above for full traceback)")
+    raise
 
 
 @app.get("/health", tags=["Health"])

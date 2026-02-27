@@ -18,6 +18,9 @@ import { apiClient, getErrorMessage } from '@/services/api'
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 
+// Generation counter — incremented on login/logout so stale checkAuth calls are discarded
+let _checkAuthGeneration = 0
+
 interface AuthState {
   // State
   user: User | null
@@ -79,6 +82,8 @@ export const useAuthStore = create<AuthState>()(
 
       // Login action
       login: async (credentials: LoginCredentials) => {
+        // Invalidate any in-flight checkAuth so it won't overwrite our fresh login
+        ++_checkAuthGeneration
         set({ isLoading: true, error: null })
 
         try {
@@ -183,13 +188,18 @@ export const useAuthStore = create<AuthState>()(
         const token = getAccessToken()
 
         if (!token) {
-          set({ isAuthenticated: false, user: null })
+          set({ isAuthenticated: false, user: null, isLoading: false })
           return
         }
+
+        // Capture generation before any async work so we can detect stale calls
+        const generation = ++_checkAuthGeneration
 
         // Check if token is expired
         if (isTokenExpired(token)) {
           const refreshed = await get().refreshToken()
+          // If login() ran while we were refreshing, discard this result
+          if (generation !== _checkAuthGeneration) return
           if (!refreshed) {
             return
           }
@@ -199,6 +209,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           set({ isLoading: true })
           const response = await apiClient.get<{ success: boolean; data: User }>('/api/v1/auth/me')
+          // If login() ran while we were fetching /me, discard this stale result
+          if (generation !== _checkAuthGeneration) return
           // Backend wraps response in { success, data } structure
           set({
             user: response.data.data,
@@ -206,6 +218,8 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           })
         } catch {
+          // If login() ran while this was failing, don't log the user out
+          if (generation !== _checkAuthGeneration) return
           get().logout()
           set({ isLoading: false })
         }

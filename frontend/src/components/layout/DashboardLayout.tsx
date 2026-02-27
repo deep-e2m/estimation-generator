@@ -12,7 +12,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getUserAvatarUrl } from '@/lib/placeholderAvatars'
+import { useUserAvatarUrl } from '@/hooks'
 import {
   LayoutDashboard,
   FolderOpen,
@@ -140,6 +140,11 @@ function UserMenu() {
     navigate('/auth/login', { replace: true })
   }
 
+  const { url: avatarUrlResolved } = useUserAvatarUrl(
+    user?.avatar_url ?? undefined,
+    user?.full_name ?? ''
+  )
+
   return (
     <div className="user-menu">
       <button
@@ -149,7 +154,7 @@ function UserMenu() {
         aria-haspopup="true"
       >
         <Avatar
-          src={user ? getUserAvatarUrl(user.avatar_url, user.full_name) : undefined}
+          src={user ? avatarUrlResolved : undefined}
           alt={user?.full_name || 'User'}
           size="sm"
         />
