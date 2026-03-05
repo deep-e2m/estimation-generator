@@ -64,6 +64,14 @@ def _url_same_host(a: str, b: str) -> bool:
         return a == b
 
 
+def _scraped_data_dict(extra_data: dict | None) -> dict:
+    """Return reference_url_scraped_data as a dict. Handles legacy list or invalid format."""
+    val = (extra_data or {}).get("reference_url_scraped_data")
+    if isinstance(val, dict):
+        return val
+    return {}
+
+
 @router.post(
     "/check-content-quality",
     response_model=CheckContentQualityResponse,
@@ -193,8 +201,8 @@ async def reference_url_preview(
     )
     quote_result = await db.execute(quote_query)
     quote = quote_result.scalar_one_or_none()
+    scraped_data = _scraped_data_dict(quote.extra_data if quote else None)
     if quote and quote.extra_data:
-        scraped_data = quote.extra_data.get("reference_url_scraped_data") or {}
         # Match by canonical key first, then exact URL or trailing-slash variants
         stored = scraped_data.get(cache_key)
         if not stored:
@@ -233,7 +241,7 @@ async def reference_url_preview(
         target_url[:80] + "..." if len(target_url) > 80 else target_url,
         cache_key[:80] + "..." if len(cache_key) > 80 else cache_key,
         quote is not None,
-        list((quote.extra_data or {}).get("reference_url_scraped_data") or {}).keys() if quote and quote.extra_data else [],
+        list(_scraped_data_dict(quote.extra_data if quote else None)),
     )
 
     if not settings.ENABLE_URL_SCRAPING:
@@ -315,8 +323,8 @@ async def reference_url_site_preview(
     )
     quote_result = await db.execute(quote_query)
     quote = quote_result.scalar_one_or_none()
+    scraped_data = _scraped_data_dict(quote.extra_data if quote else None)
     if quote and quote.extra_data:
-        scraped_data = quote.extra_data.get("reference_url_scraped_data") or {}
         crawl_seed = quote.extra_data.get("reference_url_crawl_seed")
         # Case 1: Full crawl was used — return stored pages for same-host seed
         if crawl_seed and _url_same_host(seed_url, crawl_seed) and scraped_data:
