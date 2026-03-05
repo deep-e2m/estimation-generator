@@ -6,6 +6,7 @@ CRUD operations, listing with pagination, and content quality check.
 """
 
 import logging
+from urllib.parse import urlparse
 from math import ceil
 from typing import Optional
 from uuid import UUID
@@ -42,12 +43,8 @@ from app.schemas.project import (
     ReferenceUrlSitePreviewResponse,
 )
 from app.services.ai.llm_service import get_llm_service
-from app.services.reference_url_context import (
-    REFERENCE_URLS_HEADER,
-    build_reference_url_context,
-)
 from app.services.site_crawl_service import crawl_site
-from app.services.url_extraction import extract_urls
+from app.services.url_extraction import canonicalize_url_for_cache, extract_urls
 from app.services.url_scraping_service import scrape_urls
 
 logger = logging.getLogger(__name__)
@@ -57,6 +54,14 @@ router = APIRouter()
 
 # Max combined document text length for quality check (avoid token overflow)
 CONTENT_QUALITY_DOCUMENT_TEXT_CAP = 50_000
+
+
+def _url_same_host(a: str, b: str) -> bool:
+    """Return True if both URLs have the same netloc (host)."""
+    try:
+        return urlparse(a).netloc and urlparse(a).netloc == urlparse(b).netloc
+    except Exception:
+        return a == b
 
 
 @router.post(
@@ -106,21 +111,8 @@ async def check_content_quality(
     if len(document_text) > CONTENT_QUALITY_DOCUMENT_TEXT_CAP:
         document_text = document_text[:CONTENT_QUALITY_DOCUMENT_TEXT_CAP] + "\n\n[... truncated for quality check ...]"
 
-    # Reference URL context (scraped + vision) when ENABLE_URL_SCRAPING
-    reference_url_context, _ = await build_reference_url_context(
-        request.description,
-        request.additional_instructions,
-        document_text,
-        document_plain_texts=[],
-    )
-    if reference_url_context:
-        document_text = f"{document_text}\n\n{REFERENCE_URLS_HEADER}\n{reference_url_context}"
-        if len(document_text) > CONTENT_QUALITY_DOCUMENT_TEXT_CAP:
-            document_text = (
-                document_text[:CONTENT_QUALITY_DOCUMENT_TEXT_CAP]
-                + "\n\n[... truncated for quality check ...]"
-            )
-
+    # Content check evaluates project_name, description, instructions, and document text only.
+    # URL scraping is deferred to quote generation (runs in parallel after content check passes).
     try:
         llm_service = get_llm_service()
         result = await llm_service.check_content_quality(
@@ -157,7 +149,7 @@ async def check_content_quality(
     "/{project_id}/reference-url-preview",
     response_model=ReferenceUrlPreviewResponse,
     summary="Preview scraped content for a reference URL",
-    description="Scrapes the given URL (screenshot + body text) and returns the content used for estimation. Requires project access.",
+    description="Returns scraped content (screenshot + text) from the project's estimate generation when available; otherwise scrapes the URL. Requires project access.",
     responses={
         200: {"description": "Scraped content and screenshot"},
         400: {"description": "Invalid or disallowed URL"},
@@ -171,18 +163,9 @@ async def reference_url_preview(
     db: DbSession,
     url: str = Query(..., min_length=1, max_length=2048, description="URL to scrape and preview"),
 ) -> ReferenceUrlPreviewResponse:
-    """Scrape a single URL and return extracted text + screenshot for preview."""
+    """Return scraped content from estimate generation when available; otherwise scrape the URL."""
     await get_project_with_access(project_id, current_user, db)
-
     settings = get_settings()
-    if not settings.ENABLE_URL_SCRAPING:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "URL_SCRAPING_DISABLED",
-                "message": "Reference URL scraping is disabled.",
-            },
-        )
 
     normalized = extract_urls(
         url.strip(),
@@ -199,6 +182,68 @@ async def reference_url_preview(
             },
         )
     target_url = normalized[0]
+    cache_key = canonicalize_url_for_cache(target_url)
+
+    # Try to return stored scraped data from the project's quote (no re-scrape)
+    quote_query = (
+        select(Quote)
+        .where(Quote.project_id == project_id)
+        .order_by(Quote.created_at.desc())
+        .limit(1)
+    )
+    quote_result = await db.execute(quote_query)
+    quote = quote_result.scalar_one_or_none()
+    if quote and quote.extra_data:
+        scraped_data = quote.extra_data.get("reference_url_scraped_data") or {}
+        # Match by canonical key first, then exact URL or trailing-slash variants
+        stored = scraped_data.get(cache_key)
+        if not stored:
+            stored = scraped_data.get(target_url) or scraped_data.get(target_url.rstrip("/"))
+        if not stored and target_url.endswith("/"):
+            stored = scraped_data.get(target_url[:-1])
+        if not stored:
+            for stored_url, data in scraped_data.items():
+                if stored_url == target_url or stored_url.rstrip("/") == target_url.rstrip("/"):
+                    stored = data
+                    break
+        if stored:
+            stored_url_used = next(
+                (k for k, v in scraped_data.items() if v == stored),
+                target_url,
+            )
+            logger.info(
+                "Reference URL preview cache HIT: project_id=%s, cache_key=%s, stored_keys=%s",
+                project_id,
+                cache_key,
+                list(scraped_data.keys()),
+            )
+            return ReferenceUrlPreviewResponse(
+                success=True,
+                data=ReferenceUrlPreviewData(
+                    url=stored_url_used,
+                    extracted_text=stored.get("extracted_text") or "",
+                    screenshot_base64=stored.get("screenshot_base64"),
+                    error=stored.get("error"),
+                ),
+            )
+
+    logger.info(
+        "Reference URL preview cache MISS: project_id=%s, target_url=%s, cache_key=%s, has_quote=%s, scraped_keys=%s",
+        project_id,
+        target_url[:80] + "..." if len(target_url) > 80 else target_url,
+        cache_key[:80] + "..." if len(cache_key) > 80 else cache_key,
+        quote is not None,
+        list((quote.extra_data or {}).get("reference_url_scraped_data") or {}).keys() if quote and quote.extra_data else [],
+    )
+
+    if not settings.ENABLE_URL_SCRAPING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "URL_SCRAPING_DISABLED",
+                "message": "Reference URL scraping is disabled.",
+            },
+        )
 
     results = await scrape_urls(
         [target_url],
@@ -226,7 +271,7 @@ async def reference_url_preview(
     "/{project_id}/reference-url-site-preview",
     response_model=ReferenceUrlSitePreviewResponse,
     summary="Preview full site (crawl + scrape all pages)",
-    description="Discovers same-host pages from the seed URL (sitemap + links), then scrapes each page (screenshot + extracted text). Returns one screenshot and text per page.",
+    description="Returns stored scraped pages from estimate generation when available for this seed; otherwise crawls and scrapes. Returns one screenshot and text per page.",
     responses={
         200: {"description": "Scraped content for each discovered page"},
         400: {"description": "Invalid or disallowed URL"},
@@ -240,26 +285,9 @@ async def reference_url_site_preview(
     db: DbSession,
     url: str = Query(..., min_length=1, max_length=2048, description="Seed URL to crawl and scrape"),
 ) -> ReferenceUrlSitePreviewResponse:
-    """Crawl site from seed URL, then scrape each discovered page; return list of screenshots + text (one per page)."""
+    """Return stored scraped pages when available for this seed; otherwise crawl and scrape."""
     await get_project_with_access(project_id, current_user, db)
-
     settings = get_settings()
-    if not settings.ENABLE_URL_SCRAPING:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "URL_SCRAPING_DISABLED",
-                "message": "Reference URL scraping is disabled.",
-            },
-        )
-    if not settings.SITE_CRAWL_ENABLED:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "SITE_CRAWL_DISABLED",
-                "message": "Full-site crawl is disabled.",
-            },
-        )
 
     normalized = extract_urls(
         url.strip(),
@@ -276,6 +304,104 @@ async def reference_url_site_preview(
             },
         )
     seed_url = normalized[0]
+    cache_key = canonicalize_url_for_cache(seed_url)
+
+    # Try to return stored scraped data from the project's quote (no re-crawl/re-scrape)
+    quote_query = (
+        select(Quote)
+        .where(Quote.project_id == project_id)
+        .order_by(Quote.created_at.desc())
+        .limit(1)
+    )
+    quote_result = await db.execute(quote_query)
+    quote = quote_result.scalar_one_or_none()
+    if quote and quote.extra_data:
+        scraped_data = quote.extra_data.get("reference_url_scraped_data") or {}
+        crawl_seed = quote.extra_data.get("reference_url_crawl_seed")
+        # Case 1: Full crawl was used — return stored pages for same-host seed
+        if crawl_seed and _url_same_host(seed_url, crawl_seed) and scraped_data:
+            pages = [
+                ReferenceUrlPreviewData(
+                    url=stored_url,
+                    extracted_text=(data.get("extracted_text") or ""),
+                    screenshot_base64=data.get("screenshot_base64"),
+                    error=data.get("error"),
+                )
+                for stored_url, data in scraped_data.items()
+                if _url_same_host(stored_url, seed_url)
+            ]
+            if pages:
+                logger.info(
+                    "Reference URL site preview cache HIT (crawl): project_id=%s, seed_url=%s",
+                    project_id,
+                    seed_url[:80] + "..." if len(seed_url) > 80 else seed_url,
+                )
+                return ReferenceUrlSitePreviewResponse(
+                    success=True,
+                    data=ReferenceUrlSitePreviewData(
+                        seed_url=seed_url,
+                        pages=pages,
+                    ),
+                )
+        # Case 2: Single URL (e.g. Figma) — no crawl; return single stored page if URL matches
+        if not crawl_seed and scraped_data:
+            stored = scraped_data.get(cache_key)
+            stored_url_key = seed_url
+            if not stored:
+                stored = scraped_data.get(seed_url) or scraped_data.get(seed_url.rstrip("/"))
+            if not stored and seed_url.endswith("/"):
+                stored = scraped_data.get(seed_url[:-1])
+            if not stored:
+                for k, data in scraped_data.items():
+                    if k == seed_url or k.rstrip("/") == seed_url.rstrip("/"):
+                        stored = data
+                        stored_url_key = k
+                        break
+            if stored:
+                logger.info(
+                    "Reference URL site preview cache HIT (single): project_id=%s, cache_key=%s",
+                    project_id,
+                    cache_key[:80] + "..." if len(cache_key) > 80 else cache_key,
+                )
+                return ReferenceUrlSitePreviewResponse(
+                    success=True,
+                    data=ReferenceUrlSitePreviewData(
+                        seed_url=seed_url,
+                        pages=[
+                            ReferenceUrlPreviewData(
+                                url=stored_url_key,
+                                extracted_text=(stored.get("extracted_text") or ""),
+                                screenshot_base64=stored.get("screenshot_base64"),
+                                error=stored.get("error"),
+                            ),
+                        ],
+                    ),
+                )
+
+    logger.info(
+        "Reference URL site preview cache MISS: project_id=%s, seed_url=%s, cache_key=%s, has_quote=%s",
+        project_id,
+        seed_url[:80] + "..." if len(seed_url) > 80 else seed_url,
+        cache_key[:80] + "..." if len(cache_key) > 80 else cache_key,
+        quote is not None,
+    )
+
+    if not settings.ENABLE_URL_SCRAPING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "URL_SCRAPING_DISABLED",
+                "message": "Reference URL scraping is disabled.",
+            },
+        )
+    if not settings.SITE_CRAWL_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "SITE_CRAWL_DISABLED",
+                "message": "Full-site crawl is disabled.",
+            },
+        )
 
     urls_to_scrape = await crawl_site(
         seed_url,

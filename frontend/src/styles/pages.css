@@ -3161,6 +3161,27 @@
   color: var(--color-primary-500);
 }
 
+.project-detail-stat-pill-icon.urls.urls-has-failed {
+  color: var(--color-error-600);
+}
+
+.project-detail-stat-pill-urls-error {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.project-detail-stat-pill-urls-error-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-error-500);
+  flex-shrink: 0;
+}
+
 .project-detail-stat-pills-wrapper {
   padding-top: var(--space-2);
 }
@@ -3223,6 +3244,29 @@
 .project-detail-reference-url-preview-btn:hover {
   background: var(--color-gray-100);
   color: var(--color-primary-600);
+}
+
+/* Failed reference URL (blocked, 403, etc.) — error icon + red styling */
+.project-detail-reference-url-item-row--failed {
+  border-left: 3px solid var(--color-error-500);
+  padding-left: var(--space-1);
+  margin-left: calc(-1 * var(--space-1));
+}
+
+.project-detail-reference-url-error-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-error-500);
+  flex-shrink: 0;
+}
+
+.project-detail-reference-url-item--failed {
+  color: var(--color-error-600);
+}
+
+.project-detail-reference-url-item--failed:hover {
+  color: var(--color-error-700);
 }
 
 .project-detail-stat-pill-label {

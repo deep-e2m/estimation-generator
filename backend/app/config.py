@@ -289,19 +289,19 @@ class Settings(BaseSettings):
         le=300,
         description="Total timeout in seconds for the crawl phase (discovering URLs)",
     )
-
-    # ==================== Reference site video (optional; was Playwright) ====================
-    # When set, full-site preview can record a video of the crawl (navigate through each page).
-    # Directory must exist and be writable; leave empty to disable video recording.
-    REFERENCE_VIDEO_STORAGE_PATH: str = Field(
-        default="",
-        description="Directory to store reference site videos (e.g. /tmp/estimate-ai-videos). Empty = disabled.",
+    # Total timeout for reference URL context (scrape + vision) when NOT crawling
+    REFERENCE_URL_TOTAL_TIMEOUT_SEC: int = Field(
+        default=60,
+        ge=30,
+        le=300,
+        description="Timeout for single-URL or few-URL scrape+vision (no full-site crawl)",
     )
-    REFERENCE_VIDEO_SECONDS_PER_PAGE: int = Field(
-        default=3,
-        ge=1,
-        le=15,
-        description="Seconds to stay on each page while recording (viewport + interactions visible)",
+    # Max timeout when full-site crawl is used (crawl + scrape + vision for many pages)
+    REFERENCE_URL_CRAWL_MAX_TIMEOUT_SEC: int = Field(
+        default=180,
+        ge=60,
+        le=600,
+        description="Max timeout when crawling full site (crawl + scrape + vision); allows superb outcomes",
     )
 
     # List-like settings: stored as str from env, exposed as list via properties

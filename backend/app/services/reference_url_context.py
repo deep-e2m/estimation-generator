@@ -4,23 +4,74 @@ Build reference URL context for the project brief (quote generation + content qu
 When URL scraping is enabled, extracts URLs from project content, scrapes each
 (screenshot + text), describes screenshots via vision, and returns a single
 block of text to append to the brief. See specs/url-scraping-estimation.md.
+
+Also returns raw scraped data (extracted_text, screenshot_base64) per URL so it
+can be persisted and reused when the user opens the reference URL preview
+(eye icon) without re-scraping.
 """
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from app.config import get_settings
-from app.services.url_extraction import extract_urls
+from app.services.url_extraction import canonicalize_url_for_cache, extract_urls
 
 logger = logging.getLogger(__name__)
 
-# Total wall-clock timeout for "extract + scrape + vision" so one slow URL doesn't block
-# Kept under 60s to keep quote generation responsive (crawl + scrape + vision run before LLM).
-REFERENCE_URL_TOTAL_TIMEOUT_SEC = 50
-
 # Section header used in the brief
 REFERENCE_URLS_HEADER = "Reference URLs (scraped content and visual description):"
+
+# Patterns that indicate the scrape hit a login wall, bot challenge, or error page
+# rather than actual site content. Checked on short extracted text (< 400 chars).
+_SUSPECT_PATTERNS = (
+    "verify you are human",
+    "access denied",
+    "cloudflare",
+    "enable javascript",
+    "javascript is required",
+    "sign in to",
+    "log in to",
+    "please log in",
+    "you need to sign in",
+    "enable cookies",
+    "ray id",       # Cloudflare Ray ID footer
+    "403 forbidden",
+    "401 unauthorized",
+    "this site is protected",
+)
+
+
+def _is_suspect_content(
+    extracted_text: str,
+    screenshot_base64: str | None,
+    extra_screenshots: list[str] | None = None,
+) -> bool:
+    """
+    Return True if the scrape result looks like a bot-challenge, login wall,
+    or error page rather than real site content.
+
+    Only triggers when extracted_text is short (< 400 chars) AND contains
+    known challenge/auth phrases, OR when there is literally no content at all.
+    Long pages with these phrases in context are not suspect.
+
+    IMPORTANT: When we have a screenshot (primary or extra), do NOT reject based
+    on text. Public Figma embeds and many design sites show "Sign in" / "Open in
+    Figma" in the UI—the screenshot contains the actual design. Rejecting on text
+    alone would discard valid content.
+    """
+    has_screenshot = bool(screenshot_base64) or bool(extra_screenshots)
+    text = (extracted_text or "").strip()
+    if not text and not has_screenshot:
+        return True
+    if has_screenshot:
+        return False
+    if text and len(text) < 400:
+        text_lower = text.lower()
+        for pattern in _SUSPECT_PATTERNS:
+            if pattern in text_lower:
+                return True
+    return False
 
 
 async def build_reference_url_context(
@@ -31,7 +82,7 @@ async def build_reference_url_context(
     *,
     explicit_urls: Optional[list[str]] = None,
     crawl_site_from_url: Optional[str] = None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     """
     Build the reference URL context string and list of URLs used.
 
@@ -56,13 +107,17 @@ async def build_reference_url_context(
         crawl_site_from_url: Optional seed URL to crawl for full-site context (overrides when set).
 
     Returns:
-        (context_string, urls_used). context_string is truncated to
-        URL_REFERENCE_CONTEXT_MAX_CHARS. urls_used is the list of URLs we
-        attempted to use (for logging/metadata).
+        (context_string, urls_used, urls_failed, scraped_data_by_url, crawl_seed).
+        context_string is truncated to URL_REFERENCE_CONTEXT_MAX_CHARS.
+        urls_used is URLs that produced usable content.
+        urls_failed is URLs that failed or returned suspect content.
+        scraped_data_by_url maps url -> {"extracted_text": str, "screenshot_base64": str | None}
+        for reuse in preview (no re-scrape when user opens eye icon).
+        crawl_seed is the seed URL if full-site crawl was used, else None.
     """
     settings = get_settings()
     if not settings.ENABLE_URL_SCRAPING:
-        return "", []
+        return "", [], [], {}, None
 
     # Normalize inputs so callers cannot break us (e.g. frontend sends list for crawl_site_from_url)
     if crawl_site_from_url is not None:
@@ -91,9 +146,16 @@ async def build_reference_url_context(
             combined_parts.append(str(t).strip())
 
     # Determine crawl seed: explicit crawl_site_from_url, or first URL from content/explicit
+    # Figma design/file URLs are single-page — do NOT crawl figma.com (would get unrelated pages)
+    def _is_figma_url(url: str) -> bool:
+        u = (url or "").strip().lower()
+        return "figma.com/design/" in u or "figma.com/file/" in u
+
     crawl_seed: Optional[str] = None
     if crawl_site_from_url and crawl_site_from_url.strip():
-        crawl_seed = crawl_site_from_url.strip()
+        candidate = crawl_site_from_url.strip()
+        if not _is_figma_url(candidate):
+            crawl_seed = candidate
     elif getattr(settings, "SITE_CRAWL_ENABLED", False):
         extracted_from_parts = extract_urls(
             *combined_parts,
@@ -101,11 +163,11 @@ async def build_reference_url_context(
             max_urls=10,
             reject_local_private=settings.is_production,
         )
-        if extracted_from_parts:
+        if extracted_from_parts and not _is_figma_url(extracted_from_parts[0]):
             crawl_seed = extracted_from_parts[0]
         if not crawl_seed and explicit_urls:
             for u in explicit_urls:
-                if u and u.strip():
+                if u and u.strip() and not _is_figma_url(u):
                     crawl_seed = u.strip()
                     break
 
@@ -150,7 +212,7 @@ async def build_reference_url_context(
             urls_to_scrape = urls_to_scrape[: settings.MAX_REFERENCE_URLS]
 
     if not urls_to_scrape:
-        return "", []
+        return "", [], [], {}, None
 
     max_urls_for_scrape = len(urls_to_scrape) if used_crawl else min(settings.MAX_REFERENCE_URLS, len(urls_to_scrape))
 
@@ -160,14 +222,27 @@ async def build_reference_url_context(
         used_crawl,
     )
 
-    timeout = REFERENCE_URL_TOTAL_TIMEOUT_SEC
+    # Timeout calculation:
+    # - Crawl mode: crawl_time + urls*(scrape_time + vision_estimate), capped at crawl_max
+    # - Non-crawl: dynamic based on url count so last URLs aren't cut off.
+    #   Formula: urls * scrape_time + vision_buffer (vision runs in parallel so ~15s flat)
+    base_timeout = getattr(settings, "REFERENCE_URL_TOTAL_TIMEOUT_SEC", 60) or 60
+    crawl_max = getattr(settings, "REFERENCE_URL_CRAWL_MAX_TIMEOUT_SEC", 180) or 180
+    vision_buffer = 15  # vision runs in parallel; flat overhead
     if used_crawl:
-        timeout = max(timeout, settings.SITE_CRAWL_TIMEOUT_SEC + max_urls_for_scrape * settings.URL_SCRAPE_TIMEOUT_SEC)
-    # Cap total so quote generation stays responsive even when crawling many pages
-    timeout = min(timeout, 75)
+        vision_estimate_per_url = 5
+        needed = (
+            settings.SITE_CRAWL_TIMEOUT_SEC
+            + max_urls_for_scrape * (settings.URL_SCRAPE_TIMEOUT_SEC + vision_estimate_per_url)
+        )
+        timeout = min(max(base_timeout, needed), crawl_max)
+    else:
+        # Dynamic: each URL scraped in parallel, but give enough headroom for all
+        needed = max_urls_for_scrape * settings.URL_SCRAPE_TIMEOUT_SEC + vision_buffer
+        timeout = max(base_timeout, needed)
 
     try:
-        context, urls_used = await asyncio.wait_for(
+        context, urls_used, urls_failed, scraped_data_by_url = await asyncio.wait_for(
             _scrape_and_describe(
                 urls_to_scrape,
                 timeout_per_url=settings.URL_SCRAPE_TIMEOUT_SEC,
@@ -178,13 +253,80 @@ async def build_reference_url_context(
         )
         if context and len(context) > settings.URL_REFERENCE_CONTEXT_MAX_CHARS:
             context = context[: settings.URL_REFERENCE_CONTEXT_MAX_CHARS] + "\n\n[... truncated ...]"
-        return context, urls_used
+        crawl_seed_return: Optional[str] = crawl_seed if used_crawl else None
+        return context, urls_used, urls_failed, scraped_data_by_url, crawl_seed_return
     except asyncio.TimeoutError:
-        logger.warning("Reference URL context build timed out after %ds", REFERENCE_URL_TOTAL_TIMEOUT_SEC)
-        return "", []
+        logger.warning("Reference URL context build timed out after %ds", timeout)
+        return "", [], [], {}, None
     except Exception as e:
         logger.warning("Reference URL context build failed: %s", e)
-        return "", []
+        return "", [], [], {}, None
+
+
+async def _describe_single_result(
+    r,  # UrlScrapeResult
+    llm,  # LLMService
+) -> tuple[str | None, str, bool]:
+    """
+    Build context block for one URL result (text + vision/design inference).
+    Returns (section_text or None, url, is_failed).
+    is_failed is True when the result has no usable content or is suspect.
+    """
+    if r.error and not r.extracted_text and not r.screenshot_base64:
+        logger.debug("Skipping URL (failed): %s", r.url)
+        return None, r.url, True
+
+    if _is_suspect_content(
+        r.extracted_text,
+        r.screenshot_base64,
+        getattr(r, "extra_screenshots", None),
+    ):
+        logger.info(
+            "Skipping URL (suspect content — likely login/challenge page): %s", r.url
+        )
+        return None, r.url, True
+
+    block_parts: list[str] = [f"Reference URL: {r.url}"]
+    if r.extracted_text:
+        block_parts.append(r.extracted_text.strip())
+
+    all_screenshots: list[str] = []
+    if r.screenshot_base64:
+        all_screenshots.append(r.screenshot_base64)
+    if getattr(r, "extra_screenshots", None):
+        all_screenshots.extend(r.extra_screenshots)
+    if all_screenshots:
+        for idx, img_b64 in enumerate(all_screenshots):
+            try:
+                analysis_result = await llm.analyze_image(
+                    img_b64,
+                    context=r.url,
+                    analysis_type="reference_url_screenshot",
+                )
+                analysis_text = (analysis_result.get("analysis") or "").strip()
+                if analysis_text:
+                    label = (
+                        f"Visual reference for {r.url} (screenshot {idx + 1} of {len(all_screenshots)}):"
+                        if len(all_screenshots) > 1
+                        else f"Visual reference for {r.url}:"
+                    )
+                    block_parts.append(f"{label} {analysis_text}")
+            except Exception as e:
+                logger.warning("Vision description failed for %s (screenshot %s): %s", r.url, idx + 1, e)
+    elif (r.extracted_text or "").strip():
+        try:
+            design_inference = await llm.infer_reference_design_from_text(
+                r.extracted_text.strip(),
+                r.url,
+            )
+            if design_inference:
+                block_parts.append(
+                    f"Design inference (from reference content; no screenshot available): {design_inference}"
+                )
+        except Exception as e:
+            logger.warning("Design inference from text failed for %s: %s", r.url, e)
+
+    return "\n\n".join(block_parts), r.url, False
 
 
 async def _scrape_and_describe(
@@ -193,8 +335,13 @@ async def _scrape_and_describe(
     timeout_per_url: int,
     max_urls: int,
     max_context_chars: int,
-) -> tuple[str, list[str]]:
-    """Scrape URLs and build context string with text + vision descriptions."""
+) -> tuple[str, list[str], list[str], dict[str, dict[str, Any]]]:
+    """
+    Scrape URLs in parallel, then describe each result (vision/design inference) in parallel.
+    Returns (context, urls_used, urls_failed, scraped_data_by_url).
+    urls_failed contains URLs that produced no usable content (scrape error or suspect page).
+    scraped_data_by_url maps url -> {extracted_text, screenshot_base64} for urls_used.
+    """
     from app.services.ai.llm_service import get_llm_service
     from app.services.url_scraping_service import scrape_urls
 
@@ -203,58 +350,32 @@ async def _scrape_and_describe(
         timeout_per_url=timeout_per_url,
         max_urls=max_urls,
     )
+    llm = get_llm_service()
+
+    # Run vision/design inference for each result in parallel
+    describe_tasks = [_describe_single_result(r, llm) for r in results]
+    describe_results = await asyncio.gather(*describe_tasks)
+
     sections: list[str] = []
     urls_used: list[str] = []
+    urls_failed: list[str] = []
+    for section, url, is_failed in describe_results:
+        if is_failed:
+            urls_failed.append(url)
+        else:
+            urls_used.append(url)
+        if section:
+            sections.append(section)
 
-    llm = get_llm_service()
+    # Build scraped_data_by_url from successful results (canonical keys for cache matching)
+    scraped_data_by_url: dict[str, dict[str, Any]] = {}
     for r in results:
-        urls_used.append(r.url)
-        if r.error and not r.extracted_text and not r.screenshot_base64:
-            logger.debug("Skipping URL (failed): %s", r.url)
-            continue
-
-        block_parts: list[str] = [f"Reference URL: {r.url}"]
-        if r.extracted_text:
-            block_parts.append(r.extracted_text.strip())
-
-        all_screenshots: list[str] = []
-        if r.screenshot_base64:
-            all_screenshots.append(r.screenshot_base64)
-        if getattr(r, "extra_screenshots", None):
-            all_screenshots.extend(r.extra_screenshots)
-        if all_screenshots:
-            for idx, img_b64 in enumerate(all_screenshots):
-                try:
-                    analysis_result = await llm.analyze_image(
-                        img_b64,
-                        context=r.url,
-                        analysis_type="reference_url_screenshot",
-                    )
-                    analysis_text = (analysis_result.get("analysis") or "").strip()
-                    if analysis_text:
-                        label = (
-                            f"Visual reference for {r.url} (screenshot {idx + 1} of {len(all_screenshots)}):"
-                            if len(all_screenshots) > 1
-                            else f"Visual reference for {r.url}:"
-                        )
-                        block_parts.append(f"{label} {analysis_text}")
-                except Exception as e:
-                    logger.warning("Vision description failed for %s (screenshot %s): %s", r.url, idx + 1, e)
-        elif (r.extracted_text or "").strip():
-            # No screenshot (e.g. Playwright failed, HTTP fallback only): infer design level and theme/plugin implications from text
-            try:
-                design_inference = await llm.infer_reference_design_from_text(
-                    r.extracted_text.strip(),
-                    r.url,
-                )
-                if design_inference:
-                    block_parts.append(
-                        f"Design inference (from reference content; no screenshot available): {design_inference}"
-                    )
-            except Exception as e:
-                logger.warning("Design inference from text failed for %s: %s", r.url, e)
-
-        sections.append("\n\n".join(block_parts))
+        if r.url in urls_used:
+            key = canonicalize_url_for_cache(r.url)
+            scraped_data_by_url[key] = {
+                "extracted_text": r.extracted_text or "",
+                "screenshot_base64": r.screenshot_base64,
+            }
 
     if not sections:
         logger.info(
@@ -265,4 +386,4 @@ async def _scrape_and_describe(
     context = "\n\n---\n\n".join(sections) if sections else ""
     if len(context) > max_context_chars:
         context = context[:max_context_chars] + "\n\n[... truncated ...]"
-    return context, urls_used
+    return context, urls_used, urls_failed, scraped_data_by_url

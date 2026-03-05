@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   Clock,
   FileText,
   CheckCircle2,
@@ -223,13 +224,20 @@ export function ProjectDetailPage() {
     <FileText style={{ width: 14, height: 14 }} />
   );
 
-  const referenceUrlsUsed = (quote?.metadata as { reference_urls_used?: string[] } | undefined)
-    ?.reference_urls_used;
-  // Show project's saved reference URLs (e.g. Figma) when set; otherwise URLs used in last quote
-  const referenceUrlsToShow = (project?.reference_urls?.length
-    ? project.reference_urls
-    : referenceUrlsUsed) ?? [];
+  const quoteMeta = quote?.metadata as { reference_urls_used?: string[]; reference_urls_failed?: string[] } | undefined;
+  const referenceUrlsUsed = quoteMeta?.reference_urls_used;
+  const referenceUrlsFailed = quoteMeta?.reference_urls_failed ?? [];
+  // Normalize URL for matching (trailing slash, minor variations)
+  const normalizeUrlForMatch = (u: string) => (u || '').trim().replace(/\/+$/, '').toLowerCase();
+  const failedUrlsNormalized = new Set(referenceUrlsFailed.map(normalizeUrlForMatch));
+  const isUrlFailed = (url: string) => failedUrlsNormalized.has(normalizeUrlForMatch(url));
+  // Show project's saved reference URLs when set; otherwise used + failed from last quote
+  const referenceUrlsToShow =
+    (project?.reference_urls?.length
+      ? project.reference_urls
+      : [...new Set([...(referenceUrlsUsed ?? []), ...referenceUrlsFailed])]) ?? [];
   const referenceUrlsCount = referenceUrlsToShow.length;
+  const hasFailedUrls = referenceUrlsFailed.length > 0;
 
   const openUrlPreview = useCallback(
     (url: string, mode: 'page' | 'site' = 'page') => {
@@ -299,7 +307,7 @@ export function ProjectDetailPage() {
       icon: lastUpdatedIcon,
       iconClass: 'updated',
     },
-    // Always show Reference URLs pill so users see where scraped URLs appear (from description/documents)
+    // Always show Reference URLs pill; red indicator when any URL failed to scrape
     {
       label: 'Reference URLs',
       value:
@@ -308,8 +316,15 @@ export function ProjectDetailPage() {
           : referenceUrlsCount === 1
             ? '1 link'
             : `${referenceUrlsCount} links`,
-      icon: <Link2 style={{ width: 14, height: 14 }} />,
-      iconClass: 'urls' as const,
+      icon: hasFailedUrls ? (
+        <span className="project-detail-stat-pill-urls-error" title="Some URLs could not be fetched">
+          <Link2 style={{ width: 14, height: 14 }} />
+          <span className="project-detail-stat-pill-urls-error-dot" aria-hidden />
+        </span>
+      ) : (
+        <Link2 style={{ width: 14, height: 14 }} />
+      ),
+      iconClass: `urls${hasFailedUrls ? ' urls-has-failed' : ''}` as const,
       ...(referenceUrlsCount > 0 && referenceUrlsToShow.length > 0
         ? { urls: referenceUrlsToShow }
         : {}),
@@ -491,30 +506,47 @@ export function ProjectDetailPage() {
             {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsToShow.length > 0 && (
               <>
                 <div className="project-detail-reference-urls-list">
-                  {referenceUrlsToShow.map((url) => (
-                    <div key={url} className="project-detail-reference-url-item-row">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="project-detail-reference-url-item"
+                  {referenceUrlsToShow.map((url) => {
+                    const isFailed = isUrlFailed(url);
+                    return (
+                      <div
+                        key={url}
+                        className={`project-detail-reference-url-item-row${isFailed ? ' project-detail-reference-url-item-row--failed' : ''}`}
                       >
-                        {url}
-                      </a>
-                      <button
-                        type="button"
-                        className="project-detail-reference-url-preview-btn"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          openUrlPreview(url, 'site');
-                        }}
-                        aria-label={`View full site asset for ${url} (crawl, screenshots, scraped content, video)`}
-                        title="Preview full site (crawl, screenshots, content, video)"
-                      >
-                        <Eye style={{ width: 16, height: 16 }} />
-                      </button>
-                    </div>
-                  ))}
+                        {isFailed && (
+                          <span
+                            className="project-detail-reference-url-error-icon"
+                            title="Could not fetch — URL blocked or inaccessible (e.g. 403)"
+                            aria-label="URL could not be fetched"
+                          >
+                            <AlertTriangle style={{ width: 16, height: 16 }} />
+                          </span>
+                        )}
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`project-detail-reference-url-item${isFailed ? ' project-detail-reference-url-item--failed' : ''}`}
+                        >
+                          {url}
+                        </a>
+                        <button
+                          type="button"
+                          className="project-detail-reference-url-preview-btn"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            // Figma/design URLs are single-page; use page mode for faster load
+                            const isFigma = /figma\.com\/(design|file)\//i.test(url);
+                            openUrlPreview(url, isFigma ? 'page' : 'site');
+                          }}
+                          aria-label={`View full site asset for ${url} (crawl, screenshots, scraped content, video)`}
+                          title="Preview full site (crawl, screenshots, content, video)"
+                        >
+                          <Eye style={{ width: 16, height: 16 }} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}

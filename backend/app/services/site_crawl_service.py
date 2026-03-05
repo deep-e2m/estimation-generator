@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 # Wait after page load so JS-rendered links appear in the DOM (Playwright discovery)
 _PLAYWRIGHT_WAIT_AFTER_LOAD_MS = 2500
 
+# Real Chrome user-agent — reduces bot detection (403 from CloudFront etc.)
+_CHROME_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 # Sitemap namespace (common)
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 SITEMAP_INDEX_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -282,6 +288,7 @@ async def _discover_via_playwright(
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
+                    "--disable-blink-features=AutomationControlled",
                 ],
             }
             for chromium_bin in ("/usr/bin/chromium", "/usr/bin/chromium-browser"):
@@ -293,6 +300,12 @@ async def _discover_via_playwright(
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 720},
                 ignore_https_errors=True,
+                user_agent=_CHROME_USER_AGENT,
+                locale="en-US",
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                },
             )
             context.set_default_timeout(page_load_timeout_sec * 1000)
 
@@ -348,7 +361,7 @@ async def crawl_site(
     max_pages: int | None = None,
     depth: int | None = None,
     timeout_sec: float | None = None,
-    allowed_schemes: tuple[str, ...] = ("https", "http"),
+    allowed_schemes: tuple[str, ...] | None = None,
 ) -> list[str]:
     """
     Discover same-host URLs starting from seed_url.
@@ -374,6 +387,8 @@ async def crawl_site(
         depth = settings.SITE_CRAWL_DEPTH
     if timeout_sec is None:
         timeout_sec = float(settings.SITE_CRAWL_TIMEOUT_SEC)
+    if allowed_schemes is None:
+        allowed_schemes = tuple(settings.ALLOWED_URL_SCHEMES)
 
     base_origin = _normalize_base(seed_url)
     if not base_origin:
@@ -385,7 +400,7 @@ async def crawl_site(
 
     async with httpx.AsyncClient(
         follow_redirects=True,
-        headers={"User-Agent": "EstimateAI-SiteCrawl/1.0"},
+        headers={"User-Agent": _CHROME_USER_AGENT},
     ) as client:
 
         async def _run() -> list[str]:

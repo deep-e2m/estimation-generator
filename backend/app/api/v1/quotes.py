@@ -567,7 +567,8 @@ async def generate_quote(
             logger.warning("Could not load project documents for brief: %s", e)
 
     # Reference URL context (scraped content + vision descriptions when ENABLE_URL_SCRAPING)
-    # Normalize project_context so reference_urls is list[str] and crawl_site_from_url is str (no break if frontend sends wrong types)
+    # Use request.project_context.reference_urls if provided; otherwise fall back to project.reference_urls
+    # (e.g. Figma URLs stored at project creation or auto-extracted from description)
     ref_ctx = request.project_context or {}
     _explicit_urls = ref_ctx.get("reference_urls")
     if isinstance(_explicit_urls, str) and _explicit_urls.strip():
@@ -575,7 +576,12 @@ async def generate_quote(
     elif isinstance(_explicit_urls, list):
         explicit_urls_normalized = [u for u in _explicit_urls if isinstance(u, str) and (u or "").strip()]
     else:
-        explicit_urls_normalized = None
+        # Fall back to project.reference_urls (stored at creation; e.g. Figma links shared when creating project)
+        explicit_urls_normalized = (
+            [u for u in (project.reference_urls or []) if isinstance(u, str) and (u or "").strip()]
+            if project.reference_urls
+            else None
+        )
     _crawl_seed = ref_ctx.get("crawl_site_from_url")
     crawl_site_from_url_normalized: Optional[str] = None
     if isinstance(_crawl_seed, str) and _crawl_seed.strip():
@@ -585,7 +591,13 @@ async def generate_quote(
         if isinstance(first, str) and first.strip():
             crawl_site_from_url_normalized = first.strip()
 
-    reference_url_context, reference_urls_used = await build_reference_url_context(
+    (
+        reference_url_context,
+        reference_urls_used,
+        reference_urls_failed,
+        reference_url_scraped_data,
+        reference_url_crawl_seed,
+    ) = await build_reference_url_context(
         project_description,
         additional_instructions,
         document_summary,
@@ -772,6 +784,9 @@ async def generate_quote(
                 total_hours=float(result.total_hours or 0),
             ).model_dump(mode="json"),
             "reference_urls_used": reference_urls_used,
+            "reference_urls_failed": reference_urls_failed,
+            "reference_url_scraped_data": reference_url_scraped_data,
+            "reference_url_crawl_seed": reference_url_crawl_seed,
         },
     )
 

@@ -150,3 +150,31 @@ def _normalize_url(
     if not normalized.startswith(("http://", "https://")):
         return None
     return normalized
+
+
+def _is_figma_url(url: str) -> bool:
+    """Return True if URL is a Figma design or file link."""
+    u = (url or "").strip().lower()
+    return "figma.com/design/" in u or "figma.com/file/" in u
+
+
+def canonicalize_url_for_cache(url: str) -> str:
+    """
+    Return a canonical form for cache key matching.
+
+    For Figma design/file URLs, strips query params (node-id, p, t, etc.) so that
+    variants like ?node-id=0-1&p=8&t=xxx and ?node-id=0-1 map to the same cache entry.
+    For other URLs, returns the input as-is (caller should pass normalized URL).
+    """
+    if not url or not url.strip():
+        return (url or "").strip()
+    u = url.strip()
+    if _is_figma_url(u):
+        try:
+            parsed = urlparse(u)
+            return urlunparse(
+                (parsed.scheme, parsed.netloc or "", parsed.path or "/", "", "", "")
+            )
+        except Exception:
+            return u
+    return u
