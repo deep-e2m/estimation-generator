@@ -295,6 +295,14 @@ docker-compose down -v  # Reset volumes (WARNING: deletes data)
 docker-compose up -d
 ```
 
+### URL scraping (Playwright) not working locally
+For local backend development with URL scraping enabled:
+```bash
+cd backend
+playwright install chromium
+```
+Docker uses system Chromium; set `ENABLE_URL_SCRAPING=false` to disable.
+
 ## Important Files
 
 - `ARCHITECTURE.md` - Detailed architectural documentation

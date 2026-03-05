@@ -1,11 +1,11 @@
-"""Shared types for URL scraping (Selenium screenshot + text)."""
+"""Shared types for URL scraping (Playwright screenshot + text)."""
 
 from dataclasses import dataclass
 
 
 @dataclass
 class UrlScrapeResult:
-    """Result of scraping a single URL (browser or Figma API)."""
+    """Result of scraping a single URL (Playwright browser or Figma API)."""
 
     url: str
     screenshot_base64: str | None

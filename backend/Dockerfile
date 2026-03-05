@@ -23,8 +23,8 @@ FROM python:3.11-slim as runtime
 
 WORKDIR /app
 
-# Install runtime dependencies (WeasyPrint: cairo/pango; pdf2image: poppler; Selenium: Chromium)
-# Chromium needs extra libs for headless in slim; app uses /usr/bin/chromium when present
+# Install runtime dependencies (WeasyPrint: cairo/pango; pdf2image: poppler; Playwright: Chromium)
+# Chromium + libs for Playwright URL scraping; app uses /usr/bin/chromium when present
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
@@ -50,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Chromium for Selenium URL scraping (reference URLs). Set ENABLE_URL_SCRAPING=false to skip use.
+# Chromium for Playwright URL scraping (reference URLs). Set ENABLE_URL_SCRAPING=false to skip use.
 RUN useradd --create-home --shell /bin/bash appuser
 USER appuser
 

@@ -40,7 +40,7 @@ async def build_reference_url_context(
     and returns one truncated block plus the list of URLs processed.
 
     When crawl_site_from_url is set and SITE_CRAWL_ENABLED, discovers same-host
-    pages from that seed (sitemap + links) and uses them for scraping instead of
+    pages from that seed (sitemap + Playwright links) and uses them for scraping instead of
     extracted/explicit URLs only.
 
     If URL scraping is disabled or no URLs are found, returns ("", []).
@@ -241,7 +241,7 @@ async def _scrape_and_describe(
                 except Exception as e:
                     logger.warning("Vision description failed for %s (screenshot %s): %s", r.url, idx + 1, e)
         elif (r.extracted_text or "").strip():
-            # No screenshot (e.g. Selenium failed, HTTP fallback only): infer design level and theme/plugin implications from text
+            # No screenshot (e.g. Playwright failed, HTTP fallback only): infer design level and theme/plugin implications from text
             try:
                 design_inference = await llm.infer_reference_design_from_text(
                     r.extracted_text.strip(),

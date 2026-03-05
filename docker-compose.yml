@@ -85,7 +85,7 @@ services:
       - LLM_DEFAULT_TEMPERATURE=${LLM_DEFAULT_TEMPERATURE:-0.3}
       - LLM_DEFAULT_MAX_TOKENS=${LLM_DEFAULT_MAX_TOKENS:-4096}
       - LLM_REQUEST_TIMEOUT=${LLM_REQUEST_TIMEOUT:-120}
-      # Set ENABLE_URL_SCRAPING=false to disable reference URL scraping (Figma API + Selenium)
+      # Set ENABLE_URL_SCRAPING=false to disable reference URL scraping (Figma API + Playwright)
       - ENABLE_URL_SCRAPING=${ENABLE_URL_SCRAPING:-true}
       # Figma API token: when set, Figma reference URLs use API instead of browser (from .env)
       - FIGMA_ACCESS_TOKEN=${FIGMA_ACCESS_TOKEN:-}

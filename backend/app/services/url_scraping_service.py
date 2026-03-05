@@ -1,5 +1,5 @@
 """
-URL scraping service: all URLs scraped with Selenium (Chrome).
+URL scraping service: all URLs scraped with Playwright (Chromium).
 
 Used to fetch reference URLs detected in project content. Results are consumed
 by the reference URL context builder for inclusion in the project brief.
@@ -7,17 +7,15 @@ by the reference URL context builder for inclusion in the project brief.
 All URLs (including Figma design links) are opened in a headless browser for
 screenshot + body text. No Figma API or token required.
 
-When Selenium/ChromeDriver fails (e.g. in Docker), an HTTP fallback fetches HTML
-and extracts visible text so estimation still has reference content.
-
-Optional: scrape_urls_with_video delegates to scrape_urls and returns (results, None)
-since Selenium does not provide built-in video recording like Playwright did.
+Playwright provides auto-waiting, better SPA/Figma handling, and optional
+video recording. When Playwright fails (e.g. not installed), an HTTP fallback
+fetches HTML and extracts visible text so estimation still has reference content.
 """
 
 import asyncio
 import base64
 import logging
-import time
+import os
 
 import httpx
 from bs4 import BeautifulSoup
@@ -36,14 +34,14 @@ EXTRACTED_TEXT_MAX_CHARS = 15_000
 VIEWPORT_WIDTH = 1200
 VIEWPORT_HEIGHT = 800
 
-# Wait this long after load so JS-rendered and lazy content can appear (ms)
-POST_LOAD_WAIT_MS = 2000
+# Wait for network to be idle before screenshot (ms); Playwright auto-waits
+WAIT_AFTER_LOAD_MS = 1500
 
 
 async def _fetch_text_via_http(url: str, timeout_sec: float = 25.0) -> str:
     """
     Fetch URL with httpx and extract visible text from HTML (no JS).
-    Used as fallback when Selenium/ChromeDriver fails so estimation still gets content.
+    Used as fallback when Playwright fails so estimation still gets content.
     """
     try:
         async with httpx.AsyncClient(
@@ -66,89 +64,114 @@ async def _fetch_text_via_http(url: str, timeout_sec: float = 25.0) -> str:
         return ""
 
 
-def _scrape_urls_selenium_sync(
+def _truncate_text(text: str) -> str:
+    """Truncate extracted text to max chars."""
+    if not text or len(text) <= EXTRACTED_TEXT_MAX_CHARS:
+        return (text or "").strip()
+    return (text[:EXTRACTED_TEXT_MAX_CHARS] + "\n\n[... truncated ...]").strip()
+
+
+async def _scrape_urls_playwright(
     urls: list[str],
     *,
     timeout_per_url: int,
-) -> list[UrlScrapeResult]:
+    record_video: bool = False,
+    video_storage_dir: str | None = None,
+) -> tuple[list[UrlScrapeResult], str | None]:
     """
-    Synchronous Selenium scrape: launch Chrome/Chromium, for each URL get page, wait,
-    screenshot, body text. Run from thread to avoid blocking event loop.
+    Scrape each URL with Playwright (screenshot + body text).
+    Returns (results, video_path or None).
     """
-    import os
-
-    from selenium import webdriver
-    from selenium.common.exceptions import TimeoutException, WebDriverException
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from webdriver_manager.chrome import ChromeDriverManager
+    from playwright.async_api import async_playwright
 
     results: list[UrlScrapeResult] = []
+    video_path: str | None = None
+
     if not urls:
-        return results
+        return results, None
 
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-setuid-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument(f"--window-size={VIEWPORT_WIDTH},{VIEWPORT_HEIGHT}")
-    # Use system Chromium in Docker when available
-    for chromium_bin in ("/usr/bin/chromium", "/usr/bin/chromium-browser"):
-        if os.path.isfile(chromium_bin):
-            options.binary_location = chromium_bin
-            break
-
-    driver = None
     try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(timeout_per_url)
-        driver.implicitly_wait(2)
+        async with async_playwright() as p:
+            launch_opts: dict = {
+                "headless": True,
+                "args": [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                ],
+            }
+            # Use system Chromium in Docker when Playwright browsers not installed
+            for chromium_bin in ("/usr/bin/chromium", "/usr/bin/chromium-browser"):
+                if os.path.isfile(chromium_bin):
+                    launch_opts["executable_path"] = chromium_bin
+                    break
 
-        for url in urls:
-            try:
-                driver.get(url)
-                driver.implicitly_wait(0)
-                time.sleep(POST_LOAD_WAIT_MS / 1000.0)
-                screenshot_bytes = driver.get_screenshot_as_png()
-                screenshot_base64 = base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
+            browser = await p.chromium.launch(**launch_opts)
+
+            context_opts: dict = {
+                "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+                "ignore_https_errors": True,
+            }
+            if record_video and video_storage_dir:
+                os.makedirs(video_storage_dir, exist_ok=True)
+                context_opts["record_video_dir"] = video_storage_dir
+
+            context = await browser.new_context(**context_opts)
+            context.set_default_timeout(timeout_per_url * 1000)
+
+            for url in urls:
+                page = None
                 try:
-                    body = driver.find_element(By.TAG_NAME, "body")
-                    text = (body.text or "").strip()
-                except Exception:
-                    text = ""
-                if text and len(text) > EXTRACTED_TEXT_MAX_CHARS:
-                    text = text[:EXTRACTED_TEXT_MAX_CHARS] + "\n\n[... truncated ...]"
-                results.append(
-                    UrlScrapeResult(
-                        url=url,
-                        screenshot_base64=screenshot_base64,
-                        extracted_text=text or "",
-                        error=None,
+                    page = await context.new_page()
+                    await page.goto(url, wait_until="networkidle", timeout=timeout_per_url * 1000)
+                    await asyncio.sleep(min(WAIT_AFTER_LOAD_MS / 1000.0, 2.0))
+
+                    screenshot_bytes = await page.screenshot(full_page=False, type="png")
+                    screenshot_base64 = (
+                        base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
                     )
-                )
-            except TimeoutException as e:
-                logger.warning("URL scrape timeout: url=%s, error=%s", url, e)
-                results.append(
-                    UrlScrapeResult(url=url, screenshot_base64=None, extracted_text="", error=f"Timeout: {e!s}")
-                )
-            except Exception as e:
-                logger.warning("URL scrape failed: url=%s, error=%s", url, e)
-                results.append(
-                    UrlScrapeResult(
-                        url=url,
-                        screenshot_base64=None,
-                        extracted_text="",
-                        error=f"{type(e).__name__}: {e!s}",
+
+                    try:
+                        body = await page.query_selector("body")
+                        text = await body.inner_text() if body else ""
+                    except Exception:
+                        text = ""
+
+                    text = _truncate_text((text or "").strip())
+
+                    results.append(
+                        UrlScrapeResult(
+                            url=url,
+                            screenshot_base64=screenshot_base64,
+                            extracted_text=text,
+                            error=None,
+                        )
                     )
-                )
-            finally:
-                driver.implicitly_wait(2)
-    except WebDriverException as e:
-        logger.exception("Failed to launch Chrome for URL scraping: %s", e)
+                except Exception as e:
+                    logger.warning("URL scrape failed: url=%s, error=%s", url, e)
+                    results.append(
+                        UrlScrapeResult(
+                            url=url,
+                            screenshot_base64=None,
+                            extracted_text="",
+                            error=f"{type(e).__name__}: {e!s}",
+                        )
+                    )
+                finally:
+                    if page:
+                        await page.close()
+
+            if record_video and video_storage_dir:
+                # Playwright saves per-context; first page's video is typically used
+                # For multi-URL we'd need per-page video - simplified: store dir path
+                video_path = video_storage_dir
+
+            await context.close()
+            await browser.close()
+
+    except Exception as e:
+        logger.exception("Failed to launch Playwright for URL scraping: %s", e)
         for url in urls:
             results.append(
                 UrlScrapeResult(
@@ -158,14 +181,8 @@ def _scrape_urls_selenium_sync(
                     error=f"Browser launch failed: {e!s}",
                 )
             )
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception as exc:
-                logger.debug("Error closing Chrome driver: %s", exc)
 
-    return results
+    return results, video_path
 
 
 async def scrape_urls(
@@ -175,7 +192,7 @@ async def scrape_urls(
     max_urls: int = 5,
 ) -> list[UrlScrapeResult]:
     """
-    Scrape each URL with Selenium (screenshot + body text).
+    Scrape each URL with Playwright (screenshot + body text).
 
     Returns list of UrlScrapeResult in the same order as urls (up to max_urls).
     """
@@ -183,13 +200,21 @@ async def scrape_urls(
         return []
 
     to_process = urls[:max_urls]
-    loop = asyncio.get_event_loop()
-    ordered = await loop.run_in_executor(
-        None,
-        lambda: _scrape_urls_selenium_sync(to_process, timeout_per_url=timeout_per_url),
-    )
 
-    # When Selenium/ChromeDriver failed, fallback to HTTP so estimation still gets text
+    try:
+        ordered, _ = await _scrape_urls_playwright(
+            to_process,
+            timeout_per_url=timeout_per_url,
+            record_video=False,
+        )
+    except Exception as e:
+        logger.exception("Playwright scrape failed: %s", e)
+        ordered = [
+            UrlScrapeResult(url=u, screenshot_base64=None, extracted_text="", error=str(e))
+            for u in to_process
+        ]
+
+    # When Playwright failed, fallback to HTTP so estimation still gets text
     for i, r in enumerate(ordered):
         if r.error and not (r.extracted_text or "").strip():
             fallback_text = await _fetch_text_via_http(r.url, timeout_sec=float(timeout_per_url))
@@ -201,7 +226,7 @@ async def scrape_urls(
                     error=r.error,
                 )
                 logger.info(
-                    "Selenium failed for %s; used HTTP fallback for estimation text",
+                    "Playwright failed for %s; used HTTP fallback for estimation text",
                     r.url,
                 )
 
@@ -229,12 +254,28 @@ async def scrape_urls_with_video(
     """
     Scrape each URL; optionally record video.
 
-    With Selenium we do not support video recording (previously Playwright did).
-    When record_video is True we still run the scrape but return (results, None).
+    When record_video is True and video_storage_dir is set, Playwright records
+    a video of the browsing session. Returns (results, video_dir or None).
     """
-    results = await scrape_urls(
-        urls,
-        timeout_per_url=timeout_per_url,
-        max_urls=max_urls,
-    )
-    return (results, None)
+    if not urls:
+        return [], None
+
+    to_process = urls[:max_urls]
+    storage = video_storage_dir if (record_video and video_storage_dir) else None
+
+    try:
+        results, video_path = await _scrape_urls_playwright(
+            to_process,
+            timeout_per_url=timeout_per_url,
+            record_video=bool(storage),
+            video_storage_dir=storage,
+        )
+    except Exception as e:
+        logger.exception("Playwright scrape with video failed: %s", e)
+        results = [
+            UrlScrapeResult(url=u, screenshot_base64=None, extracted_text="", error=str(e))
+            for u in to_process
+        ]
+        video_path = None
+
+    return results, video_path

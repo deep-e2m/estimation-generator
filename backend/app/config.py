@@ -249,7 +249,7 @@ class Settings(BaseSettings):
         default=18,
         ge=5,
         le=120,
-        description="Timeout in seconds per URL when scraping (Selenium)",
+        description="Timeout in seconds per URL when scraping (Playwright)",
     )
     # Maximum character length for the combined reference URL block in the brief
     URL_REFERENCE_CONTEXT_MAX_CHARS: int = Field(

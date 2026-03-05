@@ -82,6 +82,7 @@ coverage.xml
 # Backend test suite and ad-hoc test scripts (ignored; not committed)
 backend/tests/
 backend/test_*.py
+backend/scripts/test_*.py
 **/local_tests/
 **/generated_tests/
 **/test_output/

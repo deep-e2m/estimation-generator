@@ -23,9 +23,9 @@ async def main():
         raise SystemExit(1)
     if not (r.extracted_text or r.screenshot_base64):
         raise SystemExit(1)
-    print('OK: Chromium scrape succeeded.')
+    print('OK: Playwright scrape succeeded.')
 
 asyncio.run(main())
 "
 
-echo "Done: URL scraping (Chromium) verified in container."
+echo "Done: URL scraping (Playwright) verified in container."
