@@ -19,9 +19,17 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import ActiveUser, DbSession, api_error, get_project_with_access
+from app.api.dependencies import (
+    ActiveUser,
+    DbSession,
+    api_error,
+    get_project_with_access,
+    get_project_with_permission,
+    get_quote_project_scope_for_user,
+)
 from app.models.document import Document, DocumentType
 from app.models.project import Project
+from app.models.project_share import AccessLevel
 from app.models.quote import Complexity, Quote, QuoteStatus
 from app.models.audit_log import ActionOutcome
 from app.services import audit
@@ -160,8 +168,14 @@ async def get_quote_with_access_check(
     current_user,
     db,
     include_project: bool = False,
+    required_permission: AccessLevel = AccessLevel.EDIT_ESTIMATION,
 ) -> Quote:
-    """Get quote and verify user has access."""
+    """
+    Get quote and verify user has at least required_permission on the project.
+
+    For mutations (update, delete, regenerate) use EDIT_ESTIMATION (default).
+    For read-only use get_quote_with_project_access instead.
+    """
     query = select(Quote).where(Quote.id == quote_id)
     if include_project:
         query = query.options(selectinload(Quote.project))
@@ -172,9 +186,7 @@ async def get_quote_with_access_check(
     if quote is None:
         raise api_error(status.HTTP_404_NOT_FOUND, "QUOTE_NOT_FOUND", "Quote not found")
 
-    if quote.created_by != current_user.id and not current_user.is_admin:
-        raise api_error(status.HTTP_403_FORBIDDEN, "ACCESS_DENIED", "You don't have access to this quote")
-
+    await get_project_with_permission(quote.project_id, current_user, db, required_permission)
     return quote
 
 
@@ -362,8 +374,11 @@ async def list_all_quotes(
     Returns:
         QuoteListResponse: Paginated list of quotes.
     """
-    # Build base query - get quotes created by current user
-    base_query = select(Quote).where(Quote.created_by == current_user.id)
+    # Build base query - quotes on projects user can access (own + shared)
+    quote_scope = get_quote_project_scope_for_user(current_user)
+    base_query = select(Quote)
+    if quote_scope is not None:
+        base_query = base_query.where(quote_scope)
 
     if status_filter:
         base_query = base_query.where(Quote.status == status_filter)
@@ -511,8 +526,10 @@ async def generate_quote(
 
     start_time = time.time()
 
-    # Verify project access
-    project = await get_project_with_access(project_id, current_user, db)
+    # Verify project access and EDIT_ESTIMATION permission
+    project, _ = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+    )
 
     # Step 1 (spec): Validate project name and description; build single source of truth (project brief)
     project_name = (project.name or "").strip()
@@ -1007,15 +1024,8 @@ async def get_quote(
             },
         )
 
-    # Check access
-    if quote.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this quote",
-            },
-        )
+    # Check access via project (owner, admin, or shared)
+    await get_project_with_access(quote.project_id, current_user, db)
 
     return QuoteDetailDataResponse(
         success=True,
@@ -1687,10 +1697,12 @@ async def refine_quote(
         current_user.email,
     )
 
-    # Verify project access and get project (may update name/description from chat)
-    project = await get_project_with_access(project_id, current_user, db)
+    # Verify project access and EDIT_ESTIMATION permission
+    project, _ = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+    )
 
-    # Get quote
+    # Get quote (also verifies EDIT_ESTIMATION; redundant but ensures quote belongs to project)
     quote = await get_quote_with_access_check(quote_id, current_user, db)
 
     # Verify quote belongs to project
@@ -1981,8 +1993,10 @@ async def export_quote_docx(
         current_user.email,
     )
 
-    # Verify project access
-    project = await get_project_with_access(project_id, current_user, db)
+    # Verify project access and EDIT_ESTIMATION permission
+    project, _ = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+    )
 
     # Fetch quote with relationships
     query = (
@@ -2002,16 +2016,6 @@ async def export_quote_docx(
             detail={
                 "code": "QUOTE_NOT_FOUND",
                 "message": "Quote not found in this project",
-            },
-        )
-
-    # Check access
-    if quote.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this quote",
             },
         )
 
@@ -2140,8 +2144,10 @@ async def export_quote_pdf(
         current_user.email,
     )
 
-    # Verify project access
-    project = await get_project_with_access(project_id, current_user, db)
+    # Verify project access and EDIT_ESTIMATION permission
+    project, _ = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+    )
 
     # Fetch quote with relationships
     query = (
@@ -2161,16 +2167,6 @@ async def export_quote_pdf(
             detail={
                 "code": "QUOTE_NOT_FOUND",
                 "message": "Quote not found in this project",
-            },
-        )
-
-    # Check access
-    if quote.created_by != current_user.id and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "ACCESS_DENIED",
-                "message": "You don't have access to this quote",
             },
         )
 
@@ -2570,6 +2566,7 @@ async def websocket_quote_updates(
     - quote.status_changed: Quote status changed
     - quote.deleted: Quote has been deleted
     """
+    from app.api.dependencies import get_project_with_access
     from app.core.database import get_session_factory
     from app.core.security import verify_access_token
     from app.models.project import Project
@@ -2606,8 +2603,10 @@ async def websocket_quote_updates(
             await websocket.close(code=4004, reason="Quote not found")
             return
 
-        # Basic access control: owner or admin only
-        if quote.created_by != user.id and not user.is_admin:
+        # Access control: user must have project access (owner, admin, or shared)
+        try:
+            await get_project_with_access(quote.project_id, user, db)
+        except Exception:
             await websocket.close(code=4003, reason="Access denied")
             return
 

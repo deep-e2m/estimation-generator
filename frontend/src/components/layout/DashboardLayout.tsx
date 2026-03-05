@@ -30,6 +30,7 @@ import {
   ClipboardCheck,
   Users,
   FileText,
+  BarChart3,
 } from 'lucide-react'
 
 import { useAuthStore, useUser, useCanApproveEstimations, useCanManageUsers } from '@/store/authStore'
@@ -247,6 +248,7 @@ export default function DashboardLayout() {
       : []),
     ...(canManageUsers
       ? [
+          { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
           { label: 'Users', href: '/admin/users', icon: Users },
           { label: 'Activity Logs', href: '/admin/logs', icon: FileText },
         ]
@@ -310,6 +312,7 @@ export default function DashboardLayout() {
     if (path === '/dashboard') return 'Dashboard'
     if (path.startsWith('/projects')) return 'Projects'
     if (path === '/approval-requests') return 'Approval Requests'
+    if (path.startsWith('/admin/analytics')) return 'Analytics'
     if (path.startsWith('/admin/users')) return 'Users'
     if (path.startsWith('/admin/logs')) return 'Activity Logs'
     if (path.startsWith('/settings')) return 'Settings'

@@ -596,6 +596,121 @@
   gap: var(--space-4);
 }
 
+/* Main layout: left column (stats + graphs) | right sidebar (AI Performance spans full height) */
+.dashboard-main-with-sidebar {
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 300px);
+  gap: var(--space-5);
+  align-items: start;
+  margin-bottom: var(--space-6);
+}
+
+.dashboard-main-content {
+  min-width: 0;
+}
+
+/* AI Performance sidebar - stretches beside top row and graphs */
+.dashboard-ai-performance-sidebar {
+  position: sticky;
+  top: var(--space-4);
+}
+
+/* Top row: three stat cards only */
+.dashboard-top-row {
+  margin-bottom: var(--space-5);
+}
+
+.dashboard-stats-compressed {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Reduced height for top three stat cards */
+.dashboard-stats-compressed .admin-analytics-kpi {
+  padding: var(--space-3) var(--space-4);
+}
+
+.dashboard-stats-compressed .admin-analytics-kpi-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.dashboard-stats-compressed .admin-analytics-kpi-value {
+  font-size: var(--font-size-2xl);
+}
+
+/* Admin analytics row: two graphs side by side */
+.dashboard-admin-graphs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  margin-bottom: 0;
+}
+
+.dashboard-graph-card {
+  padding: var(--space-4);
+  min-height: 0;
+}
+
+.dashboard-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.dashboard-graph-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+}
+
+.dashboard-graph-period-select {
+  font-size: var(--font-size-sm);
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gray-200);
+  background: white;
+  color: var(--color-gray-700);
+}
+
+.dashboard-graph-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.dashboard-section-bottom {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-main-with-sidebar {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-ai-performance-sidebar {
+    position: static;
+  }
+  .dashboard-admin-graphs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1024px) {
+  .dashboard-stats-compressed {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .dashboard-stats-compressed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* AI Greeting Header - Stitch Design */
 .dashboard-header {
   display: flex;
@@ -1103,6 +1218,150 @@
   font-weight: 600;
   color: var(--color-gray-700);
   margin: 0 0 var(--space-3);
+}
+
+/* Admin Analytics – separate cards, 2–3 column grid */
+.dashboard-analytics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-5);
+}
+
+.dashboard-analytics-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dashboard-analytics-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dashboard-analytics-period-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+}
+
+.dashboard-analytics-period-select {
+  border: 1px solid var(--color-gray-300);
+  background: white;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+}
+
+.dashboard-analytics-period-select:focus {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 1px;
+}
+
+.dashboard-analytics-export-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--space-2-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  background: white;
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.dashboard-analytics-export-btn:hover:not(:disabled) {
+  background: var(--color-gray-50);
+}
+
+.dashboard-analytics-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dashboard-analytics-loading-state {
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.dashboard-analytics-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.dashboard-analytics-chart-card {
+  padding: var(--space-4);
+  min-height: 0;
+}
+
+.dashboard-analytics-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.dashboard-analytics-chart-link {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-600);
+}
+
+.dashboard-analytics-chart-link:hover {
+  text-decoration: underline;
+}
+
+.dashboard-analytics-empty-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-400);
+  padding: var(--space-4);
+}
+
+.dashboard-analytics-section-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-gray-200);
+}
+
+.dashboard-analytics-section-row-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-gray-800);
+}
+
+.dashboard-analytics-section-row-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .dashboard-analytics-charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-analytics-charts-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .dashboard-analytics-span-2 {
+    grid-column: span 2;
+  }
 }
 
 /* Chart */
@@ -4412,4 +4671,207 @@
   .project-preview-content {
     padding: var(--space-4);
   }
+}
+
+/* =============================================================================
+   Admin Analytics Page – uses user-management-* for top layout, custom for charts
+   ============================================================================= */
+
+.admin-analytics-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.admin-analytics-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-5) !important;
+  background: white !important;
+  border: 1px solid var(--color-gray-100) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.admin-analytics-kpi:hover {
+  border-color: var(--color-gray-200) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.admin-analytics-kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.admin-analytics-kpi-primary .admin-analytics-kpi-icon {
+  background: var(--color-primary-100);
+  color: var(--color-primary-600);
+}
+
+.admin-analytics-kpi-emerald .admin-analytics-kpi-icon {
+  background: hsl(152 76% 95%);
+  color: hsl(152 69% 31%);
+}
+
+.admin-analytics-kpi-amber .admin-analytics-kpi-icon {
+  background: hsl(43 96% 94%);
+  color: hsl(32 95% 44%);
+}
+
+.admin-analytics-kpi-violet .admin-analytics-kpi-icon {
+  background: hsl(262 83% 96%);
+  color: hsl(262 83% 58%);
+}
+
+.admin-analytics-kpi-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.admin-analytics-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-gray-900);
+  line-height: 1.2;
+}
+
+.admin-analytics-kpi-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-gray-600);
+}
+
+.admin-analytics-kpi-sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+}
+
+.admin-analytics-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+}
+
+.admin-analytics-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.admin-analytics-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.admin-analytics-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-gray-100);
+}
+
+.admin-analytics-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  margin: 0;
+}
+
+.admin-analytics-section-title svg {
+  color: var(--color-primary-500);
+  flex-shrink: 0;
+}
+
+.admin-analytics-section-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-primary-600);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.admin-analytics-section-link:hover {
+  color: var(--color-primary-700);
+  text-decoration: underline;
+}
+
+.admin-analytics-section-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.admin-analytics-cards-grid {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.admin-analytics-cards-2 {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .admin-analytics-cards-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.admin-analytics-cards-1 {
+  grid-template-columns: 1fr;
+}
+
+.admin-analytics-card {
+  padding: var(--space-5) !important;
+  background: white !important;
+  border: 1px solid var(--color-gray-100) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.admin-analytics-card:hover {
+  border-color: var(--color-gray-200) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.admin-analytics-card-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-analytics-card-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-gray-700);
+  margin: 0 0 var(--space-4);
+}
+
+.admin-analytics-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-400);
+  margin: 0;
+  padding: var(--space-8) 0;
+  text-align: center;
 }

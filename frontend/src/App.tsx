@@ -35,6 +35,7 @@ import HelpPage from '@/pages/Help'
 import ApprovalRequestsPage from '@/pages/ApprovalRequests'
 import UsersPage from '@/pages/admin/Users'
 import AuditLogsPage from '@/pages/admin/AuditLogs'
+import AnalyticsPage from '@/pages/admin/Analytics'
 import NotFoundPage from '@/pages/NotFound'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import { APPROVER_ROLES, ADMIN_ROLES } from '@/constants/roles'
@@ -102,6 +103,16 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={[...APPROVER_ROLES]}>
               <ApprovalRequestsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin: Analytics (Admin only) */}
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES]}>
+              <AnalyticsPage />
             </ProtectedRoute>
           }
         />

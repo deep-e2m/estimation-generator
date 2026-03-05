@@ -34,6 +34,7 @@ export interface ProjectShareUpdate {
 export interface ApprovalRequest {
   id: string
   project_id: string
+  project_name?: string
   requested_by: User
   assigned_to: User
   status: ApprovalStatus

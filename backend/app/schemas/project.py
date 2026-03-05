@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.models.project import Platform, ProjectStatus
+from app.models.project_share import AccessLevel
 from app.schemas.auth import APIResponse
 from app.schemas.client import ClientCreate, ClientResponse
 
@@ -157,6 +158,10 @@ class ProjectDetailResponse(ProjectResponse):
     """Extended project response with owner and team information."""
 
     owner: ProjectOwner = Field(..., description="Project owner information")
+    my_access_level: AccessLevel = Field(
+        ...,
+        description="Current user's access level on this project (read, edit_content, edit_estimation, edit_full)",
+    )
     team_members: list[ProjectOwner] = Field(
         default_factory=list,
         description="List of team members on the project",

@@ -103,6 +103,11 @@ export function SendForApprovalDialog({
                   </option>
                 ))}
               </select>
+              {!loading && superPms.length === 0 && (
+                <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+                  No Superior PMs in the system. Contact an admin to add a user with the Superior PM role.
+                </p>
+              )}
               {loading && (
                 <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
                   <Loader2 className="h-4 w-4 animate-spin" />

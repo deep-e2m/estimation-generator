@@ -24,10 +24,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import (
+    get_current_user,
+    get_project_with_access,
+    get_project_with_permission,
+)
 from app.core.database import get_db_session as get_db
 from app.models.document import Document, DocumentType
-from app.models.project import Project
+from app.models.project_share import AccessLevel
 from app.models.user import User
 from app.models.audit_log import ActionOutcome
 from app.services import audit
@@ -186,9 +190,7 @@ async def list_documents(
 ):
     """List all documents for a project."""
     # Verify project exists and user has access
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await get_project_with_access(project_id, current_user, db)
 
     query = select(Document).where(Document.project_id == project_id)
     if document_type:
@@ -215,10 +217,8 @@ async def create_document(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new document."""
-    # Verify project exists
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Verify project exists and user has EDIT_CONTENT permission
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
 
     document = Document(
         project_id=project_id,
@@ -265,6 +265,9 @@ async def get_document(
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific document."""
+    # Verify project access
+    await get_project_with_access(project_id, current_user, db)
+
     document = await db.get(Document, document_id)
     if not document or document.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -284,6 +287,9 @@ async def update_document(
     current_user: User = Depends(get_current_user),
 ):
     """Update a document."""
+    # Verify project access and EDIT_CONTENT permission
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
+
     document = await db.get(Document, document_id)
     if not document or document.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -318,6 +324,9 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a document."""
+    # Verify project access and EDIT_CONTENT permission
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
+
     document = await db.get(Document, document_id)
     if not document or document.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")

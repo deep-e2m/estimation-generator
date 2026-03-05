@@ -48,6 +48,7 @@ import type {
   ReferenceUrlPreviewData,
   ReferenceUrlSitePreviewData,
 } from '@/types';
+import { canEditEstimation, canShareProject } from '@/types/project';
 import type { ChangeDescription, Quote, RefinedProjectUpdate } from '@/types/quote.types';
 
 // Status badge variants
@@ -103,7 +104,13 @@ export function ProjectDetailPage() {
   const saveStatusResetTimeoutRef = useRef<number | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sendApprovalDialogOpen, setSendApprovalDialogOpen] = useState(false);
-  const canShare = useCanShareProject();
+  const canShareRole = useCanShareProject();
+  // Show Share/Send approval only when user has edit_full (owner or admin) on this project
+  const canShareThisProject =
+    project?.my_access_level !== undefined
+      ? canShareProject(project.my_access_level)
+      : canShareRole;
+  const canEditEstimationOnProject = canEditEstimation(project?.my_access_level);
 
   // Load project data
   useEffect(() => {
@@ -391,7 +398,7 @@ export function ProjectDetailPage() {
             <span className="project-detail-breadcrumb-current">{project.name}</span>
           </div>
         </div>
-        {canShare && id && (
+        {canShareThisProject && id && (
           <div className="project-detail-header-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)} leftIcon={<Share2 style={{ width: 16, height: 16 }} />}>
               Share
@@ -403,7 +410,7 @@ export function ProjectDetailPage() {
         )}
       </header>
 
-      {canShare && id && (
+      {canShareThisProject && id && (
         <>
           <ShareProjectDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} projectId={id} />
           <SendForApprovalDialog open={sendApprovalDialogOpen} onOpenChange={setSendApprovalDialogOpen} projectId={id} />
@@ -546,7 +553,7 @@ export function ProjectDetailPage() {
             )}
           </div>
         )}
-        {canShare && id && (
+        {canShareThisProject && id && (
           <div className="project-detail-sharing-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--color-gray-200)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span className="project-detail-description-label">Shared with</span>
@@ -574,6 +581,7 @@ export function ProjectDetailPage() {
             onSaveStatusChange={handleSaveStatusChange}
             referenceUrls={project?.reference_urls?.length ? project.reference_urls : (referenceUrlsUsed ?? undefined)}
             crawlSiteFromUrl={(project?.reference_urls ?? referenceUrlsUsed)?.[0]}
+            readOnly={!canEditEstimationOnProject}
           />
         )}
       </div>

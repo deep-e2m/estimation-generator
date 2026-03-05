@@ -30,6 +30,8 @@ interface EstimationPreviewPanelProps {
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
   /** Called on every editor change so parent can pass latest content to refinement (avoids stale content when user chats without saving). */
   onEditorContentSnapshot?: (serialized: string) => void;
+  /** When true, disable editing (read-only access) */
+  readOnly?: boolean;
 }
 
 /** Debounce delay for auto-save in milliseconds */
@@ -66,6 +68,7 @@ export function EstimationPreviewPanel({
   onQuoteSaved,
   onSaveStatusChange,
   onEditorContentSnapshot,
+  readOnly = false,
 }: EstimationPreviewPanelProps) {
   // Save state
   const [isSaving, setIsSaving] = useState(false);
@@ -83,8 +86,8 @@ export function EstimationPreviewPanel({
   // Abort controller for cancelling in-flight save requests
   const saveAbortRef = useRef<AbortController | null>(null);
 
-  // Determine if the quote is editable (only draft status)
-  const isQuoteEditable = quote.status === 'draft';
+  // Determine if the quote is editable (draft status and user has edit permission)
+  const isQuoteEditable = quote.status === 'draft' && !readOnly;
 
   // ------- Save Logic -------
 

@@ -118,6 +118,8 @@ interface EstimationGenerationUIProps {
   referenceUrls?: string[];
   /** When set, backend crawls this URL for same-host pages and includes all in the brief (full-site estimation) */
   crawlSiteFromUrl?: string;
+  /** When true, user has read-only access - show message and cancel */
+  readOnly?: boolean;
 }
 
 // Animated counter hook
@@ -326,7 +328,27 @@ export function EstimationGenerationUI({
   onCancel,
   referenceUrls,
   crawlSiteFromUrl,
+  readOnly = false,
 }: EstimationGenerationUIProps) {
+  if (readOnly) {
+    return (
+      <div className="estimation-gen-readonly flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
+        <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Read-only access</h3>
+        <p className="text-gray-600 mb-6 max-w-md">
+          You don&apos;t have permission to generate estimates for this project. Ask the project owner for edit access.
+        </p>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
   // State
   const [progress, setProgress] = useState(0);
   const [isGenerating, setIsGenerating] = useState(true);

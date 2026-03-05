@@ -579,7 +579,9 @@ async def get_project(
 ) -> ProjectDetailDataResponse:
     logger.debug("Getting project: id=%s, user=%s", project_id, current_user.email)
 
-    project = await get_project_with_access(project_id, current_user, db)
+    project, my_access_level = await get_project_with_permission(
+        project_id, current_user, db, AccessLevel.READ
+    )
 
     # Get quote count
     quote_count_query = select(func.count()).where(Quote.project_id == project.id)
@@ -628,6 +630,7 @@ async def get_project(
         quotes_count=quote_count,
         client=project.client,
         owner=owner,
+        my_access_level=my_access_level,
         team_members=[],
         target_completion_date=None,
         requirements_count=requirements_count,

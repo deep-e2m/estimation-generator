@@ -34,14 +34,34 @@ export interface ProjectSummary {
   updated_at: string;
 }
 
+// Access level for shared projects (from backend RBAC)
+export type ProjectAccessLevel = 'read' | 'edit_content' | 'edit_estimation' | 'edit_full';
+
 // Full project details
 export interface Project extends ProjectSummary {
   additional_instructions?: string;
   client_email?: string;
   target_completion_date?: string;
   owner: Pick<User, 'id' | 'full_name' | 'email' | 'avatar_url'>;
+  /** Current user's access level on this project (from RBAC; owner/admin have edit_full) */
+  my_access_level?: ProjectAccessLevel;
   team_members: TeamMember[];
   requirements_count?: number;
+}
+
+/** User can generate, refine, and edit estimates when they have edit_estimation or edit_full */
+export function canEditEstimation(level?: ProjectAccessLevel): boolean {
+  return level === 'edit_estimation' || level === 'edit_full';
+}
+
+/** User can edit project content (name, description) when they have edit_content or edit_full */
+export function canEditContent(level?: ProjectAccessLevel): boolean {
+  return level === 'edit_content' || level === 'edit_full';
+}
+
+/** Only owner or admin can share; they have edit_full */
+export function canShareProject(level?: ProjectAccessLevel): boolean {
+  return level === 'edit_full';
 }
 
 // Create project request

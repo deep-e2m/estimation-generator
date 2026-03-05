@@ -99,6 +99,8 @@ interface EstimateChatProps {
   crawlSiteFromUrl?: string;
   /** Optional explicit reference URLs to include in the brief */
   referenceUrls?: string[];
+  /** When true, disable generation, refinement, and editing (read-only access) */
+  readOnly?: boolean;
 }
 
 export function EstimateChat({
@@ -109,6 +111,7 @@ export function EstimateChat({
   onSaveStatusChange,
   crawlSiteFromUrl,
   referenceUrls,
+  readOnly = false,
 }: EstimateChatProps) {
   const navigate = useNavigate();
 
@@ -300,6 +303,7 @@ export function EstimateChat({
         onCancel={handleFullscreenCancel}
         referenceUrls={referenceUrls}
         crawlSiteFromUrl={crawlSiteFromUrl}
+        readOnly={readOnly}
       />
     );
   }
@@ -312,6 +316,7 @@ export function EstimateChat({
         initialQuote={generatedEstimate}
         onQuoteUpdated={onEstimateGenerated}
         onSaveStatusChange={onSaveStatusChange}
+        readOnly={readOnly}
       />
     );
   }
@@ -398,26 +403,31 @@ export function EstimateChat({
                 <Calculator className="h-8 w-8 text-primary-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                Ready to generate estimate?
+                {readOnly
+                  ? 'View only'
+                  : 'Ready to generate estimate?'}
               </h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
-                I'll analyze your project requirements and create a detailed hours estimate. 
-                This process takes approximately 30-45 seconds.
+                {readOnly
+                  ? "You have read-only access to this project. To generate or edit estimates, ask the project owner for edit permissions."
+                  : "I'll analyze your project requirements and create a detailed hours estimate. This process takes approximately 30-45 seconds."}
               </p>
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={() => navigate('/projects')}
                   className="px-6 py-3 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
                 >
-                  Cancel
+                  {readOnly ? 'Back to Projects' : 'Cancel'}
                 </button>
-                <button
-                  onClick={startEstimateGeneration}
-                  className="px-6 py-3 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-all duration-200 shadow-sm inline-flex items-center gap-2"
-                >
-                  Generate Estimate
-                  <span>→</span>
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={startEstimateGeneration}
+                    className="px-6 py-3 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-all duration-200 shadow-sm inline-flex items-center gap-2"
+                  >
+                    Generate Estimate
+                    <span>→</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

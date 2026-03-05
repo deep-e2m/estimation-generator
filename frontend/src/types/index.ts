@@ -39,6 +39,9 @@ export type Platform = 'wordpress';
 // Project Types
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 
+// Access level for shared projects (from backend RBAC)
+export type ProjectAccessLevel = 'read' | 'edit_content' | 'edit_estimation' | 'edit_full';
+
 export interface Project {
   additional_instructions: any;
   id: string;
@@ -49,6 +52,8 @@ export interface Project {
   target_completion_date?: string;
   status: ProjectStatus;
   owner: Pick<User, 'id' | 'full_name' | 'email' | 'avatar_url'>;
+  /** Current user's access level on this project (from RBAC; owner/admin have edit_full) */
+  my_access_level?: ProjectAccessLevel;
   team_members: TeamMember[];
   quotes_count: number;
   requirements_count?: number;

@@ -48,6 +48,8 @@ interface EstimationSplitViewProps {
   ) => void;
   /** Notify parent when inline editor is saving / has saved */
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved') => void;
+  /** When true, disable editing and refinement (read-only access) */
+  readOnly?: boolean;
 }
 
 export function EstimationSplitView({
@@ -55,6 +57,7 @@ export function EstimationSplitView({
   initialQuote,
   onQuoteUpdated,
   onSaveStatusChange,
+  readOnly = false,
 }: EstimationSplitViewProps) {
   const navigate = useNavigate();
   const [currentQuote, setCurrentQuote] = useState<Quote>(initialQuote);
@@ -374,6 +377,7 @@ export function EstimationSplitView({
                     ? currentQuote.content.executive_summary
                     : undefined)
                 }
+                readOnly={readOnly}
               />
             </div>
 
@@ -402,6 +406,7 @@ export function EstimationSplitView({
                   onEditorContentSnapshot={(s) => {
                     latestEditorContentRef.current = s;
                   }}
+                  readOnly={readOnly}
                 />
               </div>
             </div>
@@ -460,7 +465,8 @@ export function EstimationSplitView({
                   type="button"
                   className="estimation-export-option"
                   onClick={() => handleExportDirect('pdf')}
-                  disabled={exportingFormat !== null}
+                  disabled={exportingFormat !== null || readOnly}
+                  title={readOnly ? 'Export requires edit permission' : undefined}
                 >
                   <div className="estimation-export-icon pdf">
                     {exportingFormat === 'pdf' ? (
@@ -480,7 +486,8 @@ export function EstimationSplitView({
                   type="button"
                   className="estimation-export-option"
                   onClick={() => handleExportDirect('docx')}
-                  disabled={exportingFormat !== null}
+                  disabled={exportingFormat !== null || readOnly}
+                  title={readOnly ? 'Export requires edit permission' : undefined}
                 >
                   <div className="estimation-export-icon docx">
                     {exportingFormat === 'docx' ? (
@@ -524,6 +531,7 @@ export function EstimationSplitView({
                   project={project}
                   quote={currentQuote}
                   onQuoteUpdated={handleQuoteUpdate}
+                  readOnly={readOnly}
                 />
               </motion.div>
             ) : (
@@ -544,6 +552,7 @@ export function EstimationSplitView({
                   onEditorContentSnapshot={(s) => {
                     latestEditorContentRef.current = s;
                   }}
+                  readOnly={readOnly}
                 />
               </motion.div>
             )}

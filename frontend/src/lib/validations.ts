@@ -16,7 +16,7 @@ const emailSchema = z
 export const companyEmailSchema = emailSchema.refine(
   (email) => {
     const domain = email.split('@')[1]?.toLowerCase()
-    return domain != null && ALLOWED_EMAIL_DOMAINS.includes(domain)
+    return domain != null && ALLOWED_EMAIL_DOMAINS.some((d) => d === domain)
   },
   { message: 'Please use your company email (@e2m.solutions or @e2msolution.com).' }
 )

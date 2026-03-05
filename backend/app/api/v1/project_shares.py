@@ -18,7 +18,7 @@ from app.api.dependencies import (
     DbSession,
     PmOrAbove,
     api_error,
-    get_project_with_owner_or_admin,
+    get_project_with_permission,
 )
 from app.models.project_share import AccessLevel, ProjectShare
 from app.models.user import User, UserRole
@@ -48,11 +48,11 @@ def _allowed_access_levels_for_role(role: UserRole) -> list[AccessLevel]:
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Share project",
-    description="Share a project with another user. Owner or admin only. When sharing with a Developer, only read or edit_estimation is allowed.",
+    description="Share a project with another user. Requires edit_full (owner, admin, or shared with edit_full). When sharing with a Developer, only read or edit_estimation is allowed.",
     responses={
         201: {"description": "Share created"},
         400: {"description": "Invalid access level for role"},
-        403: {"description": "Not owner or admin"},
+        403: {"description": "Requires edit_full access"},
         404: {"description": "Project or user not found"},
         409: {"description": "Project already shared with this user"},
     },
@@ -63,7 +63,7 @@ async def create_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_owner_or_admin(project_id, current_user, db)
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     # Resolve shared_with user and check role for allowed access levels
     user_result = await db.execute(
@@ -137,10 +137,10 @@ async def create_share(
     "/{project_id}/shares",
     response_model=dict,
     summary="List project shares",
-    description="List all shares for a project. Owner or admin only.",
+    description="List all shares for a project. Requires edit_full access.",
     responses={
         200: {"description": "List of shares"},
-        403: {"description": "Not owner or admin"},
+        403: {"description": "Requires edit_full access"},
         404: {"description": "Project not found"},
     },
 )
@@ -149,7 +149,7 @@ async def list_shares(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_owner_or_admin(project_id, current_user, db)
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     result = await db.execute(
         select(ProjectShare)
@@ -181,11 +181,11 @@ async def list_shares(
     "/{project_id}/shares/{share_id}",
     response_model=dict,
     summary="Update project share",
-    description="Update the access level of a share. Owner or admin only. Developer shares can only be set to read or edit_estimation.",
+    description="Update the access level of a share. Requires edit_full access. Developer shares can only be set to read or edit_estimation.",
     responses={
         200: {"description": "Share updated"},
         400: {"description": "Invalid access level for role"},
-        403: {"description": "Not owner or admin"},
+        403: {"description": "Requires edit_full access"},
         404: {"description": "Project or share not found"},
     },
 )
@@ -196,7 +196,7 @@ async def update_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_owner_or_admin(project_id, current_user, db)
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     result = await db.execute(
         select(ProjectShare)
@@ -262,10 +262,10 @@ async def update_share(
     "/{project_id}/shares/{share_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove project share",
-    description="Remove a share. Owner or admin only.",
+    description="Remove a share. Requires edit_full access.",
     responses={
         204: {"description": "Share removed"},
-        403: {"description": "Not owner or admin"},
+        403: {"description": "Requires edit_full access"},
         404: {"description": "Project or share not found"},
     },
 )
@@ -275,7 +275,7 @@ async def delete_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> None:
-    await get_project_with_owner_or_admin(project_id, current_user, db)
+    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     result = await db.execute(
         select(ProjectShare).where(

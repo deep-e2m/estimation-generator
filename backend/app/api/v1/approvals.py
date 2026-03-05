@@ -20,8 +20,9 @@ from app.api.dependencies import (
     PmOrAbove,
     SuperPmOnly,
     api_error,
-    get_project_with_owner_or_admin,
+    get_project_with_permission,
 )
+from app.models.project_share import AccessLevel
 from app.models.approval_request import ApprovalRequest, ApprovalStatus
 from app.models.user import UserRole
 from app.models.audit_log import ActionOutcome
@@ -43,11 +44,11 @@ router = APIRouter()
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Send project for approval",
-    description="Create an approval request and assign it to a Superior PM. PM (owner) or admin only.",
+    description="Create an approval request and assign it to a Superior PM. Requires edit_full (owner, admin, or shared with edit_full).",
     responses={
         201: {"description": "Approval request created"},
         400: {"description": "Assigned user is not a Superior PM or already has pending request"},
-        403: {"description": "Not owner or admin"},
+        403: {"description": "Not owner, admin, or edit_full access"},
         404: {"description": "Project or user not found"},
     },
 )
@@ -57,7 +58,7 @@ async def create_approval_request(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_owner_or_admin(project_id, current_user, db)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     from app.models.user import User
 
@@ -124,6 +125,7 @@ async def create_approval_request(
     response_data = ApprovalRequestResponse(
         id=request.id,
         project_id=request.project_id,
+        project_name=project.name,
         requested_by=UserResponse.model_validate(request.requester),
         assigned_to=UserResponse.model_validate(request.assignee),
         status=request.status,
@@ -170,6 +172,7 @@ async def list_approval_requests(
         ApprovalRequestResponse(
             id=ar.id,
             project_id=ar.project_id,
+            project_name=ar.project.name if ar.project else None,
             requested_by=UserResponse.model_validate(ar.requester),
             assigned_to=UserResponse.model_validate(ar.assignee),
             status=ar.status,
@@ -218,6 +221,7 @@ async def get_approval_request(
     response_data = ApprovalRequestResponse(
         id=ar.id,
         project_id=ar.project_id,
+        project_name=ar.project.name if ar.project else None,
         requested_by=UserResponse.model_validate(ar.requester),
         assigned_to=UserResponse.model_validate(ar.assignee),
         status=ar.status,
@@ -306,6 +310,7 @@ async def decide_approval(
     response_data = ApprovalRequestResponse(
         id=ar.id,
         project_id=ar.project_id,
+        project_name=ar.project.name if ar.project else None,
         requested_by=UserResponse.model_validate(ar.requester),
         assigned_to=UserResponse.model_validate(ar.assignee),
         status=ar.status,

@@ -19,6 +19,8 @@ interface EstimationChatPanelProps {
   onQuoteUpdated: (quote: Quote, changes: ChangeDescription[]) => void;
   /** When provided, used as the source for refinement so latest editor content (including unsaved) is sent. */
   getCurrentContent?: () => string | undefined;
+  /** When true, disable refinement chat (read-only access) */
+  readOnly?: boolean;
 }
 
 export function EstimationChatPanel({
@@ -26,6 +28,7 @@ export function EstimationChatPanel({
   quote,
   onQuoteUpdated,
   getCurrentContent: getCurrentContentProp,
+  readOnly = false,
 }: EstimationChatPanelProps) {
   const [messageInput, setMessageInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -63,7 +66,7 @@ export function EstimationChatPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || isProcessing) return;
+    if (!messageInput.trim() || isProcessing || readOnly) return;
 
     const text = messageInput.trim();
     setMessageInput('');
@@ -142,6 +145,11 @@ export function EstimationChatPanel({
 
       {/* Input */}
       <div className="chat-input-container">
+        {readOnly ? (
+          <div className="chat-input-readonly text-sm text-gray-500 py-3">
+            You have read-only access. Ask the project owner for edit permissions to refine estimates.
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="chat-input-form">
           <div className="chat-input-wrapper">
             <textarea
@@ -169,6 +177,7 @@ export function EstimationChatPanel({
             Shift+Enter for new line
           </span>
         </form>
+        )}
       </div>
     </div>
   );

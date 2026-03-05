@@ -48,7 +48,7 @@ export function ApprovalRequestCard({
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
             <FileText className="h-3.5 w-3.5" />
-            Project ID: {request.project_id}
+            {request.project_name || `Project ${request.project_id}`}
           </p>
           {request.disapproval_reason && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">

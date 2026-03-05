@@ -50,6 +50,7 @@ class ApprovalRequestResponse(BaseModel):
 
     id: UUID = Field(..., description="Approval request ID")
     project_id: UUID = Field(..., description="Project ID")
+    project_name: str | None = Field(None, description="Project name for display")
     requested_by: UserResponse = Field(
         ...,
         description="User who sent for approval",

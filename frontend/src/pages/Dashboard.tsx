@@ -9,12 +9,10 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
 import {
   FolderOpen,
   FileText,
   Clock,
-  TrendingUp,
   Sparkles,
   ChevronRight,
   MoreVertical,
@@ -23,9 +21,16 @@ import {
   Edit,
   Archive,
   Trash2,
-  Users,
-  ClipboardCheck,
 } from 'lucide-react'
+import {
+  AreaChart,
+  Area,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dropdown } from '@/components/ui/dropdown'
@@ -36,11 +41,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { useUser, useCanApproveEstimations, useCanManageUsers } from '@/store/authStore'
+import { useUser, useCanManageUsers } from '@/store/authStore'
 import { projectsService } from '@/services/projects.service'
 import { quotesService } from '@/services/quotes.service'
-import { dashboardService } from '@/services/dashboard.service'
-import { approvalsService } from '@/services/approvals.service'
+import {
+  dashboardService,
+  type AnalyticsPeriod,
+} from '@/services/dashboard.service'
 import { formatRelativeTime } from '@/lib/date'
 import type { QuoteSummary, QuoteStatus, ProjectStatus } from '@/types'
 
@@ -128,47 +135,29 @@ function ListSkeleton() {
 }
 
 // ============================================
-// STAT CARD COMPONENT - Stitch Design (Fast Rendering)
+// STAT CARD COMPONENT - Analytics page format (icon left, value prominent)
 // ============================================
+
+type KpiColor = 'primary' | 'emerald' | 'amber' | 'violet'
 
 interface StatCardProps {
   label: string
   value: string | number
   subLabel: string
   icon: React.ComponentType<{ style?: React.CSSProperties }>
-  trend?: string
-  trendUp?: boolean
-  badge?: string
-  iconBg: string
-  iconColor: string
+  color: KpiColor
 }
 
-function StatCard({ label, value, subLabel, icon: Icon, trend, trendUp = true, badge, iconBg, iconColor }: StatCardProps) {
+function StatCard({ label, value, subLabel, icon: Icon, color }: StatCardProps) {
   return (
-    <Card className="stat-card">
-      <div className="stat-card-content">
-        <div className="stat-card-icon" style={{ backgroundColor: iconBg }}>
-          <Icon style={{ width: 22, height: 22, color: iconColor }} />
-        </div>
-        <div className="stat-card-info">
-          <div className="stat-card-label">
-            {label}
-            {trend && (
-              <span className={`stat-card-trend ${trendUp ? 'stat-card-trend-up' : 'stat-card-trend-neutral'}`}>
-                {trend}
-                {trendUp && <TrendingUp style={{ width: 10, height: 10 }} />}
-              </span>
-            )}
-            {badge && (
-              <span className="stat-card-badge">
-                <Sparkles style={{ width: 10, height: 10 }} />
-                {badge}
-              </span>
-            )}
-          </div>
-          <div className="stat-card-value">{value}</div>
-          <div className="stat-card-sub">{subLabel}</div>
-        </div>
+    <Card className={`admin-analytics-kpi admin-analytics-kpi-${color}`}>
+      <div className="admin-analytics-kpi-icon">
+        <Icon style={{ width: 22, height: 22 }} />
+      </div>
+      <div className="admin-analytics-kpi-content">
+        <span className="admin-analytics-kpi-value">{value}</span>
+        <span className="admin-analytics-kpi-label">{label}</span>
+        <span className="admin-analytics-kpi-sub">{subLabel}</span>
       </div>
     </Card>
   )
@@ -690,7 +679,7 @@ export default function Dashboard() {
   const user = useUser()
   const queryClient = useQueryClient()
   const [fullAnalyticsOpen, setFullAnalyticsOpen] = useState(false)
-  const canApprove = useCanApproveEstimations()
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>('30d')
   const canManageUsers = useCanManageUsers()
 
   // Dashboard stats from DB (so totals and hours stay correct when projects/quotes are deleted)
@@ -713,12 +702,19 @@ export default function Dashboard() {
     staleTime: 10000,
   })
 
-  // Pending approval count for approvers (admin / super_pm)
-  const { data: pendingApprovals = [] } = useQuery({
-    queryKey: ['approval-requests', 'pending'],
-    queryFn: () => approvalsService.list('pending'),
-    staleTime: 10000,
-    enabled: canApprove,
+  // Admin analytics graphs (admin only)
+  const { data: quotesOverTime = [] } = useQuery({
+    queryKey: ['analytics-quotes-over-time', analyticsPeriod],
+    queryFn: () => dashboardService.getQuotesOverTime(analyticsPeriod),
+    staleTime: 60000,
+    enabled: canManageUsers,
+  })
+
+  const { data: aiUsageOverTime = [] } = useQuery({
+    queryKey: ['analytics-ai-usage-over-time', analyticsPeriod],
+    queryFn: () => dashboardService.getAIUsageOverTime(analyticsPeriod),
+    staleTime: 60000,
+    enabled: canManageUsers,
   })
 
   const deleteProjectMutation = useMutation({
@@ -766,32 +762,28 @@ export default function Dashboard() {
   const firstName = user?.full_name?.split(' ')[0] || 'User'
   const dailyTip = getDailyTip()
 
-  // Stats configuration - Stitch Design (3 cards only); values from DB via dashboard-stats
+  // Stats configuration - Analytics page format (3 cards)
   const statsCards = [
     {
       label: 'Total Projects',
       value: totalProjects,
-      subLabel: `${activeProjects} Active now`,
+      subLabel: `${activeProjects} active`,
       icon: FolderOpen,
-      iconBg: 'var(--color-primary-100)',
-      iconColor: 'var(--color-primary-600)',
+      color: 'primary' as const,
     },
     {
       label: 'Total Quotes',
       value: totalQuotes,
-      subLabel: `${pendingQuotes} Pending`,
+      subLabel: `${pendingQuotes} pending`,
       icon: FileText,
-      iconBg: '#d1fae5',
-      iconColor: '#059669',
+      color: 'emerald' as const,
     },
     {
       label: 'Hours Estimated',
       value: `${totalHoursEstimated}h`,
       subLabel: 'All time',
       icon: Clock,
-      badge: 'AI POWERED',
-      iconBg: '#fef3c7',
-      iconColor: '#d97706',
+      color: 'amber' as const,
     },
   ]
 
@@ -814,97 +806,172 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Grid - Always rendered immediately with default values */}
-      <div className="dashboard-stats-grid" style={{ marginBottom: 'var(--space-6)' }}>
-        {statsCards.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
-      </div>
-
-      {/* Main Content - Two Column Layout */}
-      <div className="dashboard-grid dashboard-grid-3col">
-        {/* Left Column - Projects & Cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-          {/* Recent Projects */}
-          <Card className="dashboard-section" style={{ marginBottom: 0 }}>
-            <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
-              <h2 className="dashboard-section-title">Recent Projects</h2>
-              <button 
-                className="dashboard-section-link"
-                onClick={() => navigate('/projects')}
-              >
-                View all <ChevronRight style={{ width: 16, height: 16 }} />
-              </button>
+      {/* Main content + AI Performance sidebar: AI card spans beside top row AND graphs */}
+      <div className="dashboard-main-with-sidebar">
+        <div className="dashboard-main-content">
+          <div className="dashboard-top-row">
+            <div className="dashboard-stats-compressed">
+              {statsCards.map((stat) => (
+                <StatCard key={stat.label} {...stat} />
+              ))}
             </div>
-            <div style={{ padding: 'var(--space-2) var(--space-3) var(--space-4)' }}>
-              <RecentProjectsList 
-                projects={projects.slice(0, 3)} 
-                isLoading={projectsLoading}
-                onProjectAction={handleProjectAction}
-              />
-            </div>
-          </Card>
+          </div>
 
-          {/* Quick Admin - Admin only */}
+          {/* Admin Analytics: Graphs (admin only) */}
           {canManageUsers && (
-            <Card className="dashboard-section">
-              <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
-                <h2 className="dashboard-section-title flex items-center gap-2">
-                  <Users style={{ width: 20, height: 20 }} />
-                  Quick Admin
-                </h2>
-              </div>
-              <div style={{ padding: 'var(--space-4) var(--space-5)' }}>
-                <Link
-                  to="/admin/users"
-                  className="dashboard-section-link"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  Manage users <ChevronRight style={{ width: 16, height: 16 }} />
-                </Link>
-              </div>
-            </Card>
-          )}
-
-          {/* Pending Approvals - Approvers only */}
-          {canApprove && (
-            <Card className="dashboard-section">
-              <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
-                <h2 className="dashboard-section-title flex items-center gap-2">
-                  <ClipboardCheck style={{ width: 20, height: 20 }} />
-                  Pending Approvals
-                </h2>
-                <Link
-                  to="/approval-requests"
-                  className="dashboard-section-link"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  View all <ChevronRight style={{ width: 16, height: 16 }} />
-                </Link>
-              </div>
-              <div style={{ padding: 'var(--space-4) var(--space-5)' }}>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {pendingApprovals.length === 0
-                    ? 'No pending approval requests.'
-                    : `${pendingApprovals.length} request${pendingApprovals.length !== 1 ? 's' : ''} awaiting your decision.`}
-                </p>
-              </div>
-            </Card>
+            <div className="dashboard-admin-graphs">
+          <Card className="dashboard-graph-card">
+            <div className="dashboard-graph-header">
+              <h3 className="dashboard-graph-title">Quotes & hours estimated over time</h3>
+              <select
+                value={analyticsPeriod}
+                onChange={(e) => setAnalyticsPeriod(e.target.value as AnalyticsPeriod)}
+                className="dashboard-graph-period-select"
+                aria-label="Time period"
+              >
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="90d">90 days</option>
+              </select>
+            </div>
+            {quotesOverTime.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={quotesOverTime} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="dashboard-hours-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-primary-400)" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="var(--color-primary-500)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--color-gray-400)" />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} stroke="var(--color-gray-400)" />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} allowDecimals={false} stroke="var(--color-gray-400)" />
+                  <Tooltip
+                    formatter={(v: number | unknown, n?: string) => [Number(v ?? 0), n === 'count' ? 'Quotes' : 'Hours']}
+                    labelFormatter={(l) => `Date: ${l}`}
+                    contentStyle={{ borderRadius: 8, border: '1px solid var(--color-gray-200)' }}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="count"
+                    stroke="var(--color-primary-500)"
+                    fill="url(#dashboard-hours-grad)"
+                    name="Quotes"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="total_hours"
+                    stroke="#059669"
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
+                    name="Hours"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="dashboard-graph-empty">No quotes in this period</p>
+            )}
+          </Card>
+          <Card className="dashboard-graph-card">
+            <div className="dashboard-graph-header">
+              <h3 className="dashboard-graph-title">Token usage & cost over time</h3>
+              <select
+                value={analyticsPeriod}
+                onChange={(e) => setAnalyticsPeriod(e.target.value as AnalyticsPeriod)}
+                className="dashboard-graph-period-select"
+                aria-label="Time period"
+              >
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="90d">90 days</option>
+              </select>
+            </div>
+            {aiUsageOverTime.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={aiUsageOverTime} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="dashboard-tokens-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--color-gray-400)" />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} stroke="var(--color-gray-400)" />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => `$${v.toFixed(4)}`}
+                    stroke="var(--color-gray-400)"
+                  />
+                  <Tooltip
+                    formatter={(v: number | unknown, n?: string) => [
+                      n === 'tokens' ? Number(v ?? 0).toLocaleString() : `$${Number(v ?? 0).toFixed(4)}`,
+                      n === 'tokens' ? 'Tokens' : 'Cost',
+                    ]}
+                    labelFormatter={(l) => `Date: ${l}`}
+                    contentStyle={{ borderRadius: 8, border: '1px solid var(--color-gray-200)' }}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="tokens"
+                    stroke="#7c3aed"
+                    fill="url(#dashboard-tokens-grad)"
+                    name="Tokens"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="cost"
+                    stroke="#d97706"
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
+                    name="Cost"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="dashboard-graph-empty">No AI usage in this period</p>
+            )}
+          </Card>
+            </div>
           )}
         </div>
 
-        {/* Right Column - AI Performance (values from dashboard-stats API; no hardcoded fallbacks) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+        <div className="dashboard-ai-performance-sidebar">
           <AIPerformanceCard
             totalAnalysis={totalAnalysis}
             accuracyPercent={stats?.ai_accuracy_percent ?? null}
             marginOfErrorPercent={stats?.margin_of_error_percent ?? null}
             aiEfficiencyPercent={stats?.ai_efficiency_percent ?? null}
             metricsSource={stats?.ai_metrics_source ?? null}
-            onFullAnalytics={() => setFullAnalyticsOpen(true)}
+            onFullAnalytics={canManageUsers ? () => navigate('/admin/analytics') : () => setFullAnalyticsOpen(true)}
           />
         </div>
       </div>
+
+      {/* Recent Projects - Full width at bottom */}
+      <Card className="dashboard-section dashboard-section-bottom">
+        <div className="dashboard-section-header" style={{ padding: 'var(--space-4) var(--space-5) 0' }}>
+          <h2 className="dashboard-section-title">Recent Projects</h2>
+          <button
+            className="dashboard-section-link"
+            onClick={() => navigate('/projects')}
+          >
+            View all <ChevronRight style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+        <div style={{ padding: 'var(--space-2) var(--space-3) var(--space-4)' }}>
+          <RecentProjectsList
+            projects={projects.slice(0, 3)}
+            isLoading={projectsLoading}
+            onProjectAction={handleProjectAction}
+          />
+        </div>
+      </Card>
 
       <FullAnalyticsDialog
         open={fullAnalyticsOpen}

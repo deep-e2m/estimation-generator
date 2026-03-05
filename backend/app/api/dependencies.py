@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.orm import selectinload
@@ -20,6 +20,7 @@ from app.core.database import get_db_session
 from app.core.security import TokenValidationError, verify_access_token
 from app.models.project import Project
 from app.models.project_share import AccessLevel, ProjectShare
+from app.models.quote import Quote
 from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -408,3 +409,22 @@ async def get_project_with_permission(
             f"This action requires {required.value} access or higher",
         )
     return project, effective
+
+
+def get_quote_project_scope_for_user(user: User):
+    """
+    Return SQL expression to filter Quote by project access.
+
+    Admin sees all quotes; others see quotes on projects they own or have shared.
+    Returns None for admin (no filter), else an or_() expression for use in
+    .where(quote_project_scope).
+    """
+    if user.is_admin:
+        return None
+    shared_ids = select(ProjectShare.project_id).where(
+        ProjectShare.shared_with_user_id == user.id
+    )
+    return or_(
+        Quote.project_id.in_(select(Project.id).where(Project.created_by == user.id)),
+        Quote.project_id.in_(shared_ids),
+    )
