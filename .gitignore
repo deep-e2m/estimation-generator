@@ -82,6 +82,8 @@ coverage.xml
 # Backend test suite and ad-hoc test scripts (ignored; not committed)
 backend/tests/
 backend/test_*.py
+backend/scripts/test_*.py
+**/scripts/test_*.py
 **/local_tests/
 **/generated_tests/
 **/test_output/
@@ -126,7 +128,8 @@ docker/init-db/*.sh
 # ==========================================
 # Testing / Playwright
 # ==========================================
-# Test source (backend/tests/, *test*.py, *.test.ts, etc.) is tracked. Only outputs/caches below are ignored.
+# Test source (backend/tests/, backend/test_*.py, backend/scripts/test_*.py) is ignored above.
+# Only outputs/caches below are listed here.
 .playwright-mcp/
 .playwright/
 playwright-report/
