@@ -42,6 +42,8 @@ export interface Project extends ProjectSummary {
   owner: Pick<User, 'id' | 'full_name' | 'email' | 'avatar_url'>;
   team_members: TeamMember[];
   requirements_count?: number;
+  /** Scope items inferred from brief (description, docs, scraped URLs) for estimation */
+  requirements_summary?: string[];
 }
 
 // Create project request
@@ -123,6 +125,8 @@ export interface CheckContentQualityResponse {
 export interface ReferenceUrlPreviewData {
   url: string;
   extracted_text: string;
+  /** AI description of screenshot (pages, design, structure) — primary input when present (e.g. Figma) */
+  vision_analysis?: string | null;
   screenshot_base64: string | null;
   error: string | null;
 }

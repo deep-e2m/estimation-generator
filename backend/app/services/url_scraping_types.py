@@ -13,3 +13,5 @@ class UrlScrapeResult:
     error: str | None
     # Optional extra screenshots (e.g. Figma multiple frames); vision runs on each for richer context
     extra_screenshots: list[str] | None = None
+    # Optional page/section name (e.g. Figma page name); used for multi-page Figma exploration
+    page_name: str | None = None

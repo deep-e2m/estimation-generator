@@ -176,19 +176,28 @@ async def get_quote_with_access_check(
     return quote
 
 
-def extract_analysis_metadata(content: str, requirements: str, breakdown: list | None = None) -> AnalysisMetadata:
+def extract_analysis_metadata(
+    content: str,
+    requirements: str,
+    breakdown: list | None = None,
+    *,
+    brief: str | None = None,
+) -> AnalysisMetadata:
     """
     Extract analysis metadata from generated quote content.
 
     Parses the content to count requirements, tasks, sections, and pages.
-    Requirements count is derived from the requirements text so it stays
-    consistent between live analysis and project detail.
+    Requirements count is derived from the full brief (description + docs + URLs)
+    when provided, otherwise from requirements text only. This ensures the count
+    reflects all scope inputs (uploaded docs, scraped URLs) not just description.
 
     Used for dashboard and UI only; not an accuracy or validation metric.
     """
     import re
 
-    # Count requirements from the original requirements text (single source of truth)
+    # Use full brief for counting when available (includes docs, scraped URLs); else fall back to requirements
+    scope_text = (brief or requirements).strip()
+
     # 1) Explicit list items: bullets, numbered items
     req_list_patterns = [
         r'^\s*[-•*]\s+',  # Bullet points
@@ -199,21 +208,43 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
         r'(?:need|require|want|must|should|include|feature|page|section)\s+',
         re.IGNORECASE,
     )
-    requirements_lines = [ln.strip() for ln in requirements.split('\n') if ln.strip()]
+    # Skip section headers like "Description:", "Requirements:", "Source document / SOW:"
+    skip_headers = ("project:", "description:", "additional instructions:", "requirements:", "source document", "reference urls")
+    scope_lines = [ln.strip() for ln in scope_text.split('\n') if ln.strip()]
+
     requirements_count = 0
-    for line in requirements_lines:
+    requirements_items: list[str] = []
+
+    for line in scope_lines:
         if not line or line.startswith('#'):
+            continue
+        # Skip known section header lines (typically short)
+        lower = line.lower()
+        if any(lower.startswith(h) and len(line) < 80 for h in skip_headers):
             continue
         is_list_item = any(re.search(p, line) for p in req_list_patterns)
         is_requirement_phrase = len(line) > 15 and (req_phrase_pattern.search(line) or len(line) > 40)
         if is_list_item or is_requirement_phrase:
             requirements_count += 1
+            # Store first 80 chars to keep tooltip manageable
+            item = (line[:80] + "…") if len(line) > 80 else line
+            if item not in requirements_items:
+                requirements_items.append(item)
     # If no structured items found, treat each substantial non-empty line as one requirement
-    if requirements_count == 0 and requirements_lines:
-        requirements_count = sum(1 for ln in requirements_lines if len(ln) > 10 and not ln.startswith('#'))
+    if requirements_count == 0 and scope_lines:
+        for ln in scope_lines:
+            if len(ln) > 10 and not ln.startswith('#'):
+                lower = ln.lower()
+                if not any(lower.startswith(h) and len(ln) < 80 for h in skip_headers):
+                    requirements_count += 1
+                    item = (ln[:80] + "…") if len(ln) > 80 else ln
+                    requirements_items.append(item)
     # When there was input but no lines matched, treat as one requirement
-    if requirements.strip() and requirements_count == 0:
+    if scope_text and requirements_count == 0:
         requirements_count = 1
+        # Use first meaningful line or truncated brief
+        first_line = next((ln for ln in scope_lines if len(ln) > 10 and not ln.lower().startswith(("project:", "description:"))), scope_lines[0] if scope_lines else "")
+        requirements_items = [(first_line[:80] + "…") if len(first_line) > 80 else first_line] if first_line else []
 
     # Count tasks from the breakdown if available, or from content
     tasks_count = 0
@@ -293,7 +324,7 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
         complexity_factors.append("Interactive tools")
 
     # SEO / analytics (check both requirements and generated content)
-    seo_source = f"{requirements}\n{content}"
+    seo_source = f"{scope_text}\n{content}"
     seo_pattern = (
         r'\bseo\b|search engine|rank math|yoast|google analytics|ga4\b|analytics\b|schema markup|structured data'
     )
@@ -303,6 +334,7 @@ def extract_analysis_metadata(content: str, requirements: str, breakdown: list |
     
     return AnalysisMetadata(
         requirements_count=requirements_count,
+        requirements_items=requirements_items[:25],  # Cap for storage/UI
         tasks_count=tasks_count,
         sections_count=sections_count,
         pages_count=pages_count,
@@ -734,11 +766,12 @@ async def generate_quote(
         elif result.total_hours > 80:
             complexity = Complexity.HIGH
 
-    # Extract analysis metadata to get requirements count and feature flags
+    # Extract analysis metadata from full brief (description + docs + scraped URLs) for accurate requirements count
     analysis_metadata = extract_analysis_metadata(
         content=result.content,
         requirements=request.requirements,
         breakdown=result.breakdown,
+        brief=canonical_brief,
     )
 
     # Create quote in database (HOURS ONLY - NO PRICING)
@@ -770,6 +803,7 @@ async def generate_quote(
             "assumptions": result.assumptions,
             "exclusions": result.exclusions,
             "requirements_count": analysis_metadata.requirements_count,
+            "requirements_items": analysis_metadata.requirements_items,
             # Persist analysis snapshot and feature flags for dashboard / estimation UI
             "analysis": analysis_metadata.model_dump(),
             "feature_flags": {
@@ -1510,6 +1544,7 @@ async def regenerate_quote(
             "regeneration_feedback": request.feedback,
             "regeneration_count": existing_metadata.get("regeneration_count", 0) + 1,
             "requirements_count": analysis_metadata.requirements_count,
+            "requirements_items": analysis_metadata.requirements_items,
             "analysis": analysis_metadata.model_dump(),
             "feature_flags": {
                 "multi_language": analysis_metadata.has_multi_language,
@@ -1793,6 +1828,7 @@ async def refine_quote(
     existing_metadata["refinement_history"] = refinement_history
     existing_metadata["refinement_count"] = len(refinement_history)
     existing_metadata["requirements_count"] = analysis_metadata.requirements_count
+    existing_metadata["requirements_items"] = analysis_metadata.requirements_items
     existing_metadata["analysis"] = analysis_metadata.model_dump()
     existing_metadata["feature_flags"] = {
         "multi_language": analysis_metadata.has_multi_language,

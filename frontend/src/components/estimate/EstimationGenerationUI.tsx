@@ -398,8 +398,8 @@ export function EstimationGenerationUI({
         // Non-blocking: continue without document_summary if list fails
       }
 
-      // Reference URLs are auto-extracted by the backend from description, additional_instructions,
-      // and document text (uploaded PDFs/docs). No need to pass reference_urls from the form.
+      // Reference URLs: passed from project.reference_urls (auto-extracted at creation) or
+      // referenceUrlsUsed (from last quote). Backend also extracts from description, instructions, and docs.
       const request: GenerateQuoteRequest = {
         requirements: description,
         use_rag: true,

@@ -131,8 +131,9 @@ When a user shares a Figma design link during project creation, the system:
 ## Figma-Specific Behavior
 
 - **No site crawl**: Figma design links (`figma.com/design/...`, `figma.com/file/...`) trigger single-URL scrape only
-- **Why**: Crawling figma.com would discover unrelated pages; designs are single-page
-- **run_figma_estimation.py**: Standalone script sets `SITE_CRAWL_ENABLED=false` for Figma; main system achieves same via `_is_figma_url()` check
+- **Why**: Crawling figma.com would discover unrelated pages; designs live in one file
+- **Multi-page exploration**: When `FIGMA_PAGE_EXPLORATION_ENABLED=true`, Playwright explores the Pages sidebar (Home, Internal pages, etc.), expands collapsible sections, clicks each page, and captures a screenshot per page so the full scope (e.g. 10 pages) is captured for accurate estimation
+- **Config**: `MAX_FIGMA_PAGES` (default 20) caps how many pages to explore per file
 
 ## Data Flow Summary
 

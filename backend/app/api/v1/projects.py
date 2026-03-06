@@ -230,6 +230,7 @@ async def reference_url_preview(
                 data=ReferenceUrlPreviewData(
                     url=stored_url_used,
                     extracted_text=stored.get("extracted_text") or "",
+                    vision_analysis=stored.get("vision_analysis"),
                     screenshot_base64=stored.get("screenshot_base64"),
                     error=stored.get("error"),
                 ),
@@ -269,6 +270,7 @@ async def reference_url_preview(
         data=ReferenceUrlPreviewData(
             url=r.url,
             extracted_text=r.extracted_text or "",
+            vision_analysis=None,  # Only available after estimate generation (stored scraped_data)
             screenshot_base64=r.screenshot_base64,
             error=r.error,
         ),
@@ -332,6 +334,7 @@ async def reference_url_site_preview(
                 ReferenceUrlPreviewData(
                     url=stored_url,
                     extracted_text=(data.get("extracted_text") or ""),
+                    vision_analysis=data.get("vision_analysis"),
                     screenshot_base64=data.get("screenshot_base64"),
                     error=data.get("error"),
                 )
@@ -379,6 +382,7 @@ async def reference_url_site_preview(
                             ReferenceUrlPreviewData(
                                 url=stored_url_key,
                                 extracted_text=(stored.get("extracted_text") or ""),
+                                vision_analysis=stored.get("vision_analysis"),
                                 screenshot_base64=stored.get("screenshot_base64"),
                                 error=stored.get("error"),
                             ),
@@ -433,6 +437,7 @@ async def reference_url_site_preview(
         ReferenceUrlPreviewData(
             url=r.url,
             extracted_text=r.extracted_text or "",
+            vision_analysis=None,
             screenshot_base64=r.screenshot_base64,
             error=r.error,
         )
@@ -677,8 +682,9 @@ async def get_project(
     quote_count_result = await db.execute(quote_count_query)
     quote_count = quote_count_result.scalar() or 0
 
-    # Get requirements count from the latest quote's metadata
+    # Get requirements count and summary from the latest quote's metadata
     requirements_count = 0
+    requirements_summary: list[str] | None = None
     latest_quote_query = (
         select(Quote)
         .where(Quote.project_id == project.id)
@@ -689,6 +695,7 @@ async def get_project(
     latest_quote = latest_quote_result.scalar_one_or_none()
     if latest_quote and latest_quote.extra_data:
         requirements_count = latest_quote.extra_data.get("requirements_count", 0)
+        requirements_summary = latest_quote.extra_data.get("requirements_items")
 
     # Build owner from eagerly-loaded creator
     owner = ProjectOwner(
@@ -722,6 +729,7 @@ async def get_project(
         team_members=[],
         target_completion_date=None,
         requirements_count=requirements_count,
+        requirements_summary=requirements_summary,
     )
 
     return ProjectDetailDataResponse(

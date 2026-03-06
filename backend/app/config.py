@@ -246,10 +246,10 @@ class Settings(BaseSettings):
         description="Maximum number of reference URLs to scrape per request",
     )
     URL_SCRAPE_TIMEOUT_SEC: int = Field(
-        default=18,
+        default=45,
         ge=5,
         le=120,
-        description="Timeout in seconds per URL when scraping (Playwright)",
+        description="Timeout in seconds per URL when scraping. Figma/SPAs need ~45s for design canvas to load.",
     )
     # Maximum character length for the combined reference URL block in the brief
     URL_REFERENCE_CONTEXT_MAX_CHARS: int = Field(
@@ -302,6 +302,20 @@ class Settings(BaseSettings):
         ge=60,
         le=600,
         description="Max timeout when crawling full site (crawl + scrape + vision); allows superb outcomes",
+    )
+
+    # ==================== Figma multi-page exploration ====================
+    # When enabled, Figma URLs are explored by clicking each page in the Pages sidebar
+    # (Home, Internal pages, etc.) and capturing a screenshot per page for accurate scope.
+    FIGMA_PAGE_EXPLORATION_ENABLED: bool = Field(
+        default=True,
+        description="Explore all pages in Figma file (Pages sidebar) and screenshot each for accurate scope",
+    )
+    MAX_FIGMA_PAGES: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="Maximum number of Figma pages to explore and screenshot per file",
     )
 
     # List-like settings: stored as str from env, exposed as list via properties

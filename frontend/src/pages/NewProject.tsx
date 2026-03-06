@@ -48,7 +48,6 @@ interface FormData {
   name: string
   description: string
   additionalInputs: string
-  referenceUrls: string
   platform: Platform
   clientType: 'new' | 'existing'
   files: File[]
@@ -90,7 +89,6 @@ export function NewProjectPage() {
     name: '',
     description: '',
     additionalInputs: '',
-    referenceUrls: '',
     platform: 'wordpress',
     clientType: 'new',
     files: [],
@@ -176,24 +174,14 @@ export function NewProjectPage() {
     }))
   }, [])
 
-  // Parse reference URLs from text (one per line or comma-separated)
-  const parseReferenceUrls = useCallback((text: string): string[] => {
-    return text
-      .split(/[\n,]/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && /^https?:\/\//i.test(s))
-  }, [])
-
   // Create project (shared logic after quality check or "submit anyway").
-  // Reference URLs: explicit field, or auto-extracted by backend from description, additional inputs, documents.
+  // Reference URLs are auto-extracted by backend from description, additional inputs, and uploaded documents.
   const createProjectAndContinue = useCallback(async () => {
-    const explicitRefUrls = parseReferenceUrls(formData.referenceUrls)
     const projectData: ProjectCreate = {
       name: formData.name.trim(),
       description: formData.description.trim(),
       platform: formData.platform,
       ...(formData.additionalInputs.trim() ? { additional_instructions: formData.additionalInputs.trim() } : {}),
-      ...(explicitRefUrls.length > 0 ? { reference_urls: explicitRefUrls } : {}),
     }
     const project = await projectsService.create(projectData)
     const filesToUpload = formData.files.filter((f) => {
@@ -215,7 +203,7 @@ export function NewProjectPage() {
     setCreatedProject(project)
     setShowEstimationUI(true)
     setQualityResult(null)
-  }, [formData, parseReferenceUrls])
+  }, [formData])
 
   // Max document text length to send to quality check (backend caps at 100k; stay under for prompt)
   const DOCUMENT_TEXT_CAP = 45_000
@@ -330,7 +318,7 @@ export function NewProjectPage() {
   }, [createdProject, navigate])
 
   // Show estimation generation UI when project is created.
-  // Pass project.reference_urls (explicit field + auto-extracted from description/docs) for scraping during estimation.
+  // project.reference_urls is auto-extracted by backend from description + additional inputs at creation.
   if (showEstimationUI && createdProject) {
     return (
       <EstimationGenerationUI
@@ -500,27 +488,7 @@ export function NewProjectPage() {
                 </span>
               ))}
               <p className="new-project-form-hint">
-                This will be used to generate your AI-powered estimate.
-              </p>
-            </div>
-
-            {/* Reference URLs / Figma (optional) */}
-            <div className="new-project-form-group">
-              <Label className="new-project-form-label">
-                Reference URLs (Figma, etc.){' '}
-                <span className="new-project-form-optional">(Optional)</span>
-              </Label>
-              <textarea
-                className="input"
-                value={formData.referenceUrls}
-                onChange={handleChange('referenceUrls')}
-                placeholder="Paste Figma design links or other reference URLs (one per line or comma-separated)"
-                rows={2}
-                disabled={isSubmitting || isCheckingQuality}
-                style={{ resize: 'vertical', minHeight: '60px' }}
-              />
-              <p className="new-project-form-hint">
-                Design links (e.g. Figma) are scraped and used for more accurate estimates. You can also paste URLs in the description.
+                Include Figma links or other reference URLs in the description—they are detected automatically and used for the estimate.
               </p>
             </div>
 

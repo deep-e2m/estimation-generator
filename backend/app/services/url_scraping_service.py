@@ -4,26 +4,21 @@ URL scraping service: all URLs scraped with Playwright (Chromium).
 Used to fetch reference URLs detected in project content. Results are consumed
 by the reference URL context builder for inclusion in the project brief.
 
-All URLs (including Figma design links) are opened in a headless browser for
-screenshot + body text. No Figma API or token required.
+All URLs (including Figma design links) are opened directly in a headless browser
+for screenshot + body text. No API keys or tokens required — shared Figma links
+work as plain URLs.
 
-Playwright provides auto-waiting, better SPA/Figma handling. When Playwright
-fails (e.g. not installed), an HTTP fallback fetches HTML and extracts visible
-text so estimation still has reference content.
+For Figma: when FIGMA_PAGE_EXPLORATION_ENABLED, explores the Pages sidebar (Home,
+Internal pages, etc.), clicks each page, and captures a screenshot per page so
+the full scope (e.g. 10 pages) is captured for accurate estimation.
 
-Figma-specific handling (browser-only, no API):
-- URL transformed to Figma embed format (strips chrome, shows canvas directly)
-- Extended post-load wait (8s) to allow SPA + canvas to fully render
-- Full-page screenshot to capture design frames below the fold
-- Two additional scroll-offset screenshots stored in extra_screenshots so
-  vision receives the full canvas area, not just the initial viewport
+Flow: open URL → wait for load → (Figma: discover & click each page) → screenshot(s)
 """
 
 import asyncio
 import base64
 import logging
 import os
-from urllib.parse import quote as url_quote
 
 import httpx
 from bs4 import BeautifulSoup
@@ -31,45 +26,40 @@ from bs4 import BeautifulSoup
 from app.services.url_scraping_types import UrlScrapeResult
 
 # Re-export for callers that import from this module
-__all__ = ["UrlScrapeResult", "scrape_urls"]
+__all__ = ["UrlScrapeResult", "scrape_urls", "is_figma_url"]
 
 logger = logging.getLogger(__name__)
 
 # Per-URL text truncation to control token usage
 EXTRACTED_TEXT_MAX_CHARS = 15_000
 
-# Default viewport for screenshot — wide enough for desktop designs and Figma canvas
-VIEWPORT_WIDTH = 1920
-VIEWPORT_HEIGHT = 1080
+# Viewport for screenshot — high resolution for accurate design and text capture
+# 2560x1440 matches common design canvas sizes; ensures legible text and structure
+VIEWPORT_WIDTH = 2560
+VIEWPORT_HEIGHT = 1440
 
-# Wait after load for standard sites (ms)
-WAIT_AFTER_LOAD_MS = 1500
+# Device scale for sharper screenshots (1 = default, 2 = retina)
+DEVICE_SCALE_FACTOR = 2
 
-# Extended wait for Figma SPA + canvas render (ms)
+# Wait after load for content to render (ms)
+# Figma/SPAs need ~8s for design canvas; standard sites ~3s
+WAIT_AFTER_LOAD_MS = 3000
 WAIT_AFTER_LOAD_FIGMA_MS = 8000
 
-# Real Chrome user-agent — reduces bot detection (403 from Figma/CloudFront)
+# Minimum timeout for Figma (sec); design files can be large
+FIGMA_MIN_TIMEOUT_SEC = 45
+
+# Real Chrome user-agent — reduces bot detection
 CHROME_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 
-def _is_figma_url(url: str) -> bool:
-    """True if URL is a Figma design/file link."""
+def is_figma_url(url: str) -> bool:
+    """True if URL is a Figma design/file link. Shared for consistency across scraping and context builder."""
     u = (url or "").strip().lower()
     return "figma.com/design/" in u or "figma.com/file/" in u
-
-
-def _to_figma_embed_url(url: str) -> str:
-    """
-    Transform a Figma design/file URL to the embed format.
-    Embed mode removes Figma app chrome and shows the canvas directly,
-    which gives vision a cleaner view of the actual design frames.
-    e.g. https://www.figma.com/design/KEY/Name → https://www.figma.com/embed?embed_host=share&url=<encoded>
-    """
-    encoded = url_quote(url, safe="")
-    return f"https://www.figma.com/embed?embed_host=share&url={encoded}"
 
 
 async def _fetch_text_via_http(url: str, timeout_sec: float = 25.0) -> str:
@@ -105,6 +95,233 @@ def _truncate_text(text: str) -> str:
     return (text[:EXTRACTED_TEXT_MAX_CHARS] + "\n\n[... truncated ...]").strip()
 
 
+# JS to discover Figma page names from the Pages sidebar.
+# Figma uses a tree: "Pages" header, then items (Home, Internal pages, etc.).
+# "Internal pages" is expandable; we expand first, then collect all leaf names in order.
+_FIGMA_DISCOVER_PAGES_JS = """
+() => {
+  const SKIP = ['Pages','Layers','Assets','Search','Prototype','Inspect','Components','Styles'];
+  const names = [];
+  const seen = new Set();
+
+  const add = (s) => {
+    const t = (s || '').trim();
+    if (t.length >= 2 && t.length <= 80 && !SKIP.includes(t) && !seen.has(t)) {
+      seen.add(t);
+      names.push(t);
+    }
+  };
+
+  const leftPanel = document.querySelector('[data-testid="left-sidebar"]') ||
+    document.querySelector('[class*="sidebar"]') ||
+    document.querySelector('[class*="panel"]') ||
+    document.body;
+
+  const findText = (el, txt) => {
+    if ((el.textContent || '').trim() === txt) return el;
+    for (const c of (el.children || [])) {
+      const r = findText(c, txt);
+      if (r) return r;
+    }
+    return null;
+  };
+
+  const pagesHeader = findText(leftPanel, 'Pages');
+  if (!pagesHeader) {
+    const walk = (el, d) => {
+      if (d > 6) return;
+      const t = (el.textContent || '').trim().split(/[\\n\\r]+/)[0]?.trim();
+      if (t && !SKIP.includes(t)) add(t);
+      for (const c of (el.children || [])) {
+        if (c.getBoundingClientRect().height > 8) walk(c, d + 1);
+      }
+    };
+    walk(leftPanel, 0);
+    return { names, count: names.length };
+  }
+
+  let root = pagesHeader;
+  for (let i = 0; i < 10; i++) {
+    const p = root.parentElement;
+    if (!p) break;
+    root = p;
+  }
+
+  const collectVisible = (el, depth) => {
+    if (depth > 8) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.height < 8 || rect.width < 20) return;
+    const txt = (el.textContent || '').replace(/\\s+/g, ' ').trim().split('\\n')[0]?.trim();
+    if (txt) add(txt);
+    for (const c of (el.children || [])) collectVisible(c, depth + 1);
+  };
+
+  const next = root.nextElementSibling || (root.parentElement && Array.from(root.parentElement.children).find(c => c !== root && c.compareDocumentPosition(root) === 4));
+  if (next) collectVisible(next, 0);
+  collectVisible(root, 0);
+
+  return { names: names.slice(0, 30), count: names.length };
+}
+"""
+
+# Fallback: XPath for treeitem/row elements in the left panel
+_FIGMA_DISCOVER_PAGES_FALLBACK_JS = """
+() => {
+  const SKIP = ['Pages','Layers','Assets','Search','Prototype','Inspect'];
+  const names = [];
+  const sel = document.querySelectorAll('[role="treeitem"], [role="button"], [class*="row"], [class*="item"]');
+  for (const el of sel) {
+    const r = el.getBoundingClientRect();
+    if (r.left > window.innerWidth * 0.4) continue;
+    const t = (el.textContent || '').trim().split(/[\\n\\r]+/)[0]?.trim();
+    if (t && t.length >= 2 && t.length <= 80 && !SKIP.includes(t) && !names.includes(t)) {
+      names.push(t);
+    }
+  }
+  return { names: names.slice(0, 25), count: names.length };
+}
+"""
+
+
+async def _scrape_figma_multi_page(
+    context,  # playwright.async_api.BrowserContext
+    url: str,
+    *,
+    timeout_per_url: int,
+    max_pages: int,
+) -> list[UrlScrapeResult]:
+    """
+    Explore Figma Pages sidebar, click each page, and capture a screenshot per page.
+    Returns one UrlScrapeResult per page (with page_name set) for accurate scope.
+    Falls back to single-page capture if page discovery fails.
+    """
+    from app.config import get_settings
+
+    page = None
+    effective_timeout_ms = max(timeout_per_url, FIGMA_MIN_TIMEOUT_SEC) * 1000
+    wait_sec = WAIT_AFTER_LOAD_FIGMA_MS / 1000.0
+    results: list[UrlScrapeResult] = []
+
+    try:
+        page = await context.new_page()
+        page.set_default_timeout(effective_timeout_ms)
+        page.set_default_navigation_timeout(effective_timeout_ms)
+
+        await page.goto(url, wait_until="load", timeout=effective_timeout_ms)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            pass
+        await asyncio.sleep(wait_sec)
+
+        # Expand collapsible sections (e.g. "Internal pages") under Pages to discover sub-pages
+        try:
+            loc = page.get_by_text("Internal pages", exact=False).first
+            await loc.scroll_into_view_if_needed(timeout=3000)
+            await loc.click(timeout=3000)
+            await asyncio.sleep(0.8)
+        except Exception:
+            pass
+
+        # Discover page names from the Pages sidebar
+        discovered = await page.evaluate(_FIGMA_DISCOVER_PAGES_JS)
+        names: list[str] = discovered.get("names") or []
+
+        if not names:
+            discovered = await page.evaluate(_FIGMA_DISCOVER_PAGES_FALLBACK_JS)
+            names = discovered.get("names") or []
+
+        if not names:
+            logger.info(
+                "Figma page discovery found no pages for %s; falling back to single-page capture",
+                url[:80],
+            )
+            screenshot_bytes = await page.screenshot(full_page=True, type="png")
+            screenshot_base64 = (
+                base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
+            )
+            try:
+                body = await page.query_selector("body")
+                text = await body.inner_text() if body else ""
+            except Exception:
+                text = ""
+            title = await page.title()
+            if title and title.strip():
+                text = f"{title.strip()}\n{text or ''}".strip()
+            results.append(
+                UrlScrapeResult(
+                    url=url,
+                    screenshot_base64=screenshot_base64,
+                    extracted_text=_truncate_text(text),
+                    error=None,
+                    page_name=None,
+                )
+            )
+            return results
+
+        names = names[:max_pages]
+        logger.info("Figma page exploration: discovered %d pages for %s", len(names), url[:80])
+
+        # Click each page and capture screenshot
+        for i, page_name in enumerate(names):
+            try:
+                locator = page.get_by_text(page_name, exact=False).first
+                await locator.scroll_into_view_if_needed(timeout=5000)
+                await locator.click(timeout=5000)
+                await asyncio.sleep(1.2)
+
+                screenshot_bytes = await page.screenshot(full_page=True, type="png")
+                screenshot_base64 = (
+                    base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
+                )
+                results.append(
+                    UrlScrapeResult(
+                        url=url,
+                        screenshot_base64=screenshot_base64,
+                        extracted_text=f"Figma page: {page_name}",
+                        error=None,
+                        page_name=page_name,
+                    )
+                )
+            except Exception as e:
+                logger.warning(
+                    "Figma page capture failed for '%s': %s; skipping",
+                    page_name,
+                    e,
+                )
+
+        if not results:
+            screenshot_bytes = await page.screenshot(full_page=True, type="png")
+            screenshot_base64 = (
+                base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
+            )
+            results.append(
+                UrlScrapeResult(
+                    url=url,
+                    screenshot_base64=screenshot_base64,
+                    extracted_text=await page.title() or "",
+                    error=None,
+                    page_name=None,
+                )
+            )
+        return results
+
+    except Exception as e:
+        logger.warning("Figma multi-page scrape failed for %s: %s", url, e)
+        return [
+            UrlScrapeResult(
+                url=url,
+                screenshot_base64=None,
+                extracted_text="",
+                error=f"{type(e).__name__}: {e!s}",
+                page_name=None,
+            )
+        ]
+    finally:
+        if page:
+            await page.close()
+
+
 async def _scrape_single_url(
     context,  # playwright.async_api.BrowserContext
     url: str,
@@ -112,58 +329,55 @@ async def _scrape_single_url(
     timeout_per_url: int,
 ) -> UrlScrapeResult:
     """
-    Scrape one URL (screenshot + body text). Runs in parallel with other URLs.
-
-    Figma URLs get special treatment:
-    - Loaded as embed URL (canvas-only view, no app chrome)
-    - Extended post-load wait for SPA + canvas render
-    - Full-page screenshot
-    - Two extra scroll-offset screenshots in extra_screenshots (25% and 55% of page height)
-      so vision sees the full design canvas, not just initial viewport
-
-    All other URLs:
-    - Full-page screenshot (captures below-fold content)
-    - Standard post-load wait
+    Scrape one URL (screenshot + body text). Open URL directly, wait for load
+    and render, take full-page screenshot at high resolution.
     """
     page = None
-    figma = _is_figma_url(url)
-    load_url = _to_figma_embed_url(url) if figma else url
+    figma = is_figma_url(url)
+    effective_timeout_ms = (
+        max(timeout_per_url, FIGMA_MIN_TIMEOUT_SEC) * 1000 if figma else timeout_per_url * 1000
+    )
     wait_sec = WAIT_AFTER_LOAD_FIGMA_MS / 1000.0 if figma else WAIT_AFTER_LOAD_MS / 1000.0
 
     try:
         page = await context.new_page()
+        page.set_default_timeout(effective_timeout_ms)
+        page.set_default_navigation_timeout(effective_timeout_ms)
 
-        # Try networkidle first (best for SPAs); fallback to load for slow sites
+        # Open URL directly (Figma shared links work as plain URLs, no token/embed)
         try:
-            await page.goto(load_url, wait_until="networkidle", timeout=timeout_per_url * 1000)
+            await page.goto(url, wait_until="load", timeout=effective_timeout_ms)
         except Exception:
-            await page.goto(load_url, wait_until="load", timeout=timeout_per_url * 1000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=effective_timeout_ms)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
 
         await asyncio.sleep(wait_sec)
 
-        # Primary: full-page screenshot to capture below-fold content
+        # Full-page screenshot at viewport resolution for accurate design and text capture
         screenshot_bytes = await page.screenshot(full_page=True, type="png")
         screenshot_base64 = (
             base64.b64encode(screenshot_bytes).decode("ascii") if screenshot_bytes else None
         )
 
-        # For Figma: take two additional scroll-offset screenshots so vision
-        # receives the full canvas area. Figma's embed renders frames vertically
-        # so scrolling reveals additional screens/pages.
+        # For Figma: scroll and capture additional views (design often extends below fold)
         extra_screenshots: list[str] | None = None
         if figma:
             extra_shots: list[str] = []
             try:
                 page_height: int = await page.evaluate("() => document.body.scrollHeight")
-                for scroll_frac in (0.25, 0.55):
-                    scroll_y = int(page_height * scroll_frac)
-                    await page.evaluate(f"window.scrollTo(0, {scroll_y})")
-                    await asyncio.sleep(0.8)
-                    shot = await page.screenshot(full_page=False, type="png")
-                    if shot:
-                        extra_shots.append(base64.b64encode(shot).decode("ascii"))
-                # Scroll back to top for text extraction
-                await page.evaluate("window.scrollTo(0, 0)")
+                viewport_height = await page.evaluate("() => window.innerHeight")
+                if page_height > viewport_height * 1.2:
+                    for scroll_frac in (0.3, 0.6):
+                        scroll_y = int(page_height * scroll_frac)
+                        await page.evaluate(f"window.scrollTo(0, {scroll_y})")
+                        await asyncio.sleep(0.6)
+                        shot = await page.screenshot(full_page=False, type="png")
+                        if shot:
+                            extra_shots.append(base64.b64encode(shot).decode("ascii"))
+                    await page.evaluate("window.scrollTo(0, 0)")
             except Exception as e:
                 logger.debug("Figma extra screenshots failed for %s: %s", url, e)
             if extra_shots:
@@ -208,13 +422,40 @@ async def _scrape_single_url(
             await page.close()
 
 
+async def _scrape_one_url(
+    context,
+    url: str,
+    *,
+    timeout_per_url: int,
+    figma_page_exploration: bool,
+    max_figma_pages: int,
+) -> list[UrlScrapeResult]:
+    """
+    Scrape one URL. For Figma with exploration enabled, returns multiple results
+    (one per page). Otherwise returns a single-result list.
+    """
+    if is_figma_url(url) and figma_page_exploration:
+        return await _scrape_figma_multi_page(
+            context,
+            url,
+            timeout_per_url=timeout_per_url,
+            max_pages=max_figma_pages,
+        )
+    r = await _scrape_single_url(context, url, timeout_per_url=timeout_per_url)
+    return [r]
+
+
 async def _scrape_urls_playwright(
     urls: list[str],
     *,
     timeout_per_url: int,
+    figma_page_exploration: bool = True,
+    max_figma_pages: int = 20,
 ) -> list[UrlScrapeResult]:
     """
     Scrape each URL with Playwright (screenshot + body text).
+    For Figma URLs with exploration enabled, explores Pages sidebar and returns
+    one result per page. Otherwise one result per URL.
     URLs are scraped in parallel; results are merged in input order.
     """
     from playwright.async_api import async_playwright
@@ -246,6 +487,7 @@ async def _scrape_urls_playwright(
 
             context_opts: dict = {
                 "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+                "device_scale_factor": DEVICE_SCALE_FACTOR,
                 "ignore_https_errors": True,
                 "user_agent": CHROME_USER_AGENT,
                 "locale": "en-US",
@@ -258,12 +500,20 @@ async def _scrape_urls_playwright(
             context = await browser.new_context(**context_opts)
             context.set_default_timeout(timeout_per_url * 1000)
 
-            # Scrape all URLs in parallel (each URL gets its own page/task)
-            scrape_tasks = [
-                _scrape_single_url(context, url, timeout_per_url=timeout_per_url)
-                for url in urls
-            ]
-            results = list(await asyncio.gather(*scrape_tasks))
+            async def _scrape(url: str) -> list[UrlScrapeResult]:
+                return await _scrape_one_url(
+                    context,
+                    url,
+                    timeout_per_url=timeout_per_url,
+                    figma_page_exploration=figma_page_exploration,
+                    max_figma_pages=max_figma_pages,
+                )
+
+            scrape_tasks = [_scrape(url) for url in urls]
+            per_url_results = await asyncio.gather(*scrape_tasks)
+
+            for url, rlist in zip(urls, per_url_results):
+                results.extend(rlist)
 
             await context.close()
             await browser.close()
@@ -276,6 +526,7 @@ async def _scrape_urls_playwright(
                 screenshot_base64=None,
                 extracted_text="",
                 error=f"Browser launch failed: {e!s}",
+                page_name=None,
             )
             for url in urls
         ]
@@ -291,18 +542,31 @@ async def scrape_urls(
 ) -> list[UrlScrapeResult]:
     """
     Scrape each URL with Playwright (screenshot + body text).
+    For Figma URLs, explores Pages sidebar and returns one result per page when
+    FIGMA_PAGE_EXPLORATION_ENABLED.
 
-    Returns list of UrlScrapeResult in the same order as urls (up to max_urls).
+    Returns list of UrlScrapeResult (one per page for Figma; one per URL otherwise).
     """
     if not urls:
         return []
 
     to_process = urls[:max_urls]
+    try:
+        from app.config import get_settings
+
+        settings = get_settings()
+        figma_explore = getattr(settings, "FIGMA_PAGE_EXPLORATION_ENABLED", True)
+        max_figma = getattr(settings, "MAX_FIGMA_PAGES", 20)
+    except Exception:
+        figma_explore = True
+        max_figma = 20
 
     try:
         ordered = await _scrape_urls_playwright(
             to_process,
             timeout_per_url=timeout_per_url,
+            figma_page_exploration=figma_explore,
+            max_figma_pages=max_figma,
         )
     except Exception as e:
         logger.exception("Playwright scrape failed: %s", e)

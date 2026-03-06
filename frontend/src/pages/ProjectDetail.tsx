@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from '@/components/ui/Dialog';
+} from '@/components/ui/dialog';
 import { EstimateChat } from '@/components/estimate/EstimateChat';
 import type {
   Project,
@@ -85,6 +85,7 @@ export function ProjectDetailPage() {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
   const [showReferenceUrlsList, setShowReferenceUrlsList] = useState(false);
+  const [showScopeInputsList, setShowScopeInputsList] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<ReferenceUrlPreviewData | null>(null);
@@ -284,8 +285,10 @@ export function ProjectDetailPage() {
     setPreviewSiteData(null);
     setPreviewError(null);
     setPreviewPageIndex(0);
-    setPreviewVideoBlobUrl(null);
   }, []);
+
+  const scopeInputsSummary = project?.requirements_summary;
+  const hasScopeInputs = requirementsCount > 0 && scopeInputsSummary && scopeInputsSummary.length > 0;
 
   const statCardsData = [
     {
@@ -296,10 +299,11 @@ export function ProjectDetailPage() {
       iconClass: 'hours',
     },
     {
-      label: 'Requirements',
+      label: 'Scope inputs',
       value: requirementsCount > 0 ? requirementsCount : '—',
       icon: <ListChecks style={{ width: 14, height: 14 }} />,
       iconClass: 'requirements',
+      ...(hasScopeInputs ? { scopeItems: scopeInputsSummary } : {}),
     },
     {
       label: 'Last Updated',
@@ -472,21 +476,37 @@ export function ProjectDetailPage() {
             <div className="project-detail-stat-pills">
               {statCardsData.map((card, index) => {
                 const hasUrls = 'urls' in card && Array.isArray(card.urls);
+                const hasScopeItems = 'scopeItems' in card && Array.isArray(card.scopeItems);
+                const isClickable = hasUrls || hasScopeItems;
                 const pill = (
                   <div
-                    className={`project-detail-stat-pill ${hasUrls ? 'project-detail-stat-pill-clickable' : ''}`}
-                    role={hasUrls ? 'button' : undefined}
-                    tabIndex={hasUrls ? 0 : undefined}
-                    onClick={hasUrls ? () => setShowReferenceUrlsList((v) => !v) : undefined}
+                    className={`project-detail-stat-pill ${isClickable ? 'project-detail-stat-pill-clickable' : ''}`}
+                    role={isClickable ? 'button' : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onClick={
+                      isClickable
+                        ? () =>
+                            hasUrls
+                              ? setShowReferenceUrlsList((v) => !v)
+                              : setShowScopeInputsList((v) => !v)
+                        : undefined
+                    }
                     onKeyDown={
-                      hasUrls
+                      isClickable
                         ? (e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
-                              setShowReferenceUrlsList((v) => !v);
+                              hasUrls
+                                ? setShowReferenceUrlsList((v) => !v)
+                                : setShowScopeInputsList((v) => !v);
                             }
                           }
                         : undefined}
+                    title={
+                      card.label === 'Scope inputs' && requirementsCount > 0 && !hasScopeInputs
+                        ? 'Context items from project brief (description, docs, reference URLs)'
+                        : undefined
+                    }
                   >
                     <span className={`project-detail-stat-pill-icon ${card.iconClass}`}>
                       {card.icon}
@@ -503,6 +523,18 @@ export function ProjectDetailPage() {
                 );
               })}
             </div>
+            {hasScopeInputs && showScopeInputsList && scopeInputsSummary && scopeInputsSummary.length > 0 && (
+              <div className="project-detail-scope-inputs-list">
+                <p className="project-detail-scope-inputs-intro">
+                  Items inferred from project brief (description, docs, scraped URLs) used for estimation:
+                </p>
+                <ul className="project-detail-scope-inputs-items">
+                  {scopeInputsSummary.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {referenceUrlsCount > 0 && showReferenceUrlsList && referenceUrlsToShow.length > 0 && (
               <>
                 <div className="project-detail-reference-urls-list">
@@ -567,8 +599,14 @@ export function ProjectDetailPage() {
             existingEstimate={quote}
             onEstimateGenerated={handleEstimateGenerated}
             onSaveStatusChange={handleSaveStatusChange}
-            referenceUrls={project?.reference_urls?.length ? project.reference_urls : (referenceUrlsUsed ?? undefined)}
-            crawlSiteFromUrl={(project?.reference_urls ?? referenceUrlsUsed)?.[0]}
+            referenceUrls={
+              referenceUrlsUsed?.length
+                ? referenceUrlsUsed
+                : project?.reference_urls?.length
+                  ? project.reference_urls
+                  : undefined
+            }
+            crawlSiteFromUrl={(referenceUrlsUsed ?? project?.reference_urls)?.[0]}
           />
         )}
       </div>
@@ -718,23 +756,57 @@ export function ProjectDetailPage() {
                         className="reference-url-preview-text"
                         style={{ flex: '1 1 0', minWidth: 0, maxWidth: '50%' }}
                       >
-                        <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
-                          Extracted text (used for estimation)
-                        </p>
-                        <pre
-                          style={{
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            maxHeight: 280,
-                            overflow: 'auto',
-                            padding: 12,
-                            background: 'var(--color-gray-100)',
-                            borderRadius: 8,
-                            fontSize: '0.8rem',
-                          }}
-                        >
-                          {page.extracted_text || '(No text extracted)'}
-                        </pre>
+                        {page.vision_analysis ? (
+                          <>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                              Visual analysis (used for estimation)
+                            </p>
+                            <pre
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                maxHeight: 280,
+                                overflow: 'auto',
+                                padding: 12,
+                                background: 'var(--color-gray-100)',
+                                borderRadius: 8,
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              {page.vision_analysis}
+                            </pre>
+                            {page.extracted_text && (
+                              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 8 }}>
+                                Page info: {page.extracted_text}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                              Extracted text (used for estimation)
+                            </p>
+                            <pre
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                maxHeight: 280,
+                                overflow: 'auto',
+                                padding: 12,
+                                background: 'var(--color-gray-100)',
+                                borderRadius: 8,
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              {page.extracted_text || '(No text extracted)'}
+                            </pre>
+                            {page.screenshot_base64 && !page.vision_analysis && (
+                              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 8 }}>
+                                Full design analysis is generated when you create an estimate.
+                              </p>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -787,23 +859,57 @@ export function ProjectDetailPage() {
                   className="reference-url-preview-text"
                   style={{ flex: '1 1 0', minWidth: 0, maxWidth: '50%' }}
                 >
-                  <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
-                    Extracted text (used for estimation)
-                  </p>
-                  <pre
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      maxHeight: 320,
-                      overflow: 'auto',
-                      padding: 12,
-                      background: 'var(--color-gray-100)',
-                      borderRadius: 8,
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    {previewData.extracted_text || '(No text extracted)'}
-                  </pre>
+                  {previewData.vision_analysis ? (
+                    <>
+                      <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                        Visual analysis (used for estimation)
+                      </p>
+                      <pre
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          maxHeight: 320,
+                          overflow: 'auto',
+                          padding: 12,
+                          background: 'var(--color-gray-100)',
+                          borderRadius: 8,
+                          fontSize: '0.8rem',
+                        }}
+                      >
+                        {previewData.vision_analysis}
+                      </pre>
+                      {previewData.extracted_text && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 8 }}>
+                          Page info: {previewData.extracted_text}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>
+                        Extracted text (used for estimation)
+                      </p>
+                      <pre
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          maxHeight: 320,
+                          overflow: 'auto',
+                          padding: 12,
+                          background: 'var(--color-gray-100)',
+                          borderRadius: 8,
+                          fontSize: '0.8rem',
+                        }}
+                      >
+                        {previewData.extracted_text || '(No text extracted)'}
+                      </pre>
+                      {previewData.screenshot_base64 && !previewData.vision_analysis && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: 8 }}>
+                          Full design analysis is generated when you create an estimate.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}

@@ -54,6 +54,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  reference_urls?: string[];
   platform?: Platform;
   client_email?: string;
   target_completion_date?: string;

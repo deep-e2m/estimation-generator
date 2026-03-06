@@ -169,6 +169,10 @@ class ProjectDetailResponse(ProjectResponse):
         default=0,
         description="Number of requirements for this project",
     )
+    requirements_summary: Optional[list[str]] = Field(
+        default=None,
+        description="Requirement phrases that contributed to the count (for tooltip)",
+    )
 
 
 # =============================================================================
@@ -330,7 +334,11 @@ class ReferenceUrlPreviewData(BaseModel):
     url: str = Field(..., description="The URL that was scraped")
     extracted_text: str = Field(
         default="",
-        description="Plain text extracted from the page body (used for estimation)",
+        description="Plain text extracted from the page body (e.g. page titles for Figma)",
+    )
+    vision_analysis: Optional[str] = Field(
+        None,
+        description="AI description of the screenshot (pages, design, structure) — primary input for estimation when present",
     )
     screenshot_base64: Optional[str] = Field(
         None,

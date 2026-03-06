@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 from app.config import get_settings
 from app.services.url_extraction import canonicalize_url_for_cache, extract_urls
+from app.services.url_scraping_service import is_figma_url
 
 logger = logging.getLogger(__name__)
 
@@ -145,16 +146,12 @@ async def build_reference_url_context(
         if t and str(t).strip():
             combined_parts.append(str(t).strip())
 
-    # Determine crawl seed: explicit crawl_site_from_url, or first URL from content/explicit
-    # Figma design/file URLs are single-page — do NOT crawl figma.com (would get unrelated pages)
-    def _is_figma_url(url: str) -> bool:
-        u = (url or "").strip().lower()
-        return "figma.com/design/" in u or "figma.com/file/" in u
-
+    # Determine crawl seed: explicit crawl_site_from_url, or first URL from content/explicit.
+    # Figma design/file URLs are single-page — do NOT crawl figma.com (would get unrelated pages).
     crawl_seed: Optional[str] = None
     if crawl_site_from_url and crawl_site_from_url.strip():
         candidate = crawl_site_from_url.strip()
-        if not _is_figma_url(candidate):
+        if not is_figma_url(candidate):
             crawl_seed = candidate
     elif getattr(settings, "SITE_CRAWL_ENABLED", False):
         extracted_from_parts = extract_urls(
@@ -163,11 +160,11 @@ async def build_reference_url_context(
             max_urls=10,
             reject_local_private=settings.is_production,
         )
-        if extracted_from_parts and not _is_figma_url(extracted_from_parts[0]):
+        if extracted_from_parts and not is_figma_url(extracted_from_parts[0]):
             crawl_seed = extracted_from_parts[0]
         if not crawl_seed and explicit_urls:
             for u in explicit_urls:
-                if u and u.strip() and not _is_figma_url(u):
+                if u and u.strip() and not is_figma_url(u):
                     crawl_seed = u.strip()
                     break
 
@@ -216,9 +213,11 @@ async def build_reference_url_context(
 
     max_urls_for_scrape = len(urls_to_scrape) if used_crawl else min(settings.MAX_REFERENCE_URLS, len(urls_to_scrape))
 
+    figma_count = sum(1 for u in urls_to_scrape if is_figma_url(u))
     logger.info(
-        "Reference URLs to scrape: count=%d (crawl=%s)",
+        "Reference URLs to scrape: count=%d, figma=%d (crawl=%s)",
         len(urls_to_scrape),
+        figma_count,
         used_crawl,
     )
 
@@ -237,8 +236,14 @@ async def build_reference_url_context(
         )
         timeout = min(max(base_timeout, needed), crawl_max)
     else:
-        # Dynamic: each URL scraped in parallel, but give enough headroom for all
+        # Dynamic: each URL scraped in parallel. Figma multi-page explores N pages per file.
         needed = max_urls_for_scrape * settings.URL_SCRAPE_TIMEOUT_SEC + vision_buffer
+        if figma_count > 0:
+            max_figma = getattr(settings, "MAX_FIGMA_PAGES", 20)
+            figma_extra = figma_count * (
+                settings.URL_SCRAPE_TIMEOUT_SEC + max_figma * 3
+            )
+            needed = max(needed, figma_extra)
         timeout = max(base_timeout, needed)
 
     try:
@@ -266,15 +271,17 @@ async def build_reference_url_context(
 async def _describe_single_result(
     r,  # UrlScrapeResult
     llm,  # LLMService
-) -> tuple[str | None, str, bool]:
+) -> tuple[str | None, str, bool, str]:
     """
     Build context block for one URL result (text + vision/design inference).
-    Returns (section_text or None, url, is_failed).
-    is_failed is True when the result has no usable content or is suspect.
+    Returns (section_text or None, url, is_failed, vision_analysis).
+    vision_analysis is the AI description of the screenshot(s), used for estimation.
     """
-    if r.error and not r.extracted_text and not r.screenshot_base64:
-        logger.debug("Skipping URL (failed): %s", r.url)
-        return None, r.url, True
+    # Treat as failed only when we have no usable content (no screenshot, no text).
+    # Figma/design URLs often return screenshot with optional error (partial success) — still use them.
+    if r.error and not (r.extracted_text or "").strip() and not r.screenshot_base64:
+        logger.debug("Skipping URL (failed, no content): %s", r.url)
+        return None, r.url, True, ""
 
     if _is_suspect_content(
         r.extracted_text,
@@ -284,12 +291,15 @@ async def _describe_single_result(
         logger.info(
             "Skipping URL (suspect content — likely login/challenge page): %s", r.url
         )
-        return None, r.url, True
+        return None, r.url, True, ""
 
-    block_parts: list[str] = [f"Reference URL: {r.url}"]
+    page_name = getattr(r, "page_name", None)
+    url_label = f"{r.url} (page: {page_name})" if page_name else r.url
+    block_parts: list[str] = [f"Reference URL: {url_label}"]
     if r.extracted_text:
         block_parts.append(r.extracted_text.strip())
 
+    vision_parts: list[str] = []
     all_screenshots: list[str] = []
     if r.screenshot_base64:
         all_screenshots.append(r.screenshot_base64)
@@ -300,15 +310,16 @@ async def _describe_single_result(
             try:
                 analysis_result = await llm.analyze_image(
                     img_b64,
-                    context=r.url,
+                    context=url_label,
                     analysis_type="reference_url_screenshot",
                 )
                 analysis_text = (analysis_result.get("analysis") or "").strip()
                 if analysis_text:
+                    vision_parts.append(analysis_text)
                     label = (
-                        f"Visual reference for {r.url} (screenshot {idx + 1} of {len(all_screenshots)}):"
+                        f"Visual reference for {url_label} (screenshot {idx + 1} of {len(all_screenshots)}):"
                         if len(all_screenshots) > 1
-                        else f"Visual reference for {r.url}:"
+                        else f"Visual reference for {url_label}:"
                     )
                     block_parts.append(f"{label} {analysis_text}")
             except Exception as e:
@@ -320,13 +331,15 @@ async def _describe_single_result(
                 r.url,
             )
             if design_inference:
+                vision_parts.append(design_inference)
                 block_parts.append(
                     f"Design inference (from reference content; no screenshot available): {design_inference}"
                 )
         except Exception as e:
             logger.warning("Design inference from text failed for %s: %s", r.url, e)
 
-    return "\n\n".join(block_parts), r.url, False
+    vision_analysis = "\n\n".join(vision_parts).strip() if vision_parts else ""
+    return "\n\n".join(block_parts), r.url, False, vision_analysis
 
 
 async def _scrape_and_describe(
@@ -359,7 +372,7 @@ async def _scrape_and_describe(
     sections: list[str] = []
     urls_used: list[str] = []
     urls_failed: list[str] = []
-    for section, url, is_failed in describe_results:
+    for section, url, is_failed, _ in describe_results:
         if is_failed:
             urls_failed.append(url)
         else:
@@ -367,15 +380,42 @@ async def _scrape_and_describe(
         if section:
             sections.append(section)
 
-    # Build scraped_data_by_url from successful results (canonical keys for cache matching)
+    # Build scraped_data_by_url from successful results (canonical keys for cache matching).
+    # For Figma multi-page: store per-page keys and base URL -> first page for preview.
+    # Include vision_analysis (AI description of screenshot) so preview shows what drives estimation.
     scraped_data_by_url: dict[str, dict[str, Any]] = {}
-    for r in results:
-        if r.url in urls_used:
-            key = canonicalize_url_for_cache(r.url)
-            scraped_data_by_url[key] = {
+    figma_page_names_by_url: dict[str, set[str]] = {}
+    for r, (_, _url, is_failed, vision_analysis) in zip(results, describe_results):
+        if r.url in urls_used and not is_failed:
+            base_key = canonicalize_url_for_cache(r.url)
+            page_name = getattr(r, "page_name", None)
+            key = f"{base_key} (page: {page_name})" if page_name else base_key
+            entry: dict[str, Any] = {
                 "extracted_text": r.extracted_text or "",
                 "screenshot_base64": r.screenshot_base64,
             }
+            if vision_analysis:
+                entry["vision_analysis"] = vision_analysis
+            if page_name:
+                entry["page_name"] = page_name
+                figma_page_names_by_url.setdefault(r.url, set()).add(page_name)
+            if r.error:
+                entry["error"] = r.error
+            extra = getattr(r, "extra_screenshots", None)
+            if extra:
+                entry["extra_screenshots"] = extra
+            scraped_data_by_url[key] = entry
+            if page_name and base_key not in scraped_data_by_url:
+                scraped_data_by_url[base_key] = entry
+
+    # Enrich Figma base entry: set extracted_text to full page list for clearer preview
+    for url, names in figma_page_names_by_url.items():
+        if len(names) > 1:
+            base_key = canonicalize_url_for_cache(url)
+            if base_key in scraped_data_by_url:
+                scraped_data_by_url[base_key]["extracted_text"] = (
+                    "Figma pages: " + ", ".join(sorted(names))
+                )
 
     if not sections:
         logger.info(

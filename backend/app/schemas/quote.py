@@ -341,6 +341,10 @@ class AnalysisMetadata(BaseModel):
         default=0,
         description="Number of requirements identified (for dashboard/UI only; not used for estimation accuracy)",
     )
+    requirements_items: list[str] = Field(
+        default_factory=list,
+        description="Requirement phrases/lines that contributed to the count (for tooltip display)",
+    )
     tasks_count: int = Field(default=0, description="Number of tasks/deliverables identified")
     sections_count: int = Field(default=0, description="Number of sections in the quote")
     pages_count: int = Field(default=0, description="Number of pages identified")

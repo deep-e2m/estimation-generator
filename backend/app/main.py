@@ -222,6 +222,7 @@ async def health_check() -> dict:
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
+        "url_scraping_enabled": settings.ENABLE_URL_SCRAPING,
     }
 
 
