@@ -28,7 +28,8 @@ import {
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { parseTotalHoursFromContent, parseRequirementsCountFromContent } from '@/lib/quote-content-parse';
 import { apiClient, getErrorMessage, projectsService, quotesService } from '@/services';
-import { useCanShareProject } from '@/store/authStore';
+import { useAuthStore } from '@/store/authStore';
+import { canEditEstimation, canShareProject } from '@/utils/permissions';
 import { Button } from '@/components/ui/button';
 import { ShareProjectDialog } from '@/components/project/ShareProjectDialog';
 import { SendForApprovalDialog } from '@/components/approval/SendForApprovalDialog';
@@ -48,7 +49,6 @@ import type {
   ReferenceUrlPreviewData,
   ReferenceUrlSitePreviewData,
 } from '@/types';
-import { canEditEstimation, canShareProject } from '@/types/project';
 import type { ChangeDescription, Quote, RefinedProjectUpdate } from '@/types/quote.types';
 
 // Status badge variants
@@ -104,13 +104,9 @@ export function ProjectDetailPage() {
   const saveStatusResetTimeoutRef = useRef<number | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sendApprovalDialogOpen, setSendApprovalDialogOpen] = useState(false);
-  const canShareRole = useCanShareProject();
-  // Show Share/Send approval only when user has edit_full (owner or admin) on this project
-  const canShareThisProject =
-    project?.my_access_level !== undefined
-      ? canShareProject(project.my_access_level)
-      : canShareRole;
-  const canEditEstimationOnProject = canEditEstimation(project?.my_access_level);
+  const user = useAuthStore((s) => s.user);
+  const canShareThisProject = canShareProject(user, project);
+  const canEditEstimationOnProject = canEditEstimation(user, project);
 
   // Load project data
   useEffect(() => {

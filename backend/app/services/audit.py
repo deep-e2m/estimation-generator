@@ -6,14 +6,35 @@ security-sensitive actions. Never update or delete audit entries.
 """
 
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import ActionOutcome, AuditLog
 
+if TYPE_CHECKING:
+    from app.models.project import Project
+    from app.models.user import User
+
 logger = logging.getLogger(__name__)
+
+
+def with_admin_bypass(
+    metadata: dict | None,
+    project: "Project",
+    current_user: "User",
+) -> dict:
+    """
+    Merge metadata with admin_bypass flag when admin accesses a resource they don't own.
+
+    Use for audit logs on project-scoped actions. When an admin performs an action
+    on a project they do not own, adds admin_bypass: True for compliance monitoring.
+    """
+    meta = dict(metadata or {})
+    if current_user.is_admin and project.created_by != current_user.id:
+        meta["admin_bypass"] = True
+    return meta
 
 
 async def log_action(

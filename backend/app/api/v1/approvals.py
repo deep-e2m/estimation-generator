@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import (
+    get_project_with_access,
     ActiveUser,
     DbSession,
     PmOrAbove,
@@ -24,7 +25,7 @@ from app.api.dependencies import (
 )
 from app.models.project_share import AccessLevel
 from app.models.approval_request import ApprovalRequest, ApprovalStatus
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.models.audit_log import ActionOutcome
 from app.schemas.approval_request import (
     ApprovalDecision,
@@ -59,8 +60,6 @@ async def create_approval_request(
     db: DbSession,
 ) -> dict:
     project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
-
-    from app.models.user import User
 
     assignee_result = await db.execute(
         select(User).where(
@@ -100,8 +99,6 @@ async def create_approval_request(
     db.add(request)
     await db.commit()
     await db.refresh(request)
-    await db.refresh(request.requester)
-    await db.refresh(request.assignee)
 
     # Audit log: approval requested
     try:
@@ -114,20 +111,25 @@ async def create_approval_request(
             resource_type="approval",
             resource_id=request.id,
             project_id=project_id,
-            metadata={
-                "assigned_to": str(body.assigned_to),
-                "quote_id": None,  # Optional if quote is known
-            },
+            metadata=audit.with_admin_bypass(
+                {
+                    "assigned_to": str(body.assigned_to),
+                    "quote_id": None,  # Optional if quote is known
+                },
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for approval request: %s", e)
 
+    # Use current_user and assignee (already in memory); avoid lazy-loading requester/assignee in async
     response_data = ApprovalRequestResponse(
         id=request.id,
         project_id=request.project_id,
         project_name=project.name,
-        requested_by=UserResponse.model_validate(request.requester),
-        assigned_to=UserResponse.model_validate(request.assignee),
+        requested_by=UserResponse.model_validate(current_user),
+        assigned_to=UserResponse.model_validate(assignee),
         status=request.status,
         disapproval_reason=request.disapproval_reason,
         created_at=request.created_at,
@@ -154,11 +156,7 @@ async def list_approval_requests(
 ) -> dict:
     query = (
         select(ApprovalRequest)
-        .options(
-            selectinload(ApprovalRequest.requester),
-            selectinload(ApprovalRequest.assignee),
-            selectinload(ApprovalRequest.project),
-        )
+        .options(selectinload(ApprovalRequest.project))
         .where(ApprovalRequest.assigned_to == current_user.id)
         .order_by(ApprovalRequest.created_at.desc())
     )
@@ -168,13 +166,21 @@ async def list_approval_requests(
     result = await db.execute(query)
     requests = list(result.scalars().all())
 
+    # Load requester/assignee users by ID so we don't rely on ORM relationships in async
+    user_ids = set()
+    for ar in requests:
+        user_ids.add(ar.requested_by)
+        user_ids.add(ar.assigned_to)
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users_by_id = {u.id: u for u in users_result.scalars().all()}
+
     items = [
         ApprovalRequestResponse(
             id=ar.id,
             project_id=ar.project_id,
             project_name=ar.project.name if ar.project else None,
-            requested_by=UserResponse.model_validate(ar.requester),
-            assigned_to=UserResponse.model_validate(ar.assignee),
+            requested_by=UserResponse.model_validate(users_by_id[ar.requested_by]),
+            assigned_to=UserResponse.model_validate(users_by_id[ar.assigned_to]),
             status=ar.status,
             disapproval_reason=ar.disapproval_reason,
             created_at=ar.created_at,
@@ -190,7 +196,7 @@ async def list_approval_requests(
     "/approval-requests/{request_id}",
     response_model=dict,
     summary="Get approval request",
-    description="Get a single approval request. Requester or assignee (Super PM) only.",
+    description="Get a single approval request. Accessible by requester, assignee, or any user with project access (read-only).",
     responses={
         200: {"description": "Approval request"},
         403: {"description": "Access denied"},
@@ -204,26 +210,36 @@ async def get_approval_request(
 ) -> dict:
     result = await db.execute(
         select(ApprovalRequest)
-        .options(
-            selectinload(ApprovalRequest.requester),
-            selectinload(ApprovalRequest.assignee),
-            selectinload(ApprovalRequest.project),
-        )
+        .options(selectinload(ApprovalRequest.project))
         .where(ApprovalRequest.id == request_id)
     )
     ar = result.scalar_one_or_none()
     if not ar:
         raise api_error(404, "APPROVAL_REQUEST_NOT_FOUND", "Approval request not found")
 
+    # Allow: requester, assignee, or any user with project access (read-only for shared users)
     if ar.requested_by != current_user.id and ar.assigned_to != current_user.id:
-        raise api_error(403, "ACCESS_DENIED", "You don't have access to this approval request")
+        try:
+            await get_project_with_access(ar.project_id, current_user, db)
+        except Exception:
+            raise api_error(403, "ACCESS_DENIED", "You don't have access to this approval request")
+
+    # Load requester/assignee by ID so we don't rely on ORM relationships in async
+    users_result = await db.execute(
+        select(User).where(User.id.in_([ar.requested_by, ar.assigned_to]))
+    )
+    users_by_id = {u.id: u for u in users_result.scalars().all()}
+    requester_user = users_by_id.get(ar.requested_by)
+    assignee_user = users_by_id.get(ar.assigned_to)
+    if not requester_user or not assignee_user:
+        raise api_error(404, "USER_NOT_FOUND", "Requester or assignee user not found")
 
     response_data = ApprovalRequestResponse(
         id=ar.id,
         project_id=ar.project_id,
         project_name=ar.project.name if ar.project else None,
-        requested_by=UserResponse.model_validate(ar.requester),
-        assigned_to=UserResponse.model_validate(ar.assignee),
+        requested_by=UserResponse.model_validate(requester_user),
+        assigned_to=UserResponse.model_validate(assignee_user),
         status=ar.status,
         disapproval_reason=ar.disapproval_reason,
         created_at=ar.created_at,
@@ -254,11 +270,7 @@ async def decide_approval(
 
     result = await db.execute(
         select(ApprovalRequest)
-        .options(
-            selectinload(ApprovalRequest.requester),
-            selectinload(ApprovalRequest.assignee),
-            selectinload(ApprovalRequest.project),
-        )
+        .options(selectinload(ApprovalRequest.project))
         .where(ApprovalRequest.id == request_id)
     )
     ar = result.scalar_one_or_none()
@@ -307,12 +319,22 @@ async def decide_approval(
     except Exception as e:
         logger.error("Failed to log audit for approval decision: %s", e)
 
+    # Load requester/assignee by ID so we don't rely on ORM relationships after refresh
+    users_result = await db.execute(
+        select(User).where(User.id.in_([ar.requested_by, ar.assigned_to]))
+    )
+    users_by_id = {u.id: u for u in users_result.scalars().all()}
+    requester_user = users_by_id.get(ar.requested_by)
+    assignee_user = users_by_id.get(ar.assigned_to)
+    if not requester_user or not assignee_user:
+        raise api_error(404, "USER_NOT_FOUND", "Requester or assignee user not found")
+
     response_data = ApprovalRequestResponse(
         id=ar.id,
         project_id=ar.project_id,
         project_name=ar.project.name if ar.project else None,
-        requested_by=UserResponse.model_validate(ar.requester),
-        assigned_to=UserResponse.model_validate(ar.assignee),
+        requested_by=UserResponse.model_validate(requester_user),
+        assigned_to=UserResponse.model_validate(assignee_user),
         status=ar.status,
         disapproval_reason=ar.disapproval_reason,
         created_at=ar.created_at,

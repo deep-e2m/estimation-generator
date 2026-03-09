@@ -1,5 +1,6 @@
 /**
- * Edit User Dialog – update full name, role, and active status (Admin only).
+ * Edit User Dialog – update email, password, full name, role, and active status (Admin only).
+ * All data is loaded from the user prop (fetched from DB via admin users list).
  */
 
 import { useState, useEffect } from 'react'
@@ -12,7 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Input, PasswordInput } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -21,10 +22,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { usersService } from '@/services/users.service'
+import { usersService, type UserUpdatePayload } from '@/services/users.service'
 import { ROLES } from '@/constants/roles'
 import type { User, UserRole } from '@/types/auth.types'
 import { getErrorMessage } from '@/services/api'
+import { PASSWORD_RULES } from '@/types/auth.types'
+
+/** Real-time password validation (matches backend rules). Returns what's met vs missing. */
+function validatePasswordRealtime(pwd: string): {
+  minLength: boolean
+  uppercase: boolean
+  lowercase: boolean
+  number: boolean
+  special: boolean
+} {
+  return {
+    minLength: pwd.length >= PASSWORD_RULES.minLength,
+    uppercase: /[A-Z]/.test(pwd),
+    lowercase: /[a-z]/.test(pwd),
+    number: /\d/.test(pwd),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
+  }
+}
+
+function isPasswordValid(checks: ReturnType<typeof validatePasswordRealtime>): boolean {
+  return checks.minLength && checks.uppercase && checks.lowercase && checks.number && checks.special
+}
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: ROLES.ADMIN as UserRole, label: 'Administrator' },
@@ -47,6 +70,8 @@ export function EditUserDialog({
   currentUserId,
 }: EditUserDialogProps) {
   const queryClient = useQueryClient()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [role, setRole] = useState<UserRole | ''>('')
   const [isActive, setIsActive] = useState(true)
@@ -55,6 +80,8 @@ export function EditUserDialog({
 
   useEffect(() => {
     if (user) {
+      setEmail(user.email)
+      setPassword('')
       setFullName(user.full_name)
       setRole(user.role)
       setIsActive(user.is_active ?? true)
@@ -62,18 +89,28 @@ export function EditUserDialog({
   }, [user])
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { full_name?: string; role?: UserRole; is_active?: boolean }) =>
-      user ? usersService.update(user.id, payload) : Promise.reject(new Error('No user')),
+    mutationFn: ({ userId, payload }: { userId: string; payload: UserUpdatePayload }) =>
+      usersService.update(userId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       onOpenChange(false)
     },
   })
 
+  const passwordChecks = validatePasswordRealtime(password)
+  const hasInvalidPassword = password.trim().length > 0 && !isPasswordValid(passwordChecks)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) return
-    const payload: { full_name?: string; role?: UserRole; is_active?: boolean } = {}
+    if (hasInvalidPassword) return
+    const payload: UserUpdatePayload = {}
+    if (email.trim().toLowerCase() !== user.email.toLowerCase()) {
+      payload.email = email.trim().toLowerCase()
+    }
+    if (password.trim()) {
+      payload.password = password
+    }
     if (fullName.trim() !== user.full_name) payload.full_name = fullName.trim()
     if (role && role !== user.role) payload.role = role as UserRole
     if (!isSelf && (user.is_active ?? true) !== isActive) payload.is_active = isActive
@@ -81,29 +118,48 @@ export function EditUserDialog({
       onOpenChange(false)
       return
     }
-    updateMutation.mutate(payload)
+    updateMutation.mutate({ userId: user.id, payload })
   }
 
   if (!user) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="dialog" style={{ maxWidth: '28rem' }}>
+      <DialogContent className="edit-user-dialog">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            <div>
+        <form onSubmit={handleSubmit} className="edit-user-form">
+          <div className="edit-user-fields">
+            <div className="edit-user-field">
               <Label htmlFor="edit-user-email">Email</Label>
               <Input
                 id="edit-user-email"
-                value={user.email}
-                disabled
-                style={{ marginTop: 'var(--space-1)' }}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="user@example.com"
+                required
+                className="edit-user-input"
               />
             </div>
-            <div>
+            <div className="edit-user-field edit-user-field-password">
+              <Label htmlFor="edit-user-password">New password</Label>
+              {/* Password suggestion/rules UI disabled - validation still enforced on submit */}
+              <PasswordInput
+                id="edit-user-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Leave blank to keep current password"
+                autoComplete="off"
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore
+                aria-invalid={hasInvalidPassword}
+                className={`edit-user-input ${hasInvalidPassword ? 'edit-user-input-invalid' : ''}`}
+              />
+            </div>
+            <div className="edit-user-field">
               <Label htmlFor="edit-user-name">Full name</Label>
               <Input
                 id="edit-user-name"
@@ -112,20 +168,21 @@ export function EditUserDialog({
                 placeholder="Full name"
                 minLength={2}
                 maxLength={100}
-                style={{ marginTop: 'var(--space-1)' }}
+                required
+                className="edit-user-input"
               />
             </div>
-            <div>
+            <div className="edit-user-field">
               <Label htmlFor="edit-user-role">Role</Label>
               <Select
                 value={role}
                 onValueChange={(v) => setRole(v as UserRole)}
                 disabled={isSelf}
               >
-                <SelectTrigger id="edit-user-role" style={{ marginTop: 'var(--space-1)' }}>
+                <SelectTrigger id="edit-user-role" className="edit-user-input">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="select-content-in-modal" position="popper" sideOffset={4}>
                   {ROLE_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
@@ -134,33 +191,32 @@ export function EditUserDialog({
                 </SelectContent>
               </Select>
               {isSelf && (
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-gray-500)', marginTop: 'var(--space-1)' }}>
+                <p className="edit-user-hint">
                   You cannot change your own role.
                 </p>
               )}
             </div>
             {!isSelf && (
-              <div className="flex items-center gap-2">
+              <label className="edit-user-checkbox" htmlFor="edit-user-active">
                 <input
                   type="checkbox"
                   id="edit-user-active"
                   checked={isActive}
                   onChange={(e) => setIsActive(e.target.checked)}
+                  className="edit-user-checkbox-input"
                 />
-                <Label htmlFor="edit-user-active">Active</Label>
-              </div>
+                <span className="edit-user-checkbox-label">Active</span>
+              </label>
             )}
           </div>
           {updateMutation.isError && (
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-error-600)', marginTop: 'var(--space-2)' }}>
-              {getErrorMessage(updateMutation.error)}
-            </p>
+            <p className="edit-user-error">{getErrorMessage(updateMutation.error)}</p>
           )}
-          <DialogFooter style={{ marginTop: 'var(--space-4)' }}>
+          <DialogFooter className="edit-user-footer">
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={updateMutation.isPending}>
+            <Button type="submit" disabled={updateMutation.isPending || hasInvalidPassword}>
               {updateMutation.isPending ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>

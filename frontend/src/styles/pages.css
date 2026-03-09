@@ -277,6 +277,25 @@
   border-right: 1px solid var(--color-gray-200);
 }
 
+.auth-password-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  flex-shrink: 0;
+  height: 56px;
+  background-color: var(--color-gray-50);
+  border: none;
+  border-left: 1px solid var(--color-gray-200);
+  cursor: pointer;
+  color: var(--color-gray-400);
+}
+
+.auth-password-toggle:hover {
+  color: var(--color-gray-600);
+  background-color: var(--color-gray-100);
+}
+
 .auth-input {
   flex: 1;
   height: 56px;
@@ -2128,6 +2147,38 @@
   color: var(--color-gray-500);
 }
 
+/* ============================================
+   APPROVAL REQUESTS PAGE (match Projects UI)
+   ============================================ */
+
+/* Spacer so content starts at same vertical position as Projects (toolbar row height + margin) */
+.approval-requests-page .approval-requests-toolbar-spacer {
+  min-height: 48px;
+  margin-bottom: var(--space-6);
+}
+
+/* Empty state card: same visual as Projects empty (white card, centered content) */
+.approval-requests-page .approval-requests-empty-card {
+  overflow: hidden;
+}
+
+.approval-requests-page .approval-requests-empty-card .projects-empty {
+  padding: var(--space-16) var(--space-6);
+}
+
+/* Approval Requests list (same page layout as Projects; list of cards inside container) */
+.approval-requests-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.approval-requests-list-item {
+  list-style: none;
+}
+
 .projects-clear-filter {
   margin-top: var(--space-3);
   font-size: var(--font-size-sm);
@@ -2572,6 +2623,230 @@
   font-size: var(--font-size-xs);
 }
 
+/* Send for Approval Dialog – consistent with design system */
+.send-for-approval-dialog {
+  max-width: 28rem;
+}
+
+.send-for-approval-dialog .dialog-header {
+  padding-bottom: var(--space-4);
+}
+
+.send-for-approval-dialog .dialog-description {
+  margin-top: var(--space-1);
+  line-height: var(--line-height-normal);
+}
+
+.send-for-approval-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.send-for-approval-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.send-for-approval-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+  margin-top: var(--space-2);
+}
+
+.send-for-approval-footer {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-gray-100);
+}
+
+/* Edit User Dialog – modal with proper dropdown z-index and clean layout */
+.edit-user-dialog {
+  max-width: 28rem;
+}
+
+.edit-user-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.edit-user-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  overflow-y: auto;
+  max-height: min(60vh, 400px);
+}
+
+.edit-user-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Password rules above input so browser suggestion overlay never covers them */
+.edit-user-field-password .edit-user-hint,
+.edit-user-field-password .edit-user-password-checks {
+  margin: 0;
+}
+
+.edit-user-input {
+  margin-top: 0;
+}
+
+.edit-user-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  margin-top: var(--space-1);
+}
+
+.edit-user-password-checks {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+}
+
+.edit-user-password-checks li {
+  padding: var(--space-1) 0;
+}
+
+.edit-user-password-checks .check-met {
+  color: var(--color-success-600);
+}
+
+.edit-user-password-checks .check-missing {
+  color: var(--color-error-600);
+}
+
+.edit-user-input-invalid {
+  border-color: var(--color-error-300);
+}
+
+.edit-user-input-invalid:focus {
+  outline-color: var(--color-error-400);
+}
+
+.edit-user-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  padding: var(--space-3) 0;
+}
+
+.edit-user-checkbox-input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary-600);
+  cursor: pointer;
+}
+
+.edit-user-checkbox-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-700);
+}
+
+.edit-user-error {
+  font-size: var(--font-size-sm);
+  color: var(--color-error-600);
+  padding: 0 var(--space-6) var(--space-2);
+}
+
+.edit-user-footer {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* Edit User Panel – side panel (no modal, filters stay visible) */
+.edit-user-panel-wrap {
+  flex-shrink: 0;
+  width: 400px;
+  border-left: 1px solid var(--color-gray-200);
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-user-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.edit-user-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-gray-100);
+  flex-shrink: 0;
+}
+
+.edit-user-panel-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+  margin: 0;
+}
+
+.edit-user-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--color-gray-500);
+  background: none;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+
+.edit-user-panel-close:hover {
+  color: var(--color-gray-900);
+  background: var(--color-gray-100);
+}
+
+.edit-user-panel-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.edit-user-panel-form .edit-user-fields {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+}
+
+.edit-user-panel-footer {
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-gray-100);
+  background: var(--color-gray-50);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.edit-user-panel .edit-user-error {
+  padding: var(--space-2) var(--space-6);
+}
+
 /* Activity Logs filters */
 .admin-filters-row {
   flex-direction: column;
@@ -2641,7 +2916,22 @@
   padding-bottom: var(--space-8);
 }
 
+.user-management-split {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+}
+
+.user-management-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .user-management-header {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -2681,6 +2971,7 @@
 }
 
 .user-management-card {
+  flex-shrink: 0;
   background: white;
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-xl);
@@ -2847,7 +3138,10 @@
 }
 
 .user-management-content {
+  flex: 1;
+  min-height: 0;
   margin-bottom: var(--space-6);
+  overflow-y: auto;
 }
 
 .user-management-loading {
@@ -3079,6 +3373,7 @@
 }
 
 .user-management-pagination {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

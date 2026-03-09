@@ -270,12 +270,25 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 # ---------------------------------------------------------------------------
 
 
-def api_error(status_code: int, code: str, message: str) -> HTTPException:
-    """Create an HTTPException with a standardised error body."""
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": code, "message": message},
-    )
+def api_error(
+    status_code: int,
+    code: str,
+    message: str,
+    *,
+    required_permission: str | None = None,
+    current_permission: str | None = None,
+    **extra: str,
+) -> HTTPException:
+    """Create an HTTPException with a standardised error body.
+    Include required_permission and current_permission for permission-denied errors.
+    """
+    detail: dict = {"code": code, "message": message}
+    if required_permission is not None:
+        detail["required_permission"] = required_permission
+    if current_permission is not None:
+        detail["current_permission"] = current_permission
+    detail.update(extra)
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 async def get_project_with_access(
@@ -340,6 +353,28 @@ async def get_project_with_owner_or_admin(
     return project
 
 
+def has_project_permission(has: AccessLevel, need: AccessLevel) -> bool:
+    """
+    Check if user's access level satisfies the required level.
+    EDIT_FULL implies all others; EDIT_CONTENT and EDIT_ESTIMATION are independent.
+    READ is the base level - any share grants at least READ.
+    """
+    if need == AccessLevel.READ:
+        return has in (
+            AccessLevel.READ,
+            AccessLevel.EDIT_CONTENT,
+            AccessLevel.EDIT_ESTIMATION,
+            AccessLevel.EDIT_FULL,
+        )
+    if need == AccessLevel.EDIT_FULL:
+        return has == AccessLevel.EDIT_FULL
+    if need == AccessLevel.EDIT_CONTENT:
+        return has in (AccessLevel.EDIT_CONTENT, AccessLevel.EDIT_FULL)
+    if need == AccessLevel.EDIT_ESTIMATION:
+        return has in (AccessLevel.EDIT_ESTIMATION, AccessLevel.EDIT_FULL)
+    return False
+
+
 def _effective_access_level(project: Project, current_user: User, share: ProjectShare | None) -> AccessLevel:
     """Return the effective access level for a user on a project."""
     if project.created_by == current_user.id or current_user.is_admin:
@@ -387,26 +422,23 @@ async def get_project_with_permission(
     if project.created_by == current_user.id or current_user.is_admin:
         return project, AccessLevel.EDIT_FULL
     if share is None:
-        raise api_error(403, "ACCESS_DENIED", "You don't have access to this project")
+        raise api_error(
+            403,
+            "ACCESS_DENIED",
+            "You don't have access to this project",
+            required_permission=required.value,
+            current_permission="none",
+        )
 
     effective = share.access_level
 
-    def has_permission(has: AccessLevel, need: AccessLevel) -> bool:
-        if need == AccessLevel.READ:
-            return True
-        if need == AccessLevel.EDIT_FULL:
-            return has == AccessLevel.EDIT_FULL
-        if need == AccessLevel.EDIT_CONTENT:
-            return has in (AccessLevel.EDIT_CONTENT, AccessLevel.EDIT_FULL)
-        if need == AccessLevel.EDIT_ESTIMATION:
-            return has in (AccessLevel.EDIT_ESTIMATION, AccessLevel.EDIT_FULL)
-        return False
-
-    if not has_permission(effective, required):
+    if not has_project_permission(effective, required):
         raise api_error(
             403,
             "PERMISSION_DENIED",
-            f"This action requires {required.value} access or higher",
+            f"This action requires {required.value} access or higher. You currently have {effective.value}.",
+            required_permission=required.value,
+            current_permission=effective.value,
         )
     return project, effective
 

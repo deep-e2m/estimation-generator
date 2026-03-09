@@ -152,6 +152,8 @@ class ProjectResponse(BaseModel):
     )
     # Client information (from relationship)
     client: ClientResponse | None = Field(None, description="Associated client (optional)")
+    # Owner ID for frontend permission checks (populated from created_by in list endpoint)
+    owner_id: Optional[UUID] = Field(None, description="Project owner user ID")
 
 
 class ProjectDetailResponse(ProjectResponse):

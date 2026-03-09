@@ -214,9 +214,11 @@ async def login(
     Raises:
         HTTPException: If authentication fails.
     """
-    # Find user by email
+    # Find user by email (exclude soft-deleted users)
     result = await db.execute(
-        select(User).where(User.email == credentials.email.lower())
+        select(User)
+        .where(User.email == credentials.email.lower())
+        .where(User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
 

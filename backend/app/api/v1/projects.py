@@ -540,6 +540,7 @@ async def list_projects(
     for project in projects:
         project_response = ProjectResponse.model_validate(project)
         project_response.quotes_count = quote_counts.get(project.id, 0)
+        project_response.owner_id = project.created_by
         project_responses.append(project_response)
 
     pagination = PaginationMeta(
@@ -687,7 +688,7 @@ async def update_project(
             resource_type="project",
             resource_id=project.id,
             project_id=project.id,
-            metadata={"changes": changes},
+            metadata=audit.with_admin_bypass({"changes": changes}, project, current_user),
         )
     except Exception as e:
         logger.error("Failed to log audit for project update: %s", e)
@@ -744,7 +745,7 @@ async def delete_project(
             resource_type="project",
             resource_id=project_id,
             project_id=project_id,
-            metadata={"name": project_name},
+            metadata=audit.with_admin_bypass({"name": project_name}, project, current_user),
         )
     except Exception as e:
         logger.error("Failed to log audit for project deletion: %s", e)

@@ -157,6 +157,7 @@
   --z-dropdown: 50;
   --z-sticky: 100;
   --z-modal: 200;
+  --z-dropdown-in-modal: 220; /* Dropdowns/selects inside modals must appear above dialog */
   --z-tooltip: 300;
 
   /* ============================================

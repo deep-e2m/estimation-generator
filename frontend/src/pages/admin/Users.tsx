@@ -38,7 +38,7 @@ import type { User, UserRole } from '@/types/auth.types'
 import { getErrorMessage } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { getUserAvatarUrl } from '@/lib/placeholderAvatars'
-import { EditUserDialog } from './EditUserDialog'
+import { EditUserPanel } from './EditUserPanel'
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: ROLES.ADMIN as UserRole, label: 'Administrator' },
@@ -75,7 +75,6 @@ export default function UsersPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [page, setPage] = useState(1)
   const [editUser, setEditUser] = useState<User | null>(null)
-  const [editOpen, setEditOpen] = useState(false)
   const [deleteUser, setDeleteUser] = useState<User | null>(null)
 
   const isActiveParam =
@@ -130,13 +129,11 @@ export default function UsersPage() {
     if (deleteUser) deleteMutation.mutate(deleteUser.id)
   }
 
-  const openEdit = (user: User) => {
-    setEditUser(user)
-    setEditOpen(true)
-  }
+  const openEdit = (user: User) => setEditUser(user)
 
   return (
-    <div className="user-management-page">
+    <div className="user-management-page user-management-split">
+      <div className="user-management-main">
       <div className="user-management-header">
         <div className="user-management-header-left">
           <h1 className="user-management-title">User Management</h1>
@@ -352,12 +349,17 @@ export default function UsersPage() {
         </div>
       )}
 
-      <EditUserDialog
-        user={editUser}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        currentUserId={currentUser?.id ?? ''}
-      />
+      </div>
+
+      {editUser && (
+        <div className="edit-user-panel-wrap">
+          <EditUserPanel
+            user={editUser}
+            onClose={() => setEditUser(null)}
+            currentUserId={currentUser?.id ?? ''}
+          />
+        </div>
+      )}
 
       {deleteUser && (
         <Dialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>

@@ -16,6 +16,7 @@ Behaviour:
   the one synced from .env.
 
 Change admin email or password in .env and run this script again to apply.
+Other users (including PM) are managed via the app/DB, not .env.
 """
 
 from __future__ import annotations

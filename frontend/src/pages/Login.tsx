@@ -13,7 +13,7 @@ import { z } from 'zod'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Mail, Lock, ArrowRight, Sparkles } from 'lucide-react'
+import { Mail, Lock, ArrowRight, Sparkles, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useAuthStore } from '@/store/authStore'
@@ -31,6 +31,7 @@ type LoginForm = z.infer<typeof loginSchema>
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const login = useAuthStore((state) => state.login)
@@ -188,12 +189,29 @@ export default function Login() {
                 </div>
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   className="auth-input"
                   placeholder="Enter your password"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore
+                  data-bwignore
                   {...register('password')}
                 />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  ) : (
+                    <Eye style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  )}
+                </button>
               </div>
               {errors.password && (
                 <p className="auth-error-text">{errors.password.message}</p>

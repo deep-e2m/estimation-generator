@@ -1,10 +1,14 @@
 /**
  * Approval Requests page (Super PM / Admin).
  * Lists approval requests assigned to the current user; allows approve/disapprove.
+ * UI matches Projects and Activity Logs: same page header, title, subtitle, and content layout.
  */
 
 import { useState, useEffect } from 'react'
-import { Loader2, Inbox } from 'lucide-react'
+import { Inbox } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { approvalsService } from '@/services/approvals.service'
 import { ApprovalRequestCard } from '@/components/approval/ApprovalRequestCard'
 import { ApprovalDecisionDialog } from '@/components/approval/ApprovalDecisionDialog'
@@ -46,40 +50,64 @@ export default function ApprovalRequestsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Approval requests</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Projects sent to you for estimation approval. Approve or disapprove with a reason.
-        </p>
+    <div className="projects-page approval-requests-page">
+      {/* Page Header - same structure and position as Projects */}
+      <div className="projects-page-header">
+        <div className="projects-page-header-left">
+          <div className="projects-page-title-row">
+            <h1 className="projects-page-title">Approval Requests</h1>
+            {!loading && <span className="projects-page-count">{requests.length}</span>}
+          </div>
+          <p className="projects-page-subtitle">
+            Projects sent to you for estimation approval. Approve or disapprove with a reason.
+          </p>
+        </div>
       </div>
 
+      {/* Spacer so content aligns with Projects (toolbar height + margin) */}
+      <div className="approval-requests-toolbar-spacer" aria-hidden />
+
       {loading ? (
-        <div className="flex items-center gap-2 text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Loading...
+        <div className="projects-loading">
+          <Spinner size="lg" />
         </div>
       ) : error ? (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-3">
-          {error}
-        </div>
+        <Card className="projects-error-card">
+          <p className="text-error">{error}</p>
+          <Button
+            variant="outline"
+            onClick={() => load()}
+            style={{ marginTop: 'var(--space-4)' }}
+          >
+            Retry
+          </Button>
+        </Card>
       ) : requests.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-8 text-center">
-          <Inbox className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-          <p className="text-gray-600 dark:text-gray-400">No pending approval requests.</p>
-        </div>
+        <Card className="approval-requests-empty-card">
+          <div className="projects-empty">
+            <div className="projects-empty-icon">
+              <Inbox style={{ width: 48, height: 48, color: 'var(--color-primary-500)' }} />
+            </div>
+            <h3 className="projects-empty-title">No pending approval requests</h3>
+            <p className="projects-empty-description">
+              Projects sent to you for estimation approval will appear here. Approve or disapprove with a reason.
+            </p>
+          </div>
+        </Card>
       ) : (
-        <ul className="space-y-3">
-          {requests.map((req) => (
-            <li key={req.id}>
-              <ApprovalRequestCard
-                request={req}
-                showDecideButton
-                onDecide={handleDecide}
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="projects-list">
+          <ul className="approval-requests-list">
+            {requests.map((req) => (
+              <li key={req.id} className="approval-requests-list-item">
+                <ApprovalRequestCard
+                  request={req}
+                  showDecideButton
+                  onDecide={handleDecide}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <ApprovalDecisionDialog

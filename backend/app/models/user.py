@@ -254,3 +254,20 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
             bool: True if user can attempt login.
         """
         return self.is_active and not self.is_locked
+
+    @staticmethod
+    def can_assign_role(assigner_role: "UserRole", target_role: "UserRole") -> bool:
+        """
+        Check if a user with assigner_role can assign target_role to another user.
+        Prevents privilege escalation: only ADMIN can assign ADMIN/SUPER_PM;
+        PM/SUPER_PM can assign PM/DEV; DEV cannot assign any role.
+
+        Role hierarchy: ADMIN > SUPER_PM > PM > DEV
+        """
+        if assigner_role == UserRole.ADMIN:
+            return True
+        if assigner_role == UserRole.SUPER_PM:
+            return target_role in (UserRole.PM, UserRole.DEV)
+        if assigner_role == UserRole.PM:
+            return target_role == UserRole.DEV
+        return False

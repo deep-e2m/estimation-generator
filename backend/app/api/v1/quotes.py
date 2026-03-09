@@ -819,10 +819,11 @@ async def generate_quote(
             resource_type="quote",
             resource_id=new_quote.id,
             project_id=project_id,
-            metadata={
-                "title": new_quote.title,
-                "total_hours": float(new_quote.total_hours),
-            },
+            metadata=audit.with_admin_bypass(
+                {"title": new_quote.title, "total_hours": float(new_quote.total_hours)},
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for quote creation: %s", e)
@@ -1139,6 +1140,7 @@ async def update_quote(
     # Audit log: quote updated
     try:
         changes = list(update_data.keys())
+        quote_project = await db.get(Project, quote.project_id)
         await audit.log_action(
             db=db,
             actor_user_id=current_user.id,
@@ -1148,7 +1150,11 @@ async def update_quote(
             resource_type="quote",
             resource_id=quote.id,
             project_id=quote.project_id,
-            metadata={"changes": changes},
+            metadata=audit.with_admin_bypass(
+                {"changes": changes},
+                quote_project,
+                current_user,
+            ) if quote_project else {"changes": changes},
         )
     except Exception as e:
         logger.error("Failed to log audit for quote update: %s", e)
@@ -1274,6 +1280,7 @@ async def update_quote_status(
 
     # Audit log: quote status changed
     try:
+        quote_project = await db.get(Project, quote.project_id)
         await audit.log_action(
             db=db,
             actor_user_id=current_user.id,
@@ -1283,10 +1290,11 @@ async def update_quote_status(
             resource_type="quote",
             resource_id=quote.id,
             project_id=quote.project_id,
-            metadata={
-                "old_status": current_status.value,
-                "new_status": new_status.value,
-            },
+            metadata=audit.with_admin_bypass(
+                {"old_status": current_status.value, "new_status": new_status.value},
+                quote_project,
+                current_user,
+            ) if quote_project else {"old_status": current_status.value, "new_status": new_status.value},
         )
     except Exception as e:
         logger.error("Failed to log audit for quote status change: %s", e)
@@ -1358,7 +1366,9 @@ async def delete_quote(
     """
     logger.info("Deleting quote: id=%s, user=%s", quote_id, current_user.email)
 
-    quote = await get_quote_with_access_check(quote_id, current_user, db)
+    quote = await get_quote_with_access_check(
+        quote_id, current_user, db, required_permission=AccessLevel.EDIT_FULL
+    )
 
     # Prevent deletion of approved quotes
     if quote.status == QuoteStatus.APPROVED and not current_user.is_admin:
@@ -1380,6 +1390,7 @@ async def delete_quote(
 
     # Audit log: quote deleted
     try:
+        quote_project = await db.get(Project, quote_project_id)
         await audit.log_action(
             db=db,
             actor_user_id=current_user.id,
@@ -1389,7 +1400,11 @@ async def delete_quote(
             resource_type="quote",
             resource_id=quote_id,
             project_id=quote_project_id,
-            metadata={"title": quote_title},
+            metadata=audit.with_admin_bypass(
+                {"title": quote_title},
+                quote_project,
+                current_user,
+            ) if quote_project else {"title": quote_title},
         )
     except Exception as e:
         logger.error("Failed to log audit for quote deletion: %s", e)
@@ -1993,9 +2008,9 @@ async def export_quote_docx(
         current_user.email,
     )
 
-    # Verify project access and EDIT_ESTIMATION permission
+    # Verify project access (READ allows export for reviewers)
     project, _ = await get_project_with_permission(
-        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+        project_id, current_user, db, AccessLevel.READ
     )
 
     # Fetch quote with relationships
@@ -2085,7 +2100,11 @@ async def export_quote_docx(
             resource_type="quote",
             resource_id=quote_id,
             project_id=project_id,
-            metadata={"format": "docx", "filename": filename},
+            metadata=audit.with_admin_bypass(
+                {"format": "docx", "filename": filename},
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for quote export: %s", e)
@@ -2144,9 +2163,9 @@ async def export_quote_pdf(
         current_user.email,
     )
 
-    # Verify project access and EDIT_ESTIMATION permission
+    # Verify project access (READ allows export for reviewers)
     project, _ = await get_project_with_permission(
-        project_id, current_user, db, AccessLevel.EDIT_ESTIMATION
+        project_id, current_user, db, AccessLevel.READ
     )
 
     # Fetch quote with relationships
@@ -2526,7 +2545,11 @@ async def export_quote_pdf(
             resource_type="quote",
             resource_id=quote_id,
             project_id=project_id,
-            metadata={"format": "pdf", "filename": filename},
+            metadata=audit.with_admin_bypass(
+                {"format": "pdf", "filename": filename},
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for quote export: %s", e)

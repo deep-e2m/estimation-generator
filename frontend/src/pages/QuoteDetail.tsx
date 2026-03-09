@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useQuote, useQuoteVersions, useDeleteQuote } from '@/hooks/useQuotes';
 import { cn, formatCurrency, getStatusColor, downloadUrl } from '@/lib/utils';
 import { formatDate, formatSmartDate } from '@/lib/date';
@@ -31,7 +32,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { quoteService } from '@/services/quote-generation.service';
+import { quoteService, projectsService } from '@/services';
+import { useAuthStore } from '@/store/authStore';
+import { canDeleteQuote } from '@/utils/permissions';
 
 /**
  * Quote Detail page showing full quote information with edit, export, and version history
@@ -60,6 +63,15 @@ export function QuoteDetail() {
 
   // Mutations
   const deleteQuote = useDeleteQuote();
+
+  // Fetch project for permission checks (owner, my_access_level)
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => projectsService.get(projectId!),
+    enabled: !!projectId && !!quote,
+  });
+  const user = useAuthStore((s) => s.user);
+  const showDeleteQuote = canDeleteQuote(user, project);
 
   const handleExport = useCallback(
     async (format: ExportFormat) => {
@@ -226,13 +238,15 @@ export function QuoteDetail() {
             </div>
           </div>
 
-          <Button
-            variant="danger"
-            leftIcon={<Trash2 className="h-4 w-4" />}
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            Delete
-          </Button>
+          {showDeleteQuote && (
+            <Button
+              variant="danger"
+              leftIcon={<Trash2 className="h-4 w-4" />}
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </div>
 

@@ -12,7 +12,7 @@ import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Mail, Lock, User, ArrowRight, Sparkles, Briefcase } from 'lucide-react'
+import { Mail, Lock, User, ArrowRight, Sparkles, Briefcase, Eye, EyeOff } from 'lucide-react'
 import type { RegisterableRole } from '@/types/auth.types'
 
 const REGISTER_ROLE_OPTIONS: { value: RegisterableRole; label: string }[] = [
@@ -50,6 +50,8 @@ type RegisterForm = z.infer<typeof registerSchema>
 export default function Register() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const navigate = useNavigate()
   const registerUser = useAuthStore((state) => state.register)
 
@@ -250,12 +252,28 @@ export default function Register() {
                 </div>
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   className="auth-input"
                   placeholder="Min 8 characters"
-                  autoComplete="new-password"
+                  autoComplete="off"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore
                   {...register('password')}
                 />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  ) : (
+                    <Eye style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  )}
+                </button>
               </div>
               {errors.password && (
                 <p className="auth-error-text">{errors.password.message}</p>
@@ -273,12 +291,28 @@ export default function Register() {
                 </div>
                 <input
                   id="confirmPassword"
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   className="auth-input"
                   placeholder="Confirm your password"
-                  autoComplete="new-password"
+                  autoComplete="off"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore
                   {...register('confirmPassword')}
                 />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  ) : (
+                    <Eye style={{ width: 20, height: 20, color: 'var(--color-gray-400)' }} />
+                  )}
+                </button>
               </div>
               {errors.confirmPassword && (
                 <p className="auth-error-text">{errors.confirmPassword.message}</p>

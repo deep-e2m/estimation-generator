@@ -60,7 +60,7 @@ export interface PasswordInputProps extends Omit<InputProps, 'type'> {
 }
 
 const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
-  ({ className, showStrength: _showStrength, label, ...props }, ref) => {
+  ({ className, showStrength: _showStrength, label, autoComplete = 'off', ...props }, ref) => {
     const [showPassword, setShowPassword] = React.useState(false)
 
     return (
@@ -76,6 +76,7 @@ const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
             className={className}
             ref={ref}
             style={{ paddingRight: '48px' }}
+            autoComplete={autoComplete}
             {...props}
             label={undefined}
           />

@@ -319,6 +319,11 @@
   animation: fadeInScale var(--transition-fast);
 }
 
+/* Select inside modals - ensure dropdown appears above dialog */
+.select-content-in-modal {
+  z-index: var(--z-dropdown-in-modal) !important;
+}
+
 .select-item {
   display: flex;
   align-items: center;

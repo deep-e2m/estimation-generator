@@ -1,15 +1,31 @@
+import fs from 'node:fs'
+import path from 'path'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env file based on mode
+  // Load env file based on mode (loadEnv only reads .env files, not process.env)
   const env = loadEnv(mode, process.cwd(), '')
+  // Prefer process.env (Docker Compose sets this) over .env files so Docker works
+  const apiUrl = process.env.VITE_API_URL || env.VITE_API_URL || ''
 
-  // Determine API target - use environment variable or fallback to localhost
-  // In Docker, VITE_API_URL will be set to http://backend:8000
-  const apiTarget = env.VITE_API_URL || 'http://localhost:8000'
+  // Determine API target for the proxy
+  // In Docker: VITE_API_URL=http://backend:8000 (set by docker-compose)
+  // Locally: use localhost since "backend" hostname doesn't resolve on the host
+  // In Docker: "backend" can fail to resolve (getaddrinfo ENOTFOUND on some setups);
+  // use host.docker.internal to reach the host's port mapping (works on Mac/Win;
+  // Linux needs extra_hosts: host.docker.internal:host-gateway)
+  const isDocker = fs.existsSync('/.dockerenv')
+  const backendPort = process.env.BACKEND_PORT || '8000'
+  let apiTarget = apiUrl || 'http://localhost:8000'
+  if (apiTarget.includes('://backend')) {
+    if (!isDocker) {
+      apiTarget = `http://localhost:${backendPort}`
+    } else {
+      apiTarget = `http://host.docker.internal:${backendPort}`
+    }
+  }
 
   return {
     plugins: [

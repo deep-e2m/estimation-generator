@@ -5,55 +5,34 @@
 import type { PasswordStrength, PasswordStrengthResult } from '@/types/auth.types'
 
 /**
- * Calculate password strength
+ * Calculate password strength.
+ * Password suggestion/feedback disabled: always returns empty feedback array.
  */
 export function calculatePasswordStrength(password: string): PasswordStrengthResult {
-  const feedback: string[] = []
+  const feedback: string[] = [] // Disabled: no suggestions shown anywhere in the system
   let score = 0
 
   if (!password) {
     return {
       strength: 'weak',
       score: 0,
-      feedback: ['Password is required'],
+      feedback: [],
     }
   }
 
-  // Length checks
+  // Length checks (score only; no feedback)
   if (password.length >= 8) {
     score++
-  } else {
-    feedback.push('Use at least 8 characters')
   }
-
   if (password.length >= 12) {
     score++
   }
 
-  // Character type checks
-  if (/[a-z]/.test(password)) {
-    score += 0.5
-  } else {
-    feedback.push('Add lowercase letters')
-  }
-
-  if (/[A-Z]/.test(password)) {
-    score += 0.5
-  } else {
-    feedback.push('Add uppercase letters')
-  }
-
-  if (/[0-9]/.test(password)) {
-    score += 0.5
-  } else {
-    feedback.push('Add numbers')
-  }
-
-  if (/[^a-zA-Z0-9]/.test(password)) {
-    score += 0.5
-  } else {
-    feedback.push('Add special characters')
-  }
+  // Character type checks (score only)
+  if (/[a-z]/.test(password)) score += 0.5
+  if (/[A-Z]/.test(password)) score += 0.5
+  if (/[0-9]/.test(password)) score += 0.5
+  if (/[^a-zA-Z0-9]/.test(password)) score += 0.5
 
   // Penalty for common patterns
   const commonPatterns = [
@@ -64,34 +43,20 @@ export function calculatePasswordStrength(password: string): PasswordStrengthRes
     /letmein/i,
     /admin/i,
   ]
-
   for (const pattern of commonPatterns) {
     if (pattern.test(password)) {
       score -= 1
-      feedback.push('Avoid common patterns')
       break
     }
   }
 
-  // Ensure score is within bounds
   score = Math.max(0, Math.min(4, Math.round(score)))
 
-  // Determine strength level
   let strength: PasswordStrength
-  if (score <= 1) {
-    strength = 'weak'
-  } else if (score === 2) {
-    strength = 'fair'
-  } else if (score === 3) {
-    strength = 'good'
-  } else {
-    strength = 'strong'
-  }
-
-  // Add positive feedback if strong
-  if (strength === 'strong' && feedback.length === 0) {
-    feedback.push('Great password!')
-  }
+  if (score <= 1) strength = 'weak'
+  else if (score === 2) strength = 'fair'
+  else if (score === 3) strength = 'good'
+  else strength = 'strong'
 
   return { strength, score, feedback }
 }

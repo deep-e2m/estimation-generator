@@ -558,7 +558,7 @@ export default function DashboardLayout() {
           <div className={cn(
             'page-container',
             location.pathname === '/dashboard' && 'dashboard-container',
-            location.pathname === '/projects' && 'projects-container',
+            (location.pathname === '/projects' || location.pathname === '/approval-requests') && 'projects-container',
             location.pathname.startsWith('/admin') && 'admin-container'
           )}>
             <Outlet />

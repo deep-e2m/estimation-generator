@@ -11,11 +11,13 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser, AdminUser, DbSession, api_error
+from app.config import is_allowed_email_domain, settings
+from app.core.security import hash_password, validate_password_strength
 from app.models.user import User, UserRole
 from app.models.audit_log import ActionOutcome
 from app.schemas.auth import UserResponse
@@ -33,11 +35,35 @@ class UserRoleUpdate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Body for updating a user (admin only)."""
+    """Body for updating a user (admin only). All fields optional; only provided fields are updated."""
 
+    email: Optional[EmailStr] = Field(None, description="New email address")
+    password: Optional[str] = Field(None, description="New password (leave blank or omit to keep)")
     full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    company_name: Optional[str] = Field(None, max_length=200)
     role: Optional[UserRole] = Field(None)
     is_active: Optional[bool] = Field(None)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_domain(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not is_allowed_email_domain(v):
+            raise ValueError(
+                "Only company email addresses are allowed (e.g. @e2m.solutions or @e2msolution.com)."
+            )
+        return v.lower()
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        errors = validate_password_strength(v)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return v
 
 
 @router.get(
@@ -107,6 +133,14 @@ async def update_user_role(
     if not user:
         raise api_error(404, "USER_NOT_FOUND", "User not found")
 
+    if not User.can_assign_role(current_user.role, body.role):
+        raise api_error(
+            403,
+            "CANNOT_ASSIGN_ROLE",
+            f"You do not have permission to assign the {body.role.value} role. "
+            "Only admins can assign admin or super_pm roles.",
+        )
+
     old_role = user.role.value
     user.role = body.role
     await db.commit()
@@ -138,10 +172,10 @@ async def update_user_role(
     "/{user_id}",
     response_model=dict,
     summary="Update user",
-    description="Update user profile (full_name, role, is_active). Admin only. Cannot change own role or deactivate self.",
+    description="Update user profile (email, password, full_name, company_name, role, is_active). Admin only. Cannot change own role or deactivate self.",
     responses={
         200: {"description": "User updated"},
-        400: {"description": "Invalid data or cannot change self"},
+        400: {"description": "Invalid data, duplicate email, or cannot change self"},
         403: {"description": "Admin required"},
         404: {"description": "User not found"},
     },
@@ -164,10 +198,64 @@ async def update_user(
     if not user:
         raise api_error(404, "USER_NOT_FOUND", "User not found")
     changes = {}
+
+    # Email: check uniqueness (excluding current user)
+    if body.email is not None:
+        existing = (
+            await db.execute(
+                select(User).where(User.email == body.email).where(User.id != user_id)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise api_error(400, "EMAIL_IN_USE", "A user with this email already exists")
+        user.email = body.email.strip().lower()
+        changes["email"] = user.email
+        try:
+            await audit.log_action(
+                db=db,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                action="user.email.changed",
+                outcome=ActionOutcome.SUCCESS,
+                resource_type="user",
+                resource_id=user.id,
+                metadata={"target_user_id": str(user.id)},
+            )
+        except Exception as e:
+            logger.error("Failed to log audit for email change: %s", e)
+
+    # Password: hash and store
+    if body.password is not None:
+        user.password_hash = hash_password(body.password, validate=False)  # validated by schema
+        changes["password"] = "[REDACTED]"
+        try:
+            await audit.log_action(
+                db=db,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                action="user.password.changed",
+                outcome=ActionOutcome.SUCCESS,
+                resource_type="user",
+                resource_id=user.id,
+                metadata={"target_user_id": str(user.id)},
+            )
+        except Exception as e:
+            logger.error("Failed to log audit for password change: %s", e)
+
     if body.full_name is not None:
         user.full_name = body.full_name.strip()
         changes["full_name"] = user.full_name
+    if "company_name" in body.model_fields_set:
+        user.company_name = (body.company_name or "").strip() or None
+        changes["company_name"] = user.company_name
     if body.role is not None:
+        if not User.can_assign_role(current_user.role, body.role):
+            raise api_error(
+                403,
+                "CANNOT_ASSIGN_ROLE",
+                f"You do not have permission to assign the {body.role.value} role. "
+                "Only admins can assign admin or super_pm roles.",
+            )
         old_role = user.role.value
         user.role = body.role
         changes["role"] = user.role.value

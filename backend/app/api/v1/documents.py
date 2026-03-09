@@ -218,7 +218,7 @@ async def create_document(
 ):
     """Create a new document."""
     # Verify project exists and user has EDIT_CONTENT permission
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
 
     document = Document(
         project_id=project_id,
@@ -246,7 +246,7 @@ async def create_document(
             resource_type="document",
             resource_id=document.id,
             project_id=project_id,
-            metadata={"filename": document.title},
+            metadata=audit.with_admin_bypass({"filename": document.title}, project, current_user),
         )
     except Exception as e:
         logger.error("Failed to log audit for document upload: %s", e)
@@ -288,7 +288,7 @@ async def update_document(
 ):
     """Update a document."""
     # Verify project access and EDIT_CONTENT permission
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
 
     document = await db.get(Document, document_id)
     if not document or document.project_id != project_id:
@@ -325,7 +325,7 @@ async def delete_document(
 ):
     """Delete a document."""
     # Verify project access and EDIT_CONTENT permission
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_CONTENT)
 
     document = await db.get(Document, document_id)
     if not document or document.project_id != project_id:
@@ -350,7 +350,7 @@ async def delete_document(
             resource_type="document",
             resource_id=document_id,
             project_id=doc_project_id,
-            metadata={"filename": doc_title},
+            metadata=audit.with_admin_bypass({"filename": doc_title}, project, current_user),
         )
     except Exception as e:
         logger.error("Failed to log audit for document deletion: %s", e)

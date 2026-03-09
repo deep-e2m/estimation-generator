@@ -32,6 +32,8 @@ export interface ProjectSummary {
   quotes_count: number;
   created_at: string;
   updated_at: string;
+  /** Owner user ID (for permission checks, e.g. can delete) */
+  owner_id?: string | null;
 }
 
 // Access level for shared projects (from backend RBAC)

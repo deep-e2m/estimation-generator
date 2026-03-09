@@ -40,6 +40,8 @@ import {
 } from '@/components/ui/dialog'
 import { projectsService } from '@/services'
 import { formatRelativeTime } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
+import { canDeleteProject } from '@/utils/permissions'
 import { ProjectActivityModal } from '@/components/project/ProjectActivityModal'
 import type { ProjectStatus } from '@/types'
 import type { ProjectSummary, ProjectUpdate } from '@/types/project'
@@ -87,12 +89,14 @@ function ProjectCard({
   onClick,
   onSeeMore,
   onAction,
+  canDelete,
 }: {
   project: ProjectSummary
   index: number
   onClick: () => void
   onSeeMore: () => void
   onAction: (action: string, project: ProjectSummary) => void
+  canDelete: boolean
 }) {
   // Status-specific actions: only show options that change state (not current state)
   const status = (project.status || 'active').toLowerCase()
@@ -110,8 +114,8 @@ function ProjectCard({
     { value: 'edit', label: 'Edit Project', icon: <Edit style={{ width: 16, height: 16 }} /> },
     { value: 'activity', label: 'View Activity', icon: <History style={{ width: 16, height: 16 }} /> },
     ...statusActions,
-    { value: 'divider', label: '', divider: true },
-    { value: 'delete', label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true },
+    ...(canDelete ? [{ value: 'divider' as const, label: '', divider: true }] : []),
+    ...(canDelete ? [{ value: 'delete' as const, label: 'Delete', icon: <Trash2 style={{ width: 16, height: 16 }} />, danger: true }] : []),
   ]
 
   // Cycle through colors
@@ -307,6 +311,7 @@ function Pagination({
 
 export default function Projects() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const urlSearch = searchParams.get('search') ?? ''
@@ -623,6 +628,7 @@ export default function Projects() {
                 onClick={() => navigate(`/projects/${project.id}`)}
                 onSeeMore={() => handleOpenDialog(project)}
                 onAction={handleProjectAction}
+                canDelete={canDeleteProject(user, project)}
               />
             ))}
           </div>

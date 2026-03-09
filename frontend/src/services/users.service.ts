@@ -15,7 +15,10 @@ export interface UserListParams {
 }
 
 export interface UserUpdatePayload {
+  email?: string
+  password?: string
   full_name?: string
+  company_name?: string | null
   role?: UserRole
   is_active?: boolean
 }

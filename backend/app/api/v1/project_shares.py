@@ -63,7 +63,10 @@ async def create_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+
+    if body.shared_with_user_id == current_user.id:
+        raise api_error(400, "CANNOT_SHARE_WITH_SELF", "You cannot share a project with yourself")
 
     # Resolve shared_with user and check role for allowed access levels
     user_result = await db.execute(
@@ -113,10 +116,14 @@ async def create_share(
             resource_type="share",
             resource_id=share.id,
             project_id=project_id,
-            metadata={
-                "shared_with_user_id": str(body.shared_with_user_id),
-                "access_level": body.access_level.value,
-            },
+            metadata=audit.with_admin_bypass(
+                {
+                    "shared_with_user_id": str(body.shared_with_user_id),
+                    "access_level": body.access_level.value,
+                },
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for share creation: %s", e)
@@ -196,7 +203,7 @@ async def update_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> dict:
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     result = await db.execute(
         select(ProjectShare)
@@ -237,11 +244,15 @@ async def update_share(
             resource_type="share",
             resource_id=share.id,
             project_id=project_id,
-            metadata={
-                "shared_with_user_id": str(share.shared_with_user_id),
-                "old_access": old_access,
-                "new_access": body.access_level.value,
-            },
+            metadata=audit.with_admin_bypass(
+                {
+                    "shared_with_user_id": str(share.shared_with_user_id),
+                    "old_access": old_access,
+                    "new_access": body.access_level.value,
+                },
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for share update: %s", e)
@@ -275,7 +286,7 @@ async def delete_share(
     current_user: PmOrAbove,
     db: DbSession,
 ) -> None:
-    await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
 
     result = await db.execute(
         select(ProjectShare).where(
@@ -305,10 +316,14 @@ async def delete_share(
             resource_type="share",
             resource_id=share_id,
             project_id=project_id,
-            metadata={
-                "shared_with_user_id": str(shared_with_user_id),
-                "access_level": access_level,
-            },
+            metadata=audit.with_admin_bypass(
+                {
+                    "shared_with_user_id": str(shared_with_user_id),
+                    "access_level": access_level,
+                },
+                project,
+                current_user,
+            ),
         )
     except Exception as e:
         logger.error("Failed to log audit for share removal: %s", e)
