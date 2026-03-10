@@ -65,9 +65,11 @@ function DialogTrigger({ children, asChild }: DialogTriggerProps) {
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
+  /** Optional wrapper class; when set, overlay + dialog are wrapped for stacking (e.g. higher z-index). */
+  wrapperClassName?: string
 }
 
-function DialogContent({ className, children, ...props }: DialogContentProps) {
+function DialogContent({ className, wrapperClassName, children, ...props }: DialogContentProps) {
   const { open, setOpen } = useDialog()
 
   // Handle escape key
@@ -87,15 +89,15 @@ function DialogContent({ className, children, ...props }: DialogContentProps) {
 
   if (!open) return null
 
-  return (
+  const content = (
     <>
       {/* Overlay */}
-      <div 
-        className="dialog-overlay" 
+      <div
+        className="dialog-overlay"
         onClick={() => setOpen(false)}
         aria-hidden="true"
       />
-      
+
       {/* Dialog */}
       <div
         role="dialog"
@@ -104,7 +106,7 @@ function DialogContent({ className, children, ...props }: DialogContentProps) {
         {...props}
       >
         {children}
-        
+
         {/* Close button */}
         <button
           type="button"
@@ -122,6 +124,11 @@ function DialogContent({ className, children, ...props }: DialogContentProps) {
       </div>
     </>
   )
+
+  if (wrapperClassName) {
+    return <div className={wrapperClassName}>{content}</div>
+  }
+  return content
 }
 
 function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

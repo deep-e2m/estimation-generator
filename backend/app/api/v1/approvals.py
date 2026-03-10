@@ -29,7 +29,7 @@ from app.models.user import User, UserRole
 from app.models.audit_log import ActionOutcome
 from app.schemas.approval_request import (
     ApprovalDecision,
-    ApprovalRequestCreate,
+    ApprovalRequestCreateBulk,
     ApprovalRequestResponse,
 )
 from app.schemas.auth import UserResponse
@@ -40,109 +40,200 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post(
-    "/projects/{project_id}/approval-requests",
-    response_model=dict,
-    status_code=status.HTTP_201_CREATED,
-    summary="Send project for approval",
-    description="Create an approval request and assign it to a Superior PM. Requires edit_full (owner, admin, or shared with edit_full).",
-    responses={
-        201: {"description": "Approval request created"},
-        400: {"description": "Assigned user is not a Superior PM or already has pending request"},
-        403: {"description": "Not owner, admin, or edit_full access"},
-        404: {"description": "Project or user not found"},
-    },
-)
-async def create_approval_request(
-    project_id: UUID,
-    body: ApprovalRequestCreate,
-    current_user: PmOrAbove,
-    db: DbSession,
+def _approval_request_to_response(
+    request: ApprovalRequest,
+    project_name: str | None,
+    requester_user: User,
+    assignee_user: User,
 ) -> dict:
-    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+    """Build approval request payload for API response.
 
-    assignee_result = await db.execute(
-        select(User).where(
-            User.id == body.assigned_to,
-            User.is_active == True,  # noqa: E712
-        )
-    )
-    assignee = assignee_result.scalar_one_or_none()
-    if not assignee:
-        raise api_error(404, "USER_NOT_FOUND", "User not found")
-    if assignee.role != UserRole.SUPER_PM:
-        raise api_error(
-            400,
-            "NOT_SUPER_PM",
-            "Approval can only be assigned to a Superior PM",
-        )
-
-    pending_result = await db.execute(
-        select(ApprovalRequest).where(
-            ApprovalRequest.project_id == project_id,
-            ApprovalRequest.status == ApprovalStatus.PENDING,
-        )
-    )
-    if pending_result.scalar_one_or_none():
-        raise api_error(
-            400,
-            "PENDING_APPROVAL_EXISTS",
-            "This project already has a pending approval request",
-        )
-
-    request = ApprovalRequest(
-        project_id=project_id,
-        requested_by=current_user.id,
-        assigned_to=body.assigned_to,
-        status=ApprovalStatus.PENDING,
-    )
-    db.add(request)
-    await db.commit()
-    await db.refresh(request)
-
-    # Audit log: approval requested
-    try:
-        await audit.log_action(
-            db=db,
-            actor_user_id=current_user.id,
-            actor_role=current_user.role.value,
-            action="approval.requested",
-            outcome=ActionOutcome.SUCCESS,
-            resource_type="approval",
-            resource_id=request.id,
-            project_id=project_id,
-            metadata=audit.with_admin_bypass(
-                {
-                    "assigned_to": str(body.assigned_to),
-                    "quote_id": None,  # Optional if quote is known
-                },
-                project,
-                current_user,
-            ),
-        )
-    except Exception as e:
-        logger.error("Failed to log audit for approval request: %s", e)
-
-    # Use current_user and assignee (already in memory); avoid lazy-loading requester/assignee in async
+    Never build ApprovalRequestResponse from the ORM request alone — requested_by
+    and assigned_to must be full User objects (e.g. from explicit select).
+    Returns the serialized approval request dict; caller wraps with success/data.
+    """
     response_data = ApprovalRequestResponse(
         id=request.id,
         project_id=request.project_id,
-        project_name=project.name,
-        requested_by=UserResponse.model_validate(current_user),
-        assigned_to=UserResponse.model_validate(assignee),
+        project_name=project_name,
+        requested_by=UserResponse.model_validate(requester_user),
+        assigned_to=UserResponse.model_validate(assignee_user),
         status=request.status,
         disapproval_reason=request.disapproval_reason,
         created_at=request.created_at,
         updated_at=request.updated_at,
         responded_at=request.responded_at,
     )
-    return {"success": True, "data": response_data.model_dump()}
+    return response_data.model_dump()
+
+
+async def _ensure_one_pending_per_assignee(
+    db: AsyncSession, project_id: UUID, assignee_ids: list[UUID]
+) -> set[UUID]:
+    """Return set of assignee IDs that already have a pending request for this project."""
+    from sqlalchemy import and_
+
+    result = await db.execute(
+        select(ApprovalRequest.assigned_to).where(
+            and_(
+                ApprovalRequest.project_id == project_id,
+                ApprovalRequest.status == ApprovalStatus.PENDING,
+                ApprovalRequest.assigned_to.in_(assignee_ids),
+            )
+        )
+    )
+    return {row[0] for row in result.all()}
+
+
+@router.post(
+    "/projects/{project_id}/approval-requests",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Send project for approval (single or bulk)",
+    description="Create one or more approval requests. At most one pending per (project, assignee). Requires edit_full.",
+    responses={
+        201: {"description": "Approval request(s) created"},
+        400: {"description": "Assigned user not Super PM or already has pending request"},
+        403: {"description": "Not owner, admin, or edit_full access"},
+        404: {"description": "Project or user not found"},
+    },
+)
+async def create_approval_request(
+    project_id: UUID,
+    body: ApprovalRequestCreateBulk,
+    current_user: PmOrAbove,
+    db: DbSession,
+) -> dict:
+    project, _ = await get_project_with_permission(project_id, current_user, db, AccessLevel.EDIT_FULL)
+
+    assignee_ids = list(dict.fromkeys(body.assigned_to))  # preserve order, dedupe
+
+    if not assignee_ids:
+        raise api_error(400, "NO_ASSIGNEES", "At least one assignee is required")
+
+    # Load all assignees; must be active Super PMs
+    users_result = await db.execute(
+        select(User).where(
+            User.id.in_(assignee_ids),
+            User.is_active == True,  # noqa: E712
+        )
+    )
+    users_by_id = {u.id: u for u in users_result.scalars().all()}
+    for uid in assignee_ids:
+        u = users_by_id.get(uid)
+        if not u:
+            raise api_error(404, "USER_NOT_FOUND", f"User not found: {uid}")
+        if u.role != UserRole.SUPER_PM:
+            raise api_error(
+                400,
+                "NOT_SUPER_PM",
+                "Approval can only be assigned to a Superior PM",
+            )
+
+    # At most one pending per (project_id, assigned_to): skip assignees who already have pending
+    already_pending = await _ensure_one_pending_per_assignee(db, project_id, assignee_ids)
+    to_create = [uid for uid in assignee_ids if uid not in already_pending]
+
+    if not to_create:
+        raise api_error(
+            400,
+            "PENDING_FOR_THIS_PM",
+            "All selected Superior PMs already have a pending request for this project",
+        )
+
+    created: list[ApprovalRequest] = []
+    for assigned_to_id in to_create:
+        request = ApprovalRequest(
+            project_id=project_id,
+            requested_by=current_user.id,
+            assigned_to=assigned_to_id,
+            status=ApprovalStatus.PENDING,
+        )
+        db.add(request)
+        created.append(request)
+
+    await db.commit()
+    for req in created:
+        await db.refresh(req)
+
+    # Build response list (same shape for single or bulk)
+    users_result2 = await db.execute(select(User).where(User.id.in_(to_create)))
+    assignees_by_id = {u.id: u for u in users_result2.scalars().all()}
+    data_list = [
+        _approval_request_to_response(r, project.name, current_user, assignees_by_id[r.assigned_to])
+        for r in created
+    ]
+
+    for req in created:
+        try:
+            await audit.log_action(
+                db=db,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                action="approval.requested",
+                outcome=ActionOutcome.SUCCESS,
+                resource_type="approval",
+                resource_id=req.id,
+                project_id=project_id,
+                metadata=audit.with_admin_bypass(
+                    {"assigned_to": str(req.assigned_to), "quote_id": None},
+                    project,
+                    current_user,
+                ),
+            )
+        except Exception as e:
+            logger.error("Failed to log audit for approval request: %s", e)
+
+    return {"success": True, "data": data_list}
+
+
+@router.get(
+    "/projects/{project_id}/approval-requests",
+    response_model=dict,
+    summary="List approval requests by project",
+    description="List all approval requests for a project. Requires project access (read).",
+    responses={
+        200: {"description": "List of approval requests for the project"},
+        403: {"description": "No access to project"},
+        404: {"description": "Project not found"},
+    },
+)
+async def list_approval_requests_by_project(
+    project_id: UUID,
+    current_user: ActiveUser,
+    db: DbSession,
+) -> dict:
+    await get_project_with_access(project_id, current_user, db)
+
+    query = (
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.project))
+        .where(ApprovalRequest.project_id == project_id)
+        .order_by(ApprovalRequest.created_at.desc())
+    )
+    result = await db.execute(query)
+    requests = list(result.scalars().all())
+
+    user_ids = {ar.requested_by for ar in requests} | {ar.assigned_to for ar in requests}
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users_by_id = {u.id: u for u in users_result.scalars().all()}
+
+    items = [
+        _approval_request_to_response(
+            ar,
+            ar.project.name if ar.project else None,
+            users_by_id[ar.requested_by],
+            users_by_id[ar.assigned_to],
+        )
+        for ar in requests
+    ]
+    return {"success": True, "data": items}
 
 
 @router.get(
     "/approval-requests",
     response_model=dict,
-    summary="List approval requests",
+    summary="List approval requests (assigned to me)",
     description="List approval requests assigned to the current Super PM.",
     responses={
         200: {"description": "List of approval requests"},
@@ -167,25 +258,16 @@ async def list_approval_requests(
     requests = list(result.scalars().all())
 
     # Load requester/assignee users by ID so we don't rely on ORM relationships in async
-    user_ids = set()
-    for ar in requests:
-        user_ids.add(ar.requested_by)
-        user_ids.add(ar.assigned_to)
+    user_ids = {ar.requested_by for ar in requests} | {ar.assigned_to for ar in requests}
     users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
     users_by_id = {u.id: u for u in users_result.scalars().all()}
 
     items = [
-        ApprovalRequestResponse(
-            id=ar.id,
-            project_id=ar.project_id,
-            project_name=ar.project.name if ar.project else None,
-            requested_by=UserResponse.model_validate(users_by_id[ar.requested_by]),
-            assigned_to=UserResponse.model_validate(users_by_id[ar.assigned_to]),
-            status=ar.status,
-            disapproval_reason=ar.disapproval_reason,
-            created_at=ar.created_at,
-            updated_at=ar.updated_at,
-            responded_at=ar.responded_at,
+        _approval_request_to_response(
+            ar,
+            ar.project.name if ar.project else None,
+            users_by_id[ar.requested_by],
+            users_by_id[ar.assigned_to],
         )
         for ar in requests
     ]
@@ -234,19 +316,15 @@ async def get_approval_request(
     if not requester_user or not assignee_user:
         raise api_error(404, "USER_NOT_FOUND", "Requester or assignee user not found")
 
-    response_data = ApprovalRequestResponse(
-        id=ar.id,
-        project_id=ar.project_id,
-        project_name=ar.project.name if ar.project else None,
-        requested_by=UserResponse.model_validate(requester_user),
-        assigned_to=UserResponse.model_validate(assignee_user),
-        status=ar.status,
-        disapproval_reason=ar.disapproval_reason,
-        created_at=ar.created_at,
-        updated_at=ar.updated_at,
-        responded_at=ar.responded_at,
-    )
-    return {"success": True, "data": response_data.model_dump()}
+    return {
+        "success": True,
+        "data": _approval_request_to_response(
+            ar,
+            ar.project.name if ar.project else None,
+            requester_user,
+            assignee_user,
+        ),
+    }
 
 
 @router.post(
@@ -329,16 +407,12 @@ async def decide_approval(
     if not requester_user or not assignee_user:
         raise api_error(404, "USER_NOT_FOUND", "Requester or assignee user not found")
 
-    response_data = ApprovalRequestResponse(
-        id=ar.id,
-        project_id=ar.project_id,
-        project_name=ar.project.name if ar.project else None,
-        requested_by=UserResponse.model_validate(requester_user),
-        assigned_to=UserResponse.model_validate(assignee_user),
-        status=ar.status,
-        disapproval_reason=ar.disapproval_reason,
-        created_at=ar.created_at,
-        updated_at=ar.updated_at,
-        responded_at=ar.responded_at,
-    )
-    return {"success": True, "data": response_data.model_dump()}
+    return {
+        "success": True,
+        "data": _approval_request_to_response(
+            ar,
+            ar.project.name if ar.project else None,
+            requester_user,
+            assignee_user,
+        ),
+    }

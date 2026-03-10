@@ -159,6 +159,8 @@
   --z-modal: 200;
   --z-dropdown-in-modal: 220; /* Dropdowns/selects inside modals must appear above dialog */
   --z-tooltip: 300;
+  /* Above BlockNote editor floating UI (menus/toolbars); use for dialogs over estimation. */
+  --z-over-editor: 10000;
 
   /* ============================================
      LAYOUT

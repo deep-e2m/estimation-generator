@@ -40,6 +40,15 @@
    to the BlockNote demo and our existing preview layout.
    ============================================================================ */
 
+/* Keep BlockNote floating menus (block menu, suggestion menu) below app dialogs/modals.
+   Dialogs that overlay the estimation use --z-over-editor (10000); this caps portaled UI. */
+.bn-block-menu,
+.bn-suggestion-menu,
+[class*="bn-block-menu"],
+[class*="bn-suggestion-menu"] {
+  z-index: 199 !important;
+}
+
 .inline-quote-editor .bn-root,
 .inline-quote-editor .bn-container,
 .inline-quote-editor .bn-editor {

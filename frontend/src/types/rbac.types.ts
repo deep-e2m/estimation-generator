@@ -48,6 +48,11 @@ export interface ApprovalRequestCreate {
   assigned_to: string
 }
 
+/** Bulk create: send to multiple Super PMs at once. */
+export interface ApprovalRequestCreateBulk {
+  assigned_to: string[]
+}
+
 export interface ApprovalDecision {
   approved: boolean
   reason?: string

@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.core.security import TokenValidationError, verify_access_token
+from app.models.approval_request import ApprovalRequest, ApprovalStatus
 from app.models.project import Project
 from app.models.project_share import AccessLevel, ProjectShare
 from app.models.quote import Quote
@@ -330,6 +331,17 @@ async def get_project_with_access(
     if share_result.scalar_one_or_none() is not None:
         return project
 
+    # Grant read access if user has a pending approval request assigned for this project
+    approval_result = await db.execute(
+        select(ApprovalRequest).where(
+            ApprovalRequest.project_id == project_id,
+            ApprovalRequest.assigned_to == current_user.id,
+            ApprovalRequest.status == ApprovalStatus.PENDING,
+        )
+    )
+    if approval_result.scalar_one_or_none() is not None:
+        return project
+
     raise api_error(403, "ACCESS_DENIED", "You don't have access to this project")
 
 
@@ -421,16 +433,27 @@ async def get_project_with_permission(
 
     if project.created_by == current_user.id or current_user.is_admin:
         return project, AccessLevel.EDIT_FULL
-    if share is None:
-        raise api_error(
-            403,
-            "ACCESS_DENIED",
-            "You don't have access to this project",
-            required_permission=required.value,
-            current_permission="none",
+    if share is not None:
+        effective = share.access_level
+    else:
+        # Grant read-only access if user has a pending approval request for this project
+        approval_result = await db.execute(
+            select(ApprovalRequest).where(
+                ApprovalRequest.project_id == project_id,
+                ApprovalRequest.assigned_to == current_user.id,
+                ApprovalRequest.status == ApprovalStatus.PENDING,
+            )
         )
-
-    effective = share.access_level
+        if approval_result.scalar_one_or_none() is not None:
+            effective = AccessLevel.READ
+        else:
+            raise api_error(
+                403,
+                "ACCESS_DENIED",
+                "You don't have access to this project",
+                required_permission=required.value,
+                current_permission="none",
+            )
 
     if not has_project_permission(effective, required):
         raise api_error(
@@ -447,7 +470,8 @@ def get_quote_project_scope_for_user(user: User):
     """
     Return SQL expression to filter Quote by project access.
 
-    Admin sees all quotes; others see quotes on projects they own or have shared.
+    Admin sees all quotes; others see quotes on projects they own, have shared,
+    or have a pending approval request assigned to them.
     Returns None for admin (no filter), else an or_() expression for use in
     .where(quote_project_scope).
     """
@@ -456,7 +480,12 @@ def get_quote_project_scope_for_user(user: User):
     shared_ids = select(ProjectShare.project_id).where(
         ProjectShare.shared_with_user_id == user.id
     )
+    approval_project_ids = select(ApprovalRequest.project_id).where(
+        ApprovalRequest.assigned_to == user.id,
+        ApprovalRequest.status == ApprovalStatus.PENDING,
+    )
     return or_(
         Quote.project_id.in_(select(Project.id).where(Project.created_by == user.id)),
         Quote.project_id.in_(shared_ids),
+        Quote.project_id.in_(approval_project_ids),
     )

@@ -7,19 +7,29 @@ import { apiClient } from './api'
 import type { ApiResponse } from '@/services/api'
 import type {
   ApprovalRequest,
-  ApprovalRequestCreate,
+  ApprovalRequestCreateBulk,
   ApprovalDecision,
   ApprovalStatus,
 } from '@/types/rbac.types'
 
 export const approvalsService = {
-  create: async (
+  /** Create one or more approval requests (bulk). Returns list of created requests. */
+  createBulk: async (
     projectId: string,
-    data: ApprovalRequestCreate
-  ): Promise<ApprovalRequest> => {
-    const response = await apiClient.post<ApiResponse<ApprovalRequest>>(
+    data: ApprovalRequestCreateBulk
+  ): Promise<ApprovalRequest[]> => {
+    const response = await apiClient.post<ApiResponse<ApprovalRequest[]>>(
       `/api/v1/projects/${projectId}/approval-requests`,
       data
+    )
+    const dataPayload = response.data.data
+    return Array.isArray(dataPayload) ? dataPayload : [dataPayload]
+  },
+
+  /** List all approval requests for a project (for project detail / popover). */
+  listByProject: async (projectId: string): Promise<ApprovalRequest[]> => {
+    const response = await apiClient.get<ApiResponse<ApprovalRequest[]>>(
+      `/api/v1/projects/${projectId}/approval-requests`
     )
     return response.data.data
   },

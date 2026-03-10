@@ -1,16 +1,20 @@
 /**
- * Card displaying a single approval request (for list/detail views).
+ * Card (or table row) displaying a single approval request.
+ * Supports grid and list view with PM avatar, name, and email.
  */
 
 import { useNavigate } from 'react-router-dom'
-import { FileText, User, Clock } from 'lucide-react'
+import { FileText, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Avatar } from '@/components/ui/avatar'
 import type { ApprovalRequest } from '@/types/rbac.types'
 import { formatRelativeTime } from '@/lib/utils'
+import { getUserAvatarUrl } from '@/lib/placeholderAvatars'
 
 interface ApprovalRequestCardProps {
   request: ApprovalRequest
+  viewMode?: 'grid' | 'list'
   onDecide?: (request: ApprovalRequest) => void
   showDecideButton?: boolean
 }
@@ -21,55 +25,114 @@ const statusVariant: Record<string, 'active' | 'success' | 'secondary'> = {
   disapproved: 'secondary',
 }
 
+function PmInfo({ request }: { request: ApprovalRequest }) {
+  const pm = request.requested_by
+  const avatarUrl = getUserAvatarUrl(pm.avatar_url ?? null, pm.full_name)
+  return (
+    <div className="approval-request-pm">
+      <Avatar
+        src={avatarUrl}
+        alt={pm.full_name}
+        size="sm"
+        fallback={pm.full_name}
+        className="approval-request-pm-avatar"
+      />
+      <div className="approval-request-pm-details">
+        <span className="approval-request-pm-name">{pm.full_name}</span>
+        <span className="approval-request-pm-email">{pm.email}</span>
+      </div>
+    </div>
+  )
+}
+
 export function ApprovalRequestCard({
   request,
+  viewMode = 'grid',
   onDecide,
   showDecideButton,
 }: ApprovalRequestCardProps) {
   const navigate = useNavigate()
   const isPending = request.status === 'pending'
+  const projectName = request.project_name || `Project ${request.project_id}`
+
+  if (viewMode === 'list') {
+    return (
+      <tr className="approval-request-row">
+        <td className="approval-request-cell-pm">
+          <PmInfo request={request} />
+        </td>
+        <td className="approval-request-cell-project">
+          <span className="approval-request-project-name">{projectName}</span>
+        </td>
+        <td>
+          <Badge variant={statusVariant[request.status] ?? 'secondary'}>
+            {request.status}
+          </Badge>
+        </td>
+        <td className="approval-request-cell-time">
+          <span className="text-muted">
+            <Clock className="inline h-3 w-3 mr-0.5" />
+            {formatRelativeTime(request.created_at)}
+          </span>
+        </td>
+        <td className="approval-request-cell-actions">
+          <div className="approval-request-actions">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/projects/${request.project_id}`)}
+            >
+              View project
+            </Button>
+            {showDecideButton && isPending && onDecide && (
+              <Button size="sm" onClick={() => onDecide(request)}>
+                Approve / Disapprove
+              </Button>
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  }
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant={statusVariant[request.status] ?? 'secondary'}>
-              {request.status}
-            </Badge>
-            <span className="text-xs text-gray-500">
-              <Clock className="inline h-3 w-3 mr-0.5" />
-              {formatRelativeTime(request.created_at)}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-            <User className="h-3.5 w-3.5" />
-            Requested by {request.requested_by.full_name}
-          </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-            <FileText className="h-3.5 w-3.5" />
-            {request.project_name || `Project ${request.project_id}`}
-          </p>
-          {request.disapproval_reason && (
-            <p className="mt-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">
-              Reason: {request.disapproval_reason}
-            </p>
-          )}
+    <div className="approval-request-card approval-request-card-grid">
+      <div className="approval-request-card-pm">
+        <PmInfo request={request} />
+      </div>
+      <div className="approval-request-card-body">
+        <div className="approval-request-card-meta">
+          <Badge variant={statusVariant[request.status] ?? 'secondary'}>
+            {request.status}
+          </Badge>
+          <span className="approval-request-card-time">
+            <Clock className="inline h-3 w-3 mr-0.5" />
+            {formatRelativeTime(request.created_at)}
+          </span>
         </div>
-        <div className="flex flex-col gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate(`/projects/${request.project_id}`)}
-          >
-            View project
+        <p className="approval-request-card-project">
+          <FileText className="h-3.5 w-3.5 inline mr-1" />
+          {projectName}
+        </p>
+        {request.disapproval_reason && (
+          <p className="approval-request-card-reason">
+            Reason: {request.disapproval_reason}
+          </p>
+        )}
+      </div>
+      <div className="approval-request-card-footer">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate(`/projects/${request.project_id}`)}
+        >
+          View project
+        </Button>
+        {showDecideButton && isPending && onDecide && (
+          <Button size="sm" onClick={() => onDecide(request)}>
+            Approve / Disapprove
           </Button>
-          {showDecideButton && isPending && onDecide && (
-            <Button size="sm" onClick={() => onDecide(request)}>
-              Approve / Disapprove
-            </Button>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )

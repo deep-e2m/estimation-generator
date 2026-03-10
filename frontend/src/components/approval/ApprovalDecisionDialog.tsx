@@ -1,10 +1,10 @@
 /**
  * Dialog for Superior PM to approve or disapprove an approval request.
- * Disapprove requires a reason.
+ * Disapprove requires a reason. Shows request context and clear decision options.
  */
 
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, FileText, User } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -73,57 +73,96 @@ export function ApprovalDecisionDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="approval-decision-dialog max-w-lg">
         <DialogHeader>
           <DialogTitle>Approve or disapprove</DialogTitle>
           <DialogDescription>
             {request
-              ? `Respond to the approval request from ${request.requested_by.full_name}.`
+              ? 'Review the request below and choose to approve or disapprove the estimation.'
               : 'Select your decision.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="approval-decision-dialog__form">
+          {request && (
+            <div className="approval-decision-dialog__context">
+              <div className="approval-decision-dialog__context-row">
+                <FileText className="approval-decision-dialog__context-icon" aria-hidden />
+                <span className="approval-decision-dialog__context-label">Project</span>
+                <span className="approval-decision-dialog__context-value">
+                  {request.project_name || `Project ${request.project_id.slice(0, 8)}…`}
+                </span>
+              </div>
+              <div className="approval-decision-dialog__context-row">
+                <User className="approval-decision-dialog__context-icon" aria-hidden />
+                <span className="approval-decision-dialog__context-label">Requested by</span>
+                <span className="approval-decision-dialog__context-value">
+                  {request.requested_by.full_name}
+                </span>
+              </div>
+            </div>
+          )}
+
           {error && (
-            <div className="rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2 text-sm mb-3">
+            <div className="approval-decision-dialog__error" role="alert">
               {error}
             </div>
           )}
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
+
+          <div className="approval-decision-dialog__section">
+            <span className="approval-decision-dialog__section-label">Your decision</span>
+            <div className="approval-decision-dialog__options" role="radiogroup" aria-label="Approve or disapprove">
+              <label
+                className={`approval-decision-dialog__option ${approved ? 'approval-decision-dialog__option--selected' : ''}`}
+              >
                 <input
                   type="radio"
                   name="decision"
                   checked={approved}
                   onChange={() => setApproved(true)}
+                  className="sr-only"
+                  aria-label="Approve"
                 />
-                Approve
+                <CheckCircle2 className="approval-decision-dialog__option-icon" aria-hidden />
+                <span className="approval-decision-dialog__option-label">Approve</span>
+                <span className="approval-decision-dialog__option-desc">Accept the estimation as-is</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label
+                className={`approval-decision-dialog__option ${!approved ? 'approval-decision-dialog__option--selected' : ''}`}
+              >
                 <input
                   type="radio"
                   name="decision"
                   checked={!approved}
                   onChange={() => setApproved(false)}
+                  className="sr-only"
+                  aria-label="Disapprove"
                 />
-                Disapprove
+                <XCircle className="approval-decision-dialog__option-icon" aria-hidden />
+                <span className="approval-decision-dialog__option-label">Disapprove</span>
+                <span className="approval-decision-dialog__option-desc">Request changes with feedback</span>
               </label>
             </div>
-            {!approved && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Reason (required)</label>
-                <Textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explain why the estimation is disapproved..."
-                  rows={3}
-                  className="w-full"
-                  required={!approved}
-                />
-              </div>
-            )}
           </div>
-          <DialogFooter className="mt-6 gap-2">
+
+          {!approved && (
+            <div className="approval-decision-dialog__section">
+              <label htmlFor="approval-reason" className="approval-decision-dialog__section-label">
+                Reason for disapproval <span className="approval-decision-dialog__required">(required)</span>
+              </label>
+              <Textarea
+                id="approval-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Explain what needs to be changed or improved..."
+                rows={4}
+                className="approval-decision-dialog__reason"
+                required={!approved}
+                aria-required="true"
+              />
+            </div>
+          )}
+
+          <DialogFooter className="approval-decision-dialog__footer">
             <Button type="button" variant="secondary" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
@@ -131,7 +170,7 @@ export function ApprovalDecisionDialog({
               type="submit"
               disabled={submitting || (!approved && !reason.trim())}
             >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
               Submit
             </Button>
           </DialogFooter>

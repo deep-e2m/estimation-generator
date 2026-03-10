@@ -2148,14 +2148,8 @@
 }
 
 /* ============================================
-   APPROVAL REQUESTS PAGE (match Projects UI)
+   APPROVAL REQUESTS PAGE (grid/list like User Management)
    ============================================ */
-
-/* Spacer so content starts at same vertical position as Projects (toolbar row height + margin) */
-.approval-requests-page .approval-requests-toolbar-spacer {
-  min-height: 48px;
-  margin-bottom: var(--space-6);
-}
 
 /* Empty state card: same visual as Projects empty (white card, centered content) */
 .approval-requests-page .approval-requests-empty-card {
@@ -2166,17 +2160,245 @@
   padding: var(--space-16) var(--space-6);
 }
 
-/* Approval Requests list (same page layout as Projects; list of cards inside container) */
-.approval-requests-list {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-5) var(--space-6);
+/* Toolbar card: view toggle (grid/list) */
+.approval-requests-toolbar-card {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+}
+
+.approval-requests-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.approval-requests-search-spacer {
+  flex: 1;
+}
+
+.approval-requests-view-toggle {
+  display: flex;
+  background: var(--color-gray-100);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.approval-requests-view-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  color: var(--color-gray-500);
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.approval-requests-view-toggle button:hover {
+  background: white;
+  color: var(--color-gray-700);
+}
+
+.approval-requests-view-toggle button.active {
+  background: white;
+  color: var(--color-primary-600);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.approval-requests-content {
+  min-height: 0;
+}
+
+/* Grid of approval request cards */
+.approval-requests-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+}
+
+@media (min-width: 640px) {
+  .approval-requests-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .approval-requests-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .approval-requests-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Approval request card (grid view) */
+.approval-request-card-grid {
+  background: white;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s, border-color 0.2s;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
-.approval-requests-list-item {
-  list-style: none;
+
+.approval-request-card-grid:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+  border-color: rgba(30, 64, 175, 0.2);
+}
+
+.approval-request-card-pm {
+  flex-shrink: 0;
+}
+
+.approval-request-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.approval-request-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.approval-request-card-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+}
+
+.approval-request-card-project {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  margin: 0 0 var(--space-2) 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.approval-request-card-reason {
+  font-size: var(--font-size-sm);
+  color: var(--color-red-600);
+  background: var(--color-red-50);
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  margin: 0;
+}
+
+.approval-request-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-gray-100);
+}
+
+/* PM block (avatar + name + email) */
+.approval-request-pm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.approval-request-pm-avatar {
+  flex-shrink: 0;
+}
+
+.approval-request-pm-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.approval-request-pm-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+}
+
+.approval-request-pm-email {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* List view: table */
+.approval-requests-list-wrap {
+  overflow-x: auto;
+  background: white;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-xl);
+}
+
+.approval-requests-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.approval-requests-table th {
+  text-align: left;
+  padding: var(--space-4) var(--space-5);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-600);
+  background: var(--color-gray-50);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.approval-requests-table td {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-gray-100);
+  vertical-align: middle;
+}
+
+.approval-request-row:last-child td {
+  border-bottom: none;
+}
+
+.approval-request-row:hover {
+  background: var(--color-gray-50);
+}
+
+.approval-request-cell-pm {
+  min-width: 200px;
+}
+
+.approval-request-cell-project {
+  min-width: 140px;
+}
+
+.approval-request-project-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-800);
+}
+
+.approval-request-cell-time {
+  color: var(--color-gray-500);
+  white-space: nowrap;
+}
+
+.approval-request-cell-actions {
+  white-space: nowrap;
+}
+
+.approval-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
 }
 
 .projects-clear-filter {
@@ -2623,30 +2845,72 @@
   font-size: var(--font-size-xs);
 }
 
-/* Send for Approval Dialog – consistent with design system */
+/* Send for Approval Dialog – above BlockNote floating UI so it never overlaps the modal */
+.send-for-approval-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-over-editor);
+  pointer-events: none;
+}
+
+.send-for-approval-dialog-root .dialog-overlay {
+  pointer-events: auto;
+  z-index: 0;
+}
+
+.send-for-approval-dialog-root .dialog {
+  pointer-events: auto;
+  z-index: 1;
+}
+
 .send-for-approval-dialog {
-  max-width: 28rem;
+  max-width: 22rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 
-.send-for-approval-dialog .dialog-header {
-  padding-bottom: var(--space-4);
+.send-for-approval-dialog .send-for-approval-header {
+  flex-shrink: 0;
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-gray-100);
 }
 
-.send-for-approval-dialog .dialog-description {
-  margin-top: var(--space-1);
-  line-height: var(--line-height-normal);
+.send-for-approval-dialog .send-for-approval-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+  margin: 0;
+}
+
+.send-for-approval-dialog .send-for-approval-description {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+  line-height: var(--line-height-relaxed);
 }
 
 .send-for-approval-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
 }
 
-.send-for-approval-field {
+.send-for-approval-form .send-for-approval-error {
+  margin: 0 var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.send-for-approval-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-5) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
 .send-for-approval-loading {
@@ -2655,13 +2919,429 @@
   gap: var(--space-2);
   font-size: var(--font-size-sm);
   color: var(--color-gray-500);
-  margin-top: var(--space-2);
+}
+
+.send-for-approval-empty {
+  margin: 0;
+}
+
+.send-for-approval-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.send-for-approval-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.send-for-approval-section-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-800);
+}
+
+.send-for-approval-select-all {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary-600);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.send-for-approval-select-all:hover {
+  color: var(--color-primary-700);
+  background: var(--color-primary-50);
+}
+
+.send-for-approval-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  background: var(--color-gray-50);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.send-for-approval-list-item {
+  margin: 0;
+  padding: 0;
+}
+
+.send-for-approval-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin: 0 calc(-1 * var(--space-2));
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-800);
+  transition: background-color var(--transition-fast);
+}
+
+.send-for-approval-label:hover:not(:has(input:disabled)) {
+  background: var(--color-white);
+}
+
+.send-for-approval-label:has(input:disabled) {
+  cursor: default;
+  color: var(--color-gray-500);
+}
+
+.send-for-approval-checkbox {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary-600);
+}
+
+.send-for-approval-label-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.send-for-approval-label-email {
+  color: var(--color-gray-500);
+  font-size: var(--font-size-xs);
+}
+
+.send-for-approval-pending {
+  color: var(--color-amber-600);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .send-for-approval-footer {
-  margin-top: var(--space-6);
-  padding-top: var(--space-5);
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--color-gray-100);
+  background: var(--color-gray-50);
+  border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+}
+
+/* Approval Decision Dialog – approve/disapprove with context and clear options */
+.approval-decision-dialog {
+  padding: 0;
+}
+
+.approval-decision-dialog .dialog-header {
+  padding: var(--space-6) var(--space-6) var(--space-4);
+}
+
+.approval-decision-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: 0 var(--space-6) var(--space-6);
+}
+
+.approval-decision-dialog__context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+}
+
+.approval-decision-dialog__context-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.approval-decision-dialog__context-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-gray-500);
+}
+
+.approval-decision-dialog__context-label {
+  flex: 0 0 6rem;
+  color: var(--color-gray-500);
+}
+
+.approval-decision-dialog__context-value {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-800);
+}
+
+.approval-decision-dialog__error {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-error-700);
+  background: var(--color-error-50);
+  border-radius: var(--radius-md);
+}
+
+.approval-decision-dialog__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.approval-decision-dialog__section-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-800);
+}
+
+.approval-decision-dialog__required {
+  font-weight: var(--font-weight-normal);
+  color: var(--color-gray-500);
+}
+
+.approval-decision-dialog__options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.approval-decision-dialog__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 2px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.approval-decision-dialog__option:hover {
+  border-color: var(--color-gray-300);
+  background: var(--color-gray-50);
+}
+
+.approval-decision-dialog__option--selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-50);
+  box-shadow: 0 0 0 1px var(--color-primary-500);
+}
+
+.approval-decision-dialog__option--selected:hover {
+  background: var(--color-primary-50);
+}
+
+.approval-decision-dialog__option-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: var(--color-gray-500);
+}
+
+.approval-decision-dialog__option--selected .approval-decision-dialog__option-icon {
+  color: var(--color-primary-600);
+}
+
+.approval-decision-dialog__option-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+}
+
+.approval-decision-dialog__option-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  line-height: var(--line-height-relaxed);
+}
+
+.approval-decision-dialog__reason {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.approval-decision-dialog__footer {
+  margin-top: 0;
+  margin-left: calc(-1 * var(--space-6));
+  margin-right: calc(-1 * var(--space-6));
+  margin-bottom: calc(-1 * var(--space-6));
+  padding: var(--space-4) var(--space-6);
+  border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+}
+
+/* Approval hover popover (Option B) */
+.approval-hover-popover-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.approval-hover-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-2);
+  min-width: 240px;
+  max-width: 340px;
+  padding: var(--space-4) var(--space-4);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  pointer-events: auto;
+  /* Force high-contrast text; avoid inheriting light colors from parent */
+  color: var(--color-gray-900);
+  font-weight: var(--font-weight-medium);
+}
+
+.approval-hover-popover-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-1);
+  line-height: var(--line-height-tight);
+}
+
+.approval-hover-popover-date {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-gray-600);
+  margin-bottom: var(--space-2);
+  line-height: var(--line-height-normal);
+}
+
+.approval-hover-popover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.approval-hover-popover-item {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1-5) 0;
+  color: var(--color-gray-800);
+  line-height: var(--line-height-normal);
+}
+
+.approval-hover-popover-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+}
+
+.approval-hover-popover-status {
+  font-weight: var(--font-weight-medium);
+}
+
+.approval-hover-popover-status--pending {
+  color: var(--color-amber-700);
+}
+
+.approval-hover-popover-status--approved {
+  color: var(--color-success-700);
+}
+
+.approval-hover-popover-status--disapproved {
+  color: var(--color-error-700);
+}
+
+.approval-hover-popover-tooltip-only {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-800);
+  line-height: var(--line-height-normal);
+}
+
+/* Project detail approval control */
+.project-detail-approval-control-wrapper {
+  display: inline-flex;
+}
+
+.project-detail-approval-status {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.project-detail-approval-status.approved {
+  background: var(--color-green-50);
+  color: var(--color-green-700);
+  border-color: var(--color-green-200);
+}
+
+.project-detail-approval-status.declined {
+  background: var(--color-red-50);
+  color: var(--color-red-700);
+  border-color: var(--color-red-200);
+  cursor: pointer;
+}
+
+.project-detail-approval-status.declined:hover {
+  background: var(--color-red-100);
+}
+
+/* Decline reasons modal – above BlockNote floating UI when shown over estimation */
+.decline-reasons-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-over-editor);
+  pointer-events: none;
+}
+
+.decline-reasons-modal-root .dialog-overlay {
+  pointer-events: auto;
+  z-index: 0;
+}
+
+.decline-reasons-modal-root .dialog {
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.decline-reasons-modal .dialog-content {
+  max-width: 28rem;
+}
+
+.decline-reasons-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.decline-reasons-item {
+  padding: var(--space-3);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gray-200);
+}
+
+.decline-reasons-item-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-2);
+}
+
+.decline-reasons-item-reason {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  white-space: pre-wrap;
 }
 
 /* Edit User Dialog – modal with proper dropdown z-index and clean layout */

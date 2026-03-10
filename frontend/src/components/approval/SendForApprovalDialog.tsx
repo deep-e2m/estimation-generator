@@ -1,10 +1,11 @@
 /**
- * Dialog to send project for approval to a Superior PM.
- * Uses design system: Alert, NativeSelect, Button, dialog tokens.
+ * Dialog to send project for approval to one or more Superior PMs.
+ * Multi-select with checkboxes; bulk create; toast on success.
  */
 
 import { useState, useEffect } from 'react'
 import { Loader2, Send } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -14,18 +15,20 @@ import {
   DialogFooter,
   Alert,
   AlertDescription,
-  NativeSelect,
 } from '@/components/ui'
 import { Button } from '@/components/ui/button'
 import { approvalsService } from '@/services/approvals.service'
 import { usersService } from '@/services/users.service'
 import type { User } from '@/types/auth.types'
+import type { ApprovalRequest } from '@/types/rbac.types'
 import { getErrorMessage } from '@/services/api'
 
 interface SendForApprovalDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: string
+  /** Existing approval requests for this project (to disable already-pending Super PMs). */
+  existingApprovals?: ApprovalRequest[]
   onSent?: () => void
 }
 
@@ -33,24 +36,28 @@ export function SendForApprovalDialog({
   open,
   onOpenChange,
   projectId,
+  existingApprovals = [],
   onSent,
 }: SendForApprovalDialogProps) {
   const [superPms, setSuperPms] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const pendingAssigneeIds = new Set(
+    existingApprovals.filter((r) => r.status === 'pending').map((r) => r.assigned_to.id)
+  )
 
   useEffect(() => {
     if (!open) return
     setError(null)
-    setSelectedUserId('')
+    setSelectedUserIds([])
     const load = async () => {
       setLoading(true)
       try {
         const list = await usersService.list({ role: 'super_pm' })
         setSuperPms(list)
-        if (list.length > 0) setSelectedUserId(list[0].id)
       } catch (e) {
         setError(getErrorMessage(e))
       } finally {
@@ -58,15 +65,34 @@ export function SendForApprovalDialog({
       }
     }
     load()
-  }, [open])
+  }, [open, projectId])
+
+  const toggleUser = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    )
+  }
+
+  const selectAllAvailable = () => {
+    const available = superPms.filter((u) => !pendingAssigneeIds.has(u.id)).map((u) => u.id)
+    setSelectedUserIds(available)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedUserId) return
+    if (selectedUserIds.length === 0) return
     setSubmitting(true)
     setError(null)
     try {
-      await approvalsService.create(projectId, { assigned_to: selectedUserId })
+      const created = await approvalsService.createBulk(projectId, {
+        assigned_to: selectedUserIds,
+      })
+      const n = created.length
+      if (n === 1) {
+        toast.success('Project sent for approval')
+      } else {
+        toast.success(`Sent to ${n} Super PMs`)
+      }
       onSent?.()
       onOpenChange(false)
     } catch (e) {
@@ -76,35 +102,27 @@ export function SendForApprovalDialog({
     }
   }
 
-  const options = superPms.map((u) => ({
-    value: u.id,
-    label: `${u.full_name} (${u.email})`,
-  }))
+  const availableCount = superPms.filter((u) => !pendingAssigneeIds.has(u.id)).length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="send-for-approval-dialog">
-        <DialogHeader>
-          <DialogTitle>Send for approval</DialogTitle>
-          <DialogDescription>
-            Send this project estimation to a Superior PM for approval.
+      <DialogContent
+        className="send-for-approval-dialog"
+        wrapperClassName="send-for-approval-dialog-root"
+      >
+        <DialogHeader className="send-for-approval-header">
+          <DialogTitle className="send-for-approval-title">Send for approval</DialogTitle>
+          <DialogDescription className="send-for-approval-description">
+            Send this project estimation to one or more Superior PMs for approval.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="send-for-approval-form">
           {error && (
-            <Alert variant="error">
+            <Alert variant="error" className="send-for-approval-error">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="send-for-approval-field">
-            <NativeSelect
-              label="Superior PM"
-              placeholder="Select Superior PM..."
-              options={options}
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              disabled={loading}
-            />
+          <div className="send-for-approval-body">
             {loading && (
               <div className="send-for-approval-loading">
                 <Loader2 style={{ width: 18, height: 18 }} className="animate-spin" />
@@ -118,6 +136,52 @@ export function SendForApprovalDialog({
                 </AlertDescription>
               </Alert>
             )}
+            {!loading && superPms.length > 0 && (
+              <div className="send-for-approval-section">
+                <div className="send-for-approval-section-header">
+                  <span className="send-for-approval-section-label">Superior PMs</span>
+                  {availableCount > 0 && (
+                    <button
+                      type="button"
+                      className="send-for-approval-select-all"
+                      onClick={selectAllAvailable}
+                    >
+                      Select all available
+                    </button>
+                  )}
+                </div>
+                <ul
+                  className="send-for-approval-list"
+                  role="group"
+                  aria-label="Select Superior PMs"
+                >
+                  {superPms.map((u) => {
+                    const hasPending = pendingAssigneeIds.has(u.id)
+                    const isChecked = selectedUserIds.includes(u.id)
+                    return (
+                      <li key={u.id} className="send-for-approval-list-item">
+                        <label className="send-for-approval-label">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={hasPending}
+                            onChange={() => toggleUser(u.id)}
+                            className="send-for-approval-checkbox"
+                          />
+                          <span className="send-for-approval-label-text">
+                            {u.full_name}
+                            <span className="send-for-approval-label-email"> ({u.email})</span>
+                            {hasPending && (
+                              <span className="send-for-approval-pending"> — Pending</span>
+                            )}
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
           <DialogFooter className="send-for-approval-footer">
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
@@ -125,7 +189,7 @@ export function SendForApprovalDialog({
             </Button>
             <Button
               type="submit"
-              disabled={!selectedUserId || submitting || superPms.length === 0}
+              disabled={selectedUserIds.length === 0 || submitting || superPms.length === 0}
               leftIcon={<Send style={{ width: 18, height: 18 }} />}
             >
               Send for approval

@@ -28,11 +28,14 @@ import {
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { parseTotalHoursFromContent, parseRequirementsCountFromContent } from '@/lib/quote-content-parse';
 import { apiClient, getErrorMessage, projectsService, quotesService } from '@/services';
+import { approvalsService } from '@/services/approvals.service';
 import { useAuthStore } from '@/store/authStore';
 import { canEditEstimation, canShareProject } from '@/utils/permissions';
 import { Button } from '@/components/ui/button';
 import { ShareProjectDialog } from '@/components/project/ShareProjectDialog';
 import { SendForApprovalDialog } from '@/components/approval/SendForApprovalDialog';
+import { ApprovalHoverPopover } from '@/components/approval/ApprovalHoverPopover';
+import { DeclineReasonsModal } from '@/components/approval/DeclineReasonsModal';
 import { ProjectSharesList } from '@/components/project/ProjectSharesList';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -104,9 +107,26 @@ export function ProjectDetailPage() {
   const saveStatusResetTimeoutRef = useRef<number | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sendApprovalDialogOpen, setSendApprovalDialogOpen] = useState(false);
+  const [declineReasonsModalOpen, setDeclineReasonsModalOpen] = useState(false);
+  const [projectApprovalRequests, setProjectApprovalRequests] = useState<
+    import('@/types/rbac.types').ApprovalRequest[]
+  >([]);
   const user = useAuthStore((s) => s.user);
   const canShareThisProject = canShareProject(user, project);
   const canEditEstimationOnProject = canEditEstimation(user, project);
+
+  const hasAnyPending = projectApprovalRequests.some((r) => r.status === 'pending');
+  const hasAnyDisapproved = projectApprovalRequests.some((r) => r.status === 'disapproved');
+  const allResolved =
+    projectApprovalRequests.length > 0 && !hasAnyPending;
+  const approvalControlLabel = !projectApprovalRequests.length
+    ? 'Send for approval'
+    : hasAnyPending
+      ? 'Project under approval'
+      : allResolved && hasAnyDisapproved
+        ? 'Declined'
+        : 'Approved';
+  const declinedRequests = projectApprovalRequests.filter((r) => r.status === 'disapproved');
 
   // Load project data
   useEffect(() => {
@@ -152,6 +172,20 @@ export function ProjectDetailPage() {
 
     loadQuote();
   }, [id]);
+
+  const fetchProjectApprovals = useCallback(async () => {
+    if (!id || !canShareThisProject) return;
+    try {
+      const list = await approvalsService.listByProject(id);
+      setProjectApprovalRequests(list);
+    } catch {
+      setProjectApprovalRequests([]);
+    }
+  }, [id, canShareThisProject]);
+
+  useEffect(() => {
+    fetchProjectApprovals();
+  }, [fetchProjectApprovals]);
 
   // Detect if description text overflows 2 lines
   useEffect(() => {
@@ -399,9 +433,38 @@ export function ProjectDetailPage() {
             <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)} leftIcon={<Share2 style={{ width: 16, height: 16 }} />}>
               Share
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setSendApprovalDialogOpen(true)} leftIcon={<Send style={{ width: 16, height: 16 }} />}>
-              Send for approval
-            </Button>
+            <ApprovalHoverPopover
+              approvalRequests={projectApprovalRequests}
+              emptyTooltip="Send this project to Superior PMs for approval."
+            >
+              <div className="project-detail-approval-control-wrapper">
+                {!projectApprovalRequests.length ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSendApprovalDialogOpen(true)}
+                    leftIcon={<Send style={{ width: 16, height: 16 }} />}
+                  >
+                    Send for approval
+                  </Button>
+                ) : hasAnyPending ? (
+                  <Button variant="outline" size="sm" disabled leftIcon={<Send style={{ width: 16, height: 16 }} />}>
+                    Project under approval
+                  </Button>
+                ) : allResolved && hasAnyDisapproved ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="project-detail-approval-status declined"
+                    onClick={() => setDeclineReasonsModalOpen(true)}
+                  >
+                    Declined
+                  </Button>
+                ) : (
+                  <span className="project-detail-approval-status approved">Approved</span>
+                )}
+              </div>
+            </ApprovalHoverPopover>
           </div>
         )}
       </header>
@@ -409,7 +472,18 @@ export function ProjectDetailPage() {
       {canShareThisProject && id && (
         <>
           <ShareProjectDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} projectId={id} />
-          <SendForApprovalDialog open={sendApprovalDialogOpen} onOpenChange={setSendApprovalDialogOpen} projectId={id} />
+          <SendForApprovalDialog
+            open={sendApprovalDialogOpen}
+            onOpenChange={setSendApprovalDialogOpen}
+            projectId={id}
+            existingApprovals={projectApprovalRequests}
+            onSent={fetchProjectApprovals}
+          />
+          <DeclineReasonsModal
+            open={declineReasonsModalOpen}
+            onOpenChange={setDeclineReasonsModalOpen}
+            declinedRequests={declinedRequests}
+          />
         </>
       )}
 

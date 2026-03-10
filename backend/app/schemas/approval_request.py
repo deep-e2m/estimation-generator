@@ -15,11 +15,22 @@ from app.schemas.auth import UserResponse
 
 
 class ApprovalRequestCreate(BaseModel):
-    """Schema for sending a project for approval."""
+    """Schema for sending a project for approval (single assignee)."""
 
     assigned_to: UUID = Field(
         ...,
         description="UUID of the Superior PM to assign the approval request to",
+    )
+
+
+class ApprovalRequestCreateBulk(BaseModel):
+    """Schema for sending a project for approval to multiple Superior PMs."""
+
+    assigned_to: list[UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="UUIDs of Superior PMs to assign approval requests to",
     )
 
 
@@ -44,7 +55,13 @@ class ApprovalDecision(BaseModel):
 
 
 class ApprovalRequestResponse(BaseModel):
-    """Schema for approval request in API responses."""
+    """Schema for approval request in API responses.
+
+    Always build from explicit (id, project_id, requested_by UserResponse,
+    assigned_to UserResponse, ...). Do not use model_validate(orm_request) —
+    the ORM has requested_by/assigned_to as UUIDs and relationships may not
+    load in async context.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,12 +71,10 @@ class ApprovalRequestResponse(BaseModel):
     requested_by: UserResponse = Field(
         ...,
         description="User who sent for approval",
-        validation_alias="requester",
     )
     assigned_to: UserResponse = Field(
         ...,
         description="Superior PM assigned to approve",
-        validation_alias="assignee",
     )
     status: ApprovalStatus = Field(..., description="Current status")
     disapproval_reason: str | None = Field(None, description="Reason when disapproved")

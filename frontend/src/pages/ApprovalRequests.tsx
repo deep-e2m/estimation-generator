@@ -1,11 +1,11 @@
 /**
  * Approval Requests page (Super PM / Admin).
  * Lists approval requests assigned to the current user; allows approve/disapprove.
- * UI matches Projects and Activity Logs: same page header, title, subtitle, and content layout.
+ * Grid/list view toggle and PM info (avatar, name, email) like User Management.
  */
 
 import { useState, useEffect } from 'react'
-import { Inbox } from 'lucide-react'
+import { Inbox, LayoutGrid, List } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -15,12 +15,15 @@ import { ApprovalDecisionDialog } from '@/components/approval/ApprovalDecisionDi
 import type { ApprovalRequest } from '@/types/rbac.types'
 import { getErrorMessage } from '@/services/api'
 
+type ViewMode = 'grid' | 'list'
+
 export default function ApprovalRequestsPage() {
   const [requests, setRequests] = useState<ApprovalRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [decideDialogOpen, setDecideDialogOpen] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
   const load = async () => {
     setLoading(true)
@@ -64,9 +67,6 @@ export default function ApprovalRequestsPage() {
         </div>
       </div>
 
-      {/* Spacer so content aligns with Projects (toolbar height + margin) */}
-      <div className="approval-requests-toolbar-spacer" aria-hidden />
-
       {loading ? (
         <div className="projects-loading">
           <Spinner size="lg" />
@@ -95,19 +95,72 @@ export default function ApprovalRequestsPage() {
           </div>
         </Card>
       ) : (
-        <div className="projects-list">
-          <ul className="approval-requests-list">
-            {requests.map((req) => (
-              <li key={req.id} className="approval-requests-list-item">
-                <ApprovalRequestCard
-                  request={req}
-                  showDecideButton
-                  onDecide={handleDecide}
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
+        <>
+          <Card className="approval-requests-toolbar-card">
+            <div className="approval-requests-search-row">
+              <div className="approval-requests-search-spacer" aria-hidden />
+              <div className="approval-requests-view-toggle">
+                <button
+                  type="button"
+                  className={viewMode === 'list' ? 'active' : ''}
+                  onClick={() => setViewMode('list')}
+                  aria-label="List view"
+                >
+                  <List className="icon-sm" />
+                </button>
+                <button
+                  type="button"
+                  className={viewMode === 'grid' ? 'active' : ''}
+                  onClick={() => setViewMode('grid')}
+                  aria-label="Grid view"
+                >
+                  <LayoutGrid className="icon-sm" />
+                </button>
+              </div>
+            </div>
+          </Card>
+
+          <div className="approval-requests-content">
+            {viewMode === 'grid' ? (
+              <div className="approval-requests-grid">
+                {requests.map((req) => (
+                  <ApprovalRequestCard
+                    key={req.id}
+                    request={req}
+                    viewMode="grid"
+                    showDecideButton
+                    onDecide={handleDecide}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="approval-requests-list-wrap">
+                <table className="approval-requests-table">
+                  <thead>
+                    <tr>
+                      <th>Requested by</th>
+                      <th>Project</th>
+                      <th>Status</th>
+                      <th>Requested</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {requests.map((req) => (
+                      <ApprovalRequestCard
+                        key={req.id}
+                        request={req}
+                        viewMode="list"
+                        showDecideButton
+                        onDecide={handleDecide}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <ApprovalDecisionDialog
